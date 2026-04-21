@@ -3,7 +3,7 @@ AssertPathExists=/usr/bin/mpclipboard-server
 
 [Service]
 WorkingDirectory=~
-ExecStart=/usr/bin/mpclipboard-server --start
+ExecStart=/usr/bin/mpclipboard-server
 Restart=always
 PrivateTmp=false
 NoNewPrivileges=true

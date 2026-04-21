@@ -1,13 +1,12 @@
 use crate::clip::Clip;
 
-#[derive(Default)]
 pub(crate) struct Store {
     clip: Option<Clip>,
 }
 
 impl Store {
-    pub(crate) fn new() -> Self {
-        Self::default()
+    pub(crate) fn empty() -> Self {
+        Self { clip: None }
     }
 
     pub(crate) fn current(&self) -> Option<Clip> {

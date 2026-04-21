@@ -1,30 +1,44 @@
-use crate::event_loop::EventLoop;
+use crate::{config::Config, state::State};
 use anyhow::{Context as _, Result};
-use config::Config;
+use std::time::Duration;
 use tokio::net::TcpListener;
 
+mod auth;
 mod client;
 mod clip;
 mod config;
-mod event_loop;
-mod name;
-mod pending;
+mod state;
 mod store;
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
-    pretty_env_logger::init();
+    env_logger::Builder::from_default_env()
+        .write_style(env_logger::WriteStyle::Always)
+        .init();
 
-    let config = Config::read().await?;
-    log::info!("Running with config {config:?}");
+    let Config { port, token } = Config::read().await?;
 
-    log::info!("Starting server on http://127.0.0.1:{}", config.port);
-    let listener = TcpListener::bind(("127.0.0.1", config.port))
+    log::info!("Starting server on http://127.0.0.1:{}", port);
+    let listener = TcpListener::bind(("127.0.0.1", port))
         .await
         .context("failed to bind")?;
 
-    let mut event_loop = EventLoop::new(listener, config);
-    event_loop.start().await;
+    let mut state = State::new(token);
+    let mut timer = tokio::time::interval(Duration::from_secs(1));
 
-    Ok(())
+    loop {
+        tokio::select! {
+            Ok((stream, remote_addr)) = listener.accept() => {
+                state.register(stream, remote_addr).await;
+            }
+
+            Some((name, clip)) = state.recv() => {
+                state.broadcast(name, clip).await;
+            }
+
+            _ = timer.tick() => {
+                state.ping().await;
+            }
+        }
+    }
 }

@@ -1,8 +1,5 @@
 run:
-    RUST_LOG=trace cargo run -- --start
-
-generate-config:
-    RUST_LOG=trace cargo run -- --generate
+    RUST_LOG=info cargo run
 
 now := `date +%s`
 

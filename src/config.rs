@@ -7,15 +7,6 @@ pub(crate) struct Config {
     pub(crate) token: String,
 }
 
-impl std::fmt::Debug for Config {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Config")
-            .field("port", &self.port)
-            .field("token", &"*****")
-            .finish()
-    }
-}
-
 const PATH: &str = if cfg!(debug_assertions) {
     "config.toml"
 } else {
