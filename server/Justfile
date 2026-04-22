@@ -18,3 +18,6 @@ container-push version:
 container-mark-latest version:
     docker tag ghcr.io/iliabylich/mpclipboard:{{version}} ghcr.io/iliabylich/mpclipboard:latest
     docker push ghcr.io/iliabylich/mpclipboard:latest
+
+check:
+    cargo check

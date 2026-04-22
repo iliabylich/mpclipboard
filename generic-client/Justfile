@@ -15,3 +15,6 @@ kqueue:
 valgrind:
     cargo build --example cli
     valgrind --leak-check=full target/debug/examples/cli
+
+check:
+    cargo check
