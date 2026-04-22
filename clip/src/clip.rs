@@ -67,6 +67,19 @@ impl Clip {
             text_or_binary: TextOrBinary::decode(bytes)?,
         })
     }
+
+    /// Returns true if self has a timestamp greater than the one in the given Clip
+    pub fn newer_than(&self, other: &Clip) -> bool {
+        self.timestamp > other.timestamp
+    }
+
+    /// Builds a dummy Clip with zero timestamp
+    pub fn zero() -> Self {
+        Self {
+            timestamp: 0,
+            text_or_binary: TextOrBinary::Binary(vec![]),
+        }
+    }
 }
 
 #[cfg(test)]

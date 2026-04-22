@@ -1,4 +1,4 @@
-use crate::clip::Clip;
+use clip::Clip;
 use futures_util::{Stream, StreamExt, stream::SplitStream};
 use std::{
     pin::{Pin, pin},

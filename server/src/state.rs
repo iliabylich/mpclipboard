@@ -1,9 +1,9 @@
 use crate::{
     auth::Auth,
     client::{ClientRx, ClientTx, IncomingMessage, OutgoingMessage},
-    clip::Clip,
     store::Store,
 };
+use clip::Clip;
 use futures_util::{SinkExt as _, Stream, StreamExt as _};
 use std::{
     collections::HashMap,

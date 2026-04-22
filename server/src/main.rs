@@ -12,7 +12,6 @@ use tokio::net::TcpListener;
 
 mod auth;
 mod client;
-mod clip;
 mod config;
 mod state;
 mod store;

@@ -1,5 +1,5 @@
-use crate::clip::Clip;
 use bytes::Bytes;
+use clip::Clip;
 use futures_util::{Sink, stream::SplitSink};
 use std::{
     pin::{Pin, pin},

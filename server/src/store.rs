@@ -1,4 +1,4 @@
-use crate::clip::Clip;
+use clip::Clip;
 
 pub(crate) struct Store {
     clip: Option<Clip>,
