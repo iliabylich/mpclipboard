@@ -10,7 +10,13 @@ defaults:
 
 jobs:
   ci:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    name: on ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          # - os: ubuntu-latest
+          - os: macos-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
