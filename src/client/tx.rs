@@ -1,7 +1,10 @@
 use crate::clip::Clip;
 use bytes::Bytes;
 use futures_util::{Sink, stream::SplitSink};
-use std::pin::{Pin, pin};
+use std::{
+    pin::{Pin, pin},
+    task::{Context, Poll},
+};
 use tokio::net::TcpStream;
 use tokio_tungstenite::{WebSocketStream, tungstenite::Message};
 
@@ -34,31 +37,19 @@ impl From<OutgoingMessage> for Message {
 impl Sink<OutgoingMessage> for ClientTx {
     type Error = tokio_tungstenite::tungstenite::Error;
 
-    fn poll_ready(
-        mut self: Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<std::result::Result<(), Self::Error>> {
+    fn poll_ready(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         pin!(&mut self.tx).poll_ready(cx)
     }
 
-    fn start_send(
-        mut self: Pin<&mut Self>,
-        item: OutgoingMessage,
-    ) -> std::result::Result<(), Self::Error> {
+    fn start_send(mut self: Pin<&mut Self>, item: OutgoingMessage) -> Result<(), Self::Error> {
         pin!(&mut self.tx).start_send(item.into())
     }
 
-    fn poll_flush(
-        mut self: Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<std::result::Result<(), Self::Error>> {
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         pin!(&mut self.tx).poll_flush(cx)
     }
 
-    fn poll_close(
-        mut self: Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<std::result::Result<(), Self::Error>> {
+    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         pin!(&mut self.tx).poll_close(cx)
     }
 }

@@ -7,14 +7,12 @@ license = "MIT"
 
 [dependencies]
 anyhow = "1"
-tokio = { version = "1", features = ["net", "macros", "rt", "fs"] }
+tokio = { version = "1", features = ["net", "macros", "rt", "fs", "time"] }
 serde = { version = "1", features = ["derive"] }
 futures-util = { version = "0.3", features = ["sink"] }
 log = { version = "0.4" }
 toml = "1.1"
 tokio-tungstenite = "0.29"
-tokio-util = "0.7"
-tokio-stream = "0.1"
 env_logger = { version = "0.11" }
 bytes = "1.11"
 

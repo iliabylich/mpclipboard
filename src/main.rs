@@ -1,5 +1,12 @@
+#![warn(trivial_casts)]
+#![warn(trivial_numeric_casts)]
+#![warn(unused_qualifications)]
+#![warn(deprecated_in_future)]
+#![warn(unused_lifetimes)]
+
 use crate::{config::Config, state::State};
 use anyhow::{Context as _, Result};
+use futures_util::StreamExt;
 use std::time::Duration;
 use tokio::net::TcpListener;
 
@@ -32,7 +39,7 @@ async fn main() -> Result<()> {
                 state.register(stream, remote_addr).await;
             }
 
-            Some((name, clip)) = state.recv() => {
+            Some((name, clip)) = state.next() => {
                 state.broadcast(name, clip).await;
             }
 

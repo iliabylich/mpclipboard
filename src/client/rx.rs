@@ -57,7 +57,10 @@ impl Stream for ClientRx {
         };
 
         let bytes = match message {
-            Message::Text(utf8_bytes) => utf8_bytes.to_string().into_bytes(),
+            Message::Text(_) => {
+                log::info!(target: &self.name, "received (unsupported) text");
+                return Ready(Some(IncomingMessage::Skip));
+            }
             Message::Binary(bytes) => bytes.to_vec(),
             Message::Ping(_) => {
                 log::info!(target: &self.name, "received ping");
