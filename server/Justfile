@@ -3,11 +3,11 @@ dev:
 
 now := `date +%s`
 
-build-deb-package:
+build-deb-package version:
     cargo build --target=x86_64-unknown-linux-musl --release
-
     strip target/x86_64-unknown-linux-musl/release/mpclipboard-server
-    cargo deb --deb-revision="{{now}}" -p mpclipboard-server --target=x86_64-unknown-linux-musl
+    cargo deb --deb-version {{version}} -p mpclipboard-server --target=x86_64-unknown-linux-musl
+    mv target/debian/mpclipboard-server_{{version}}_amd64.deb mpclipboard-server.deb
 
 container-build version:
     docker build -t ghcr.io/iliabylich/mpclipboard:{{version}} .
@@ -18,3 +18,6 @@ container-push version:
 container-mark-latest version:
     docker tag ghcr.io/iliabylich/mpclipboard:{{version}} ghcr.io/iliabylich/mpclipboard:latest
     docker push ghcr.io/iliabylich/mpclipboard:latest
+
+release version ref="master":
+    gh workflow run release-server --ref {{ref}} -f version={{version}}

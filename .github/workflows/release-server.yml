@@ -1,0 +1,54 @@
+name: release-server
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: release version in MAJOR.MINOR.PATCH version
+        required: true
+        type: string
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  release-server:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - run: sudo apt update
+      - run: sudo apt install musl musl-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-musl
+
+      - uses: extractions/setup-just@v3
+
+      - name: install cargo-deb
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deb
+
+      - run: just server::build-deb-package ${{ inputs.version }}
+
+      - name: release (for version)
+        uses: ncipollo/release-action@v1
+        with:
+          allowUpdates: false
+          artifactErrorsFailBuild: true
+          tag: server-v${{ inputs.version }}
+          artifacts: server/mpclipboard-server.deb
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: release (latest)
+        uses: ncipollo/release-action@v1
+        with:
+          allowUpdates: true
+          artifactErrorsFailBuild: true
+          removeArtifacts: true
+          tag: server-latest
+          artifacts: server/mpclipboard-server.deb
+          token: ${{ secrets.GITHUB_TOKEN }}
