@@ -1,0 +1,17 @@
+cbindgen:
+    cbindgen --output bindings.h
+
+ws := 'ws://127.0.0.1:3000'
+secret := 'sekret'
+
+dev number:
+    RUST_LOG=info cargo run --example cli -- {{ws}} {{secret}} client-{{number}} hello-from-client-{{number}}
+
+kqueue:
+    cargo build
+    clang -fuse-ld=lld examples/kqueue.c target/debug/libmpclipboard_generic_client.a -framework Security -framework CoreFoundation -o kqueue-example
+    RUST_LOG=info ./kqueue-example
+
+valgrind:
+    cargo build --example cli
+    valgrind --leak-check=full target/debug/examples/cli

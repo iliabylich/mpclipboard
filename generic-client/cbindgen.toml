@@ -1,0 +1,16 @@
+language = "C"
+pragma_once = true
+usize_is_size_t = true
+style = "type"
+no_includes = true
+sys_includes = ["stdint.h", "stdbool.h", "stddef.h"]
+
+[enum]
+rename_variants = "QualifiedScreamingSnakeCase"
+
+[export.rename]
+"COutput" = "Output"
+
+[export]
+exclude = ["mpclipboard_setup_rustls_on_jvm"]
+prefix = "mpclipboard_"

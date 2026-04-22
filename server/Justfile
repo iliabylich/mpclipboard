@@ -1,4 +1,4 @@
-run:
+dev:
     RUST_LOG=debug cargo run
 
 now := `date +%s`
@@ -10,11 +10,11 @@ build-deb-package:
     cargo deb --deb-revision="{{now}}" -p mpclipboard-server --target=x86_64-unknown-linux-musl
 
 container-build version:
-    podman build -t ghcr.io/mpclipboard/server:{{version}} .
+    docker build -t ghcr.io/iliabylich/mpclipboard:{{version}} .
 
 container-push version:
-    podman push ghcr.io/mpclipboard/server:{{version}}
+    docker push ghcr.io/iliabylich/mpclipboard:{{version}}
 
 container-mark-latest version:
-    podman tag ghcr.io/mpclipboard/server:{{version}} ghcr.io/mpclipboard/server:latest
-    podman push ghcr.io/mpclipboard/server:latest
+    docker tag ghcr.io/iliabylich/mpclipboard:{{version}} ghcr.io/iliabylich/mpclipboard:latest
+    docker push ghcr.io/iliabylich/mpclipboard:latest

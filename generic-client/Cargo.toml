@@ -1,0 +1,28 @@
+[package]
+name = "mpclipboard-generic-client"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib", "rlib", "staticlib"]
+
+[dependencies]
+anyhow = "1.0"
+serde = { version = "1", features = ["derive"] }
+toml = "1.1"
+log = "0.4"
+tungstenite = { version = "0.29", features = ["rustls-tls-native-roots"] }
+rustls-platform-verifier = "0.7"
+rustls = { version = "0.23", features = ["ring"] }
+http-serde = "2.1"
+libc = "0.2.184"
+polling = { version = "3.11.0", features = [] }
+rustix = { version = "1.1.4", features = ["net"] }
+clip = { path = "../clip" }
+
+[target.'cfg(target_os = "android")'.dependencies]
+android_logger = "0.15"
+jni = { version = "0.22", default-features = false }
+
+[target.'cfg(not(target_os = "android"))'.dependencies]
+env_logger = { version = "0.11" }
