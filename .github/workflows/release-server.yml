@@ -18,45 +18,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - run: sudo apt update
-      - run: sudo apt install musl musl-dev
+      - run: sudo apt update && sudo apt install musl musl-dev
 
       - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: x86_64-unknown-linux-musl
+        with: { targets: x86_64-unknown-linux-musl }
 
       - uses: extractions/setup-just@v3
 
-      - name: install cargo-deb
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-deb
+      - uses: taiki-e/install-action@v2
+        with: { tool: cargo-deb }
 
-      - run: just server::release ${{ inputs.version }}
-      - run: cp mpclipboard-server.deb mpclipboard-server_${{ inputs.version }}.deb
+      - run: just server::release ${{ inputs.version }} $PWD/mpclipboard-server_${{ inputs.version }}.deb
 
-      - uses: mknejp/delete-release-assets@v1
+      - uses: ./.github/actions/release
         with:
-          tag: latest
-          assets: mpclipboard-server_*.deb
-          token: ${{ secrets.GITHUB_TOKEN }}
-          fail-if-no-assets: false
-          fail-if-no-release: false
-
-      - name: release (for version)
-        uses: ncipollo/release-action@v1
-        with:
-          allowUpdates: false
-          artifactErrorsFailBuild: true
-          tag: server-v${{ inputs.version }}
-          artifacts: mpclipboard-server_${{ inputs.version }}.deb
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: release (latest)
-        uses: ncipollo/release-action@v1
-        with:
-          allowUpdates: true
-          artifactErrorsFailBuild: true
-          tag: latest
-          artifacts: mpclipboard-server_${{ inputs.version }}.deb
+          filename: mpclipboard-server_${{ inputs.version }}.deb
+          own-release-name: server-v${{ inputs.version }}
+          previous-files-pattern: mpclipboard-server_*.deb
           token: ${{ secrets.GITHUB_TOKEN }}

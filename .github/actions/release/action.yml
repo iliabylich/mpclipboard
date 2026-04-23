@@ -1,0 +1,39 @@
+inputs:
+  filename:
+    required: true
+  own-release-name:
+    required: true
+  previous-files-pattern:
+    required: true
+  token:
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - uses: mknejp/delete-release-assets@v1
+      with:
+        tag: latest
+        assets: ${{ inputs.previous-files-pattern }}
+        token: ${{ inputs.token }}
+        fail-if-no-assets: false
+        fail-if-no-release: false
+
+    - name: release (for version)
+      uses: ncipollo/release-action@v1
+      with:
+        allowUpdates: false
+        artifactErrorsFailBuild: true
+        tag: ${{ inputs.own-release-name }}
+        artifacts: ${{ inputs.filename }}
+        token: ${{ inputs.token }}
+
+    - name: release (latest)
+      uses: ncipollo/release-action@v1
+      with:
+        allowUpdates: true
+        artifactErrorsFailBuild: true
+        tag: latest
+        artifacts: ${{ inputs.filename }}
+        token: ${{ inputs.token }}
+

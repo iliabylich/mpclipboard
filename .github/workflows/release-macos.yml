@@ -17,36 +17,17 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
       - uses: extractions/setup-just@v3
+      - uses: dtolnay/rust-toolchain@stable
 
       # - run: find /Applications -name "Xcode*.app" -type d
       - run: sudo xcode-select -switch /Applications/Xcode_16.2.app/Contents/Developer
-      - run: just macos::release
+      - run: just macos::release $PWD/mpclipboard_${{ inputs.version }}.dmg
       - run: cp mpclipboard.dmg mpclipboard_${{ inputs.version }}.dmg
 
-      - uses: mknejp/delete-release-assets@v1
+      - uses: ./.github/actions/release
         with:
-          tag: latest
-          assets: mpclipboard_*.dmg
-          token: ${{ secrets.GITHUB_TOKEN }}
-          fail-if-no-assets: false
-          fail-if-no-release: false
-
-      - name: release (for version)
-        uses: ncipollo/release-action@v1
-        with:
-          allowUpdates: false
-          artifactErrorsFailBuild: true
-          tag: macos-v${{ inputs.version }}
-          artifacts: mpclipboard_${{ inputs.version }}.dmg
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: release (latest)
-        uses: ncipollo/release-action@v1
-        with:
-          allowUpdates: true
-          artifactErrorsFailBuild: true
-          tag: latest
-          artifacts: mpclipboard_${{ inputs.version }}.dmg
+          filename: mpclipboard_${{ inputs.version }}.dmg
+          own-release-name: macos-v${{ inputs.version }}
+          previous-files-pattern: mpclipboard_*.dmg
           token: ${{ secrets.GITHUB_TOKEN }}

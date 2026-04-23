@@ -13,7 +13,7 @@ dev:
     @just run Debug
 
 [macos]
-release:
+release out:
     cd ../generic-client && cargo build --release
     @just build Release
 
@@ -24,7 +24,7 @@ release:
         ln -s /Applications dmg-root/Applications && \
         hdiutil create -volname mpclipboard -srcfolder dmg-root -ov -format UDZO mpclipboard.dmg
 
-    mv build/Release/mpclipboard.dmg ..
+    mv build/Release/mpclipboard.dmg {{out}}
 
 clean:
     rm -rf build

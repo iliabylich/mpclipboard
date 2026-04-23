@@ -3,11 +3,11 @@ dev:
 
 now := `date +%s`
 
-release version:
+release version out:
     cargo build --target=x86_64-unknown-linux-musl --release
     strip target/x86_64-unknown-linux-musl/release/mpclipboard-server
     cargo deb --deb-version {{version}} -p mpclipboard-server --target=x86_64-unknown-linux-musl
-    mv target/debian/mpclipboard-server_{{version}}_amd64.deb ../mpclipboard-server.deb
+    mv target/debian/mpclipboard-server_{{version}}_amd64.deb {{out}}
 
 container-build version:
     docker build -t ghcr.io/iliabylich/mpclipboard:{{version}} .
