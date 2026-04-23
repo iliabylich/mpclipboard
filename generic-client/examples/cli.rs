@@ -47,7 +47,6 @@ fn main() -> Result<()> {
                                 log::info!("{connectivity:?}")
                             }
                             Output::NewText { text } => log::info!("[{text}]"),
-                            Output::NewBinary { bytes } => log::info!("[{bytes:?}]"),
                         }
                     }
                 }

@@ -3,7 +3,7 @@ use crate::{
     event_loop::EventLoop,
     state::{Disconnected, State},
 };
-use clip::{Clip, TextOrBinary};
+use clip::Clip;
 use std::{io::ErrorKind, net::TcpStream, os::fd::AsRawFd, rc::Rc};
 use tungstenite::{Message, stream::MaybeTlsStream};
 
@@ -104,10 +104,7 @@ impl Ready {
         {
             *last_clip = clip.clone();
 
-            match clip.text_or_binary {
-                TextOrBinary::Text(text) => Some(Output::NewText { text }),
-                TextOrBinary::Binary(bytes) => Some(Output::NewBinary { bytes }),
-            }
+            Some(Output::NewText { text: clip.text })
         } else {
             None
         };

@@ -14,9 +14,4 @@ pub enum Output {
         /// New text
         text: String,
     },
-    /// New binary clip
-    NewBinary {
-        /// New bytes
-        bytes: Vec<u8>,
-    },
 }

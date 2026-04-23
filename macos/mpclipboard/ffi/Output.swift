@@ -19,12 +19,6 @@ enum Output {
             } else {
                 fatalError("non-utf8 new text in output")
             }
-        case MPCLIPBOARD_OUTPUT_NEW_BINARY:
-            let ptr = output.NEW_BINARY.ptr!
-            let len = output.NEW_BINARY.len
-            let data = Data(bytes: ptr, count: len)
-            free(ptr)
-            return .newBinary(data)
         case MPCLIPBOARD_OUTPUT_INTERNAL:
             return nil
         default:

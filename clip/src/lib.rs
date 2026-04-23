@@ -8,8 +8,5 @@
 mod error;
 pub use error::ParseClipError;
 
-mod text_or_binary;
-pub use text_or_binary::TextOrBinary;
-
 mod clip;
 pub use clip::Clip;

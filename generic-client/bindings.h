@@ -64,10 +64,6 @@ typedef enum {
    */
   MPCLIPBOARD_OUTPUT_NEW_TEXT,
   /**
-   * New binary clip
-   */
-  MPCLIPBOARD_OUTPUT_NEW_BINARY,
-  /**
    * Internal
    */
   MPCLIPBOARD_OUTPUT_INTERNAL,
@@ -92,22 +88,10 @@ typedef struct {
 } mpclipboard_NewText_Body;
 
 typedef struct {
-  /**
-   * New bytes
-   */
-  char *ptr;
-  /**
-   * and its length
-   */
-  size_t len;
-} mpclipboard_NewBinary_Body;
-
-typedef struct {
   mpclipboard_Output_Tag tag;
   union {
     mpclipboard_ConnectivityChanged_Body CONNECTIVITY_CHANGED;
     mpclipboard_NewText_Body NEW_TEXT;
-    mpclipboard_NewBinary_Body NEW_BINARY;
   };
 } mpclipboard_Output;
 
@@ -163,12 +147,6 @@ bool mpclipboard_push_text1(mpclipboard_MPClipboard *mpclipboard, const char *te
  * returns false if given text isn't new
  */
 bool mpclipboard_push_text2(mpclipboard_MPClipboard *mpclipboard, const char *ptr, size_t len);
-
-/**
- * Pushes binary
- * returns false if given blob isn't new
- */
-bool mpclipboard_push_binary(mpclipboard_MPClipboard *mpclipboard, const char *ptr, size_t len);
 
 /**
  * Drops an instance of MPClipboard, frees memory, closes files

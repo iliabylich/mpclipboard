@@ -42,12 +42,6 @@ class MPClipboard {
         }
     }
 
-    func pushBinary(_ data: Data) -> Bool {
-        data.withUnsafeBytes { (ptr: UnsafeRawBufferPointer) in
-            return mpclipboard_push_binary(mpclipboard, ptr.baseAddress, ptr.count)
-        }
-    }
-
     func read() -> Output? {
         return Output.from(mpclipboard_read(mpclipboard))
     }

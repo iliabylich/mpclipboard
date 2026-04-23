@@ -136,10 +136,6 @@ void print_output(mpclipboard_Output output) {
     print_string(output.NEW_TEXT.ptr, output.NEW_TEXT.len);
     break;
   }
-  case MPCLIPBOARD_OUTPUT_NEW_BINARY: {
-    print_string(output.NEW_BINARY.ptr, output.NEW_BINARY.len);
-    break;
-  }
   case MPCLIPBOARD_OUTPUT_INTERNAL: {
     break;
   }

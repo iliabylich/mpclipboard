@@ -100,13 +100,6 @@ impl MPClipboard {
         None
     }
 
-    /// Pushes a new binary Clip with provided bytes.
-    /// There's NO queue internally, so this this method overrides previously pushed-but-not-sent Clip.
-    #[must_use]
-    pub fn push_binary(&mut self, bytes: Vec<u8>) -> bool {
-        self.push_clip(Clip::binary(bytes))
-    }
-
     /// Pushes a new text Clip with provided content.
     /// There's NO queue internally, so this this method overrides previously pushed-but-not-sent Clip.
     #[must_use]

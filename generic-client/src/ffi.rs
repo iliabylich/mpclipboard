@@ -22,10 +22,6 @@ fn string_to_c(s: String) -> (*mut c_char, usize) {
     let (ptr, len, _capacity) = s.into_raw_parts();
     (ptr.cast(), len)
 }
-fn bytes_to_c(bytes: Vec<u8>) -> (*mut c_char, usize) {
-    let (ptr, len, _capacity) = bytes.into_raw_parts();
-    (ptr.cast(), len)
-}
 
 /// Initializes MPClipboard, must be called once at startup
 #[unsafe(no_mangle)]
@@ -102,13 +98,6 @@ pub enum COutput {
         /// and its length
         len: usize,
     },
-    /// New binary clip
-    NewBinary {
-        /// New bytes
-        ptr: *mut c_char,
-        /// and its length
-        len: usize,
-    },
     /// Internal
     Internal,
 }
@@ -121,10 +110,6 @@ impl From<Output> for COutput {
             Output::NewText { text } => {
                 let (ptr, len) = string_to_c(text);
                 Self::NewText { ptr, len }
-            }
-            Output::NewBinary { bytes } => {
-                let (ptr, len) = bytes_to_c(bytes);
-                Self::NewBinary { ptr, len }
             }
         }
     }
@@ -164,19 +149,6 @@ pub extern "C" fn mpclipboard_push_text2(
     let bytes = unsafe { core::slice::from_raw_parts(ptr.cast::<u8>(), len) };
     let text = unsafe { std::str::from_utf8_unchecked(bytes) };
     mpclipboard.push_text(text.to_string())
-}
-
-/// Pushes binary
-/// returns false if given blob isn't new
-#[unsafe(no_mangle)]
-pub extern "C" fn mpclipboard_push_binary(
-    mpclipboard: *mut MPClipboard,
-    ptr: *const c_char,
-    len: usize,
-) -> bool {
-    let mpclipboard = unsafe { &mut *mpclipboard };
-    let bytes = unsafe { core::slice::from_raw_parts(ptr.cast::<u8>(), len) }.to_vec();
-    mpclipboard.push_binary(bytes)
 }
 
 /// Drops an instance of MPClipboard, frees memory, closes files
