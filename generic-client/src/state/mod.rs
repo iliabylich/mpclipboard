@@ -4,8 +4,6 @@ mod disconnected;
 mod handshaking;
 mod ready;
 
-use std::os::fd::AsRawFd as _;
-
 pub(crate) use connected::Connected;
 pub(crate) use connecting::Connecting;
 pub(crate) use disconnected::Disconnected;
@@ -49,25 +47,6 @@ impl State {
             State::Handshaking(_) => StateTag::Handshaking,
             State::Ready(_) => StateTag::Ready,
             State::Disconnected(_) => StateTag::Disconnected,
-        }
-    }
-
-    // readable -> writable -> fd
-    pub(crate) fn interests(
-        &self,
-        write_blocked: bool,
-        has_pending_message: bool,
-    ) -> Option<(bool, bool, i32)> {
-        match self {
-            State::Connecting(state) => Some((false, true, state.as_raw_fd())),
-            State::Connected(state) => Some((true, true, state.as_raw_fd())),
-            State::Handshaking(state) => Some((true, true, state.as_raw_fd())),
-            State::Ready(state) => Some((
-                true,
-                write_blocked || has_pending_message,
-                state.as_raw_fd(),
-            )),
-            State::Disconnected(_) => None,
         }
     }
 }

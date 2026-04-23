@@ -1,4 +1,5 @@
 use crate::{
+    Connectivity, Output,
     event_loop::EventLoop,
     state::{Connected, Connecting, State},
 };
@@ -14,11 +15,16 @@ use std::{net::SocketAddr, os::fd::AsRawFd as _, rc::Rc};
 pub(crate) struct Disconnected;
 
 impl Disconnected {
-    pub(crate) fn connect(remote_addr: SocketAddr, event_loop: Rc<EventLoop>) -> State {
+    pub(crate) fn connect(
+        remote_addr: SocketAddr,
+        event_loop: Rc<EventLoop>,
+    ) -> (State, Option<Output>) {
+        log::trace!("connect");
+
         macro_rules! disconnect {
             ($err:expr) => {{
                 log::error!("{:?}", $err);
-                return State::Disconnected(Disconnected);
+                return (State::Disconnected(Disconnected), None);
             }};
         }
 
@@ -30,8 +36,6 @@ impl Disconnected {
                 }
             };
         }
-
-        log::trace!("starting connect");
 
         let domain = if remote_addr.is_ipv4() {
             AddressFamily::INET
@@ -59,24 +63,23 @@ impl Disconnected {
             Err(err) => disconnect!(err),
         };
 
-        let (fd, state) = if connected {
-            log::trace!("connected; fd: {}", fd.as_raw_fd());
-            (
-                fd.as_raw_fd(),
-                State::Connected(Connected::new(fd, Rc::clone(&event_loop))),
-            )
+        let rawfd = fd.as_raw_fd();
+
+        let state = if connected {
+            log::trace!("connected; fd: {rawfd}");
+            State::Connected(Connected::new(fd, Rc::clone(&event_loop)))
         } else {
-            log::trace!("connecting; fd: {}", fd.as_raw_fd());
-            (
-                fd.as_raw_fd(),
-                State::Connecting(Connecting::new(fd, Rc::clone(&event_loop))),
-            )
+            log::trace!("connecting; fd: {rawfd}");
+            State::Connecting(Connecting::new(fd, Rc::clone(&event_loop)))
         };
 
-        if let Err(err) = event_loop.add(fd, true, true) {
-            disconnect!(err);
-        }
+        event_loop.add(rawfd, true, true);
 
-        state
+        (
+            state,
+            Some(Output::ConnectivityChanged {
+                connectivity: Connectivity::Connecting,
+            }),
+        )
     }
 }

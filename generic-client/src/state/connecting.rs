@@ -1,4 +1,5 @@
 use crate::{
+    Connectivity, Output,
     event_loop::EventLoop,
     state::{Connected, Disconnected, State},
 };
@@ -20,7 +21,7 @@ impl Connecting {
         }
     }
 
-    pub(crate) fn finish(&mut self) -> State {
+    pub(crate) fn finish(&mut self) -> (State, Option<Output>) {
         let fd = self.fd.take().expect("bug: malformed state in Connecting");
         let rawfd = fd.as_raw_fd();
 
@@ -28,12 +29,25 @@ impl Connecting {
             ($err:expr) => {{
                 log::error!("{:?}", $err);
                 self.event_loop.remove(rawfd);
-                return State::Disconnected(Disconnected);
+
+                return (
+                    State::Disconnected(Disconnected),
+                    Some(Output::ConnectivityChanged {
+                        connectivity: Connectivity::Disconnected,
+                    }),
+                );
             }};
         }
 
         match rustix::net::sockopt::socket_error(&fd) {
-            Ok(Ok(())) => State::Connected(Connected::new(fd, Rc::clone(&self.event_loop))),
+            Ok(Ok(())) => {
+                self.event_loop.modify(rawfd, true, true);
+
+                (
+                    State::Connected(Connected::new(fd, Rc::clone(&self.event_loop))),
+                    None,
+                )
+            }
             Ok(Err(err)) => disconnect!(err),
             Err(err) => disconnect!(err),
         }

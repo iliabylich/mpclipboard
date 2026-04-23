@@ -1,4 +1,3 @@
-use anyhow::{Context as _, Result, bail};
 use polling::{Event, Events, PollMode, Poller};
 use std::{
     cell::Cell,
@@ -22,37 +21,36 @@ impl EventLoop {
     const TIMER_ID: u32 = 1;
     const WS_ID: u32 = 2;
 
-    pub(crate) fn new() -> Result<Rc<Self>> {
+    pub(crate) fn new() -> Rc<Self> {
         let this = Self {
-            poller: Poller::new()?,
+            poller: Poller::new().expect("bug: failed to instantiate event loop"),
             ticks: Cell::new(0),
         };
         log::trace!("Supports edge: {}", this.poller.supports_edge());
         log::trace!("Supports level: {}", this.poller.supports_level());
-        this.add_timer()?;
-        Ok(Rc::new(this))
+        this.add_timer();
+        Rc::new(this)
     }
 
     #[cfg(target_os = "macos")]
-    pub(crate) fn add_timer(&self) -> Result<()> {
+    pub(crate) fn add_timer(&self) {
         use polling::os::kqueue::{PollerKqueueExt, Timer};
-        self.poller.add_filter(
-            Timer {
-                id: 2,
-                timeout: Duration::from_secs(1),
-            },
-            Self::TIMER_ID as usize,
-            PollMode::Level,
-        )?;
-        Ok(())
+        self.poller
+            .add_filter(
+                Timer {
+                    id: 2,
+                    timeout: Duration::from_secs(1),
+                },
+                Self::TIMER_ID as usize,
+                PollMode::Level,
+            )
+            .expect("bug: failed to add timer");
     }
 
     #[cfg(target_os = "macos")]
-    fn drain_timer(&self) -> Result<()> {
-        Ok(())
-    }
+    fn drain_timer(&self) {}
 
-    pub(crate) fn add(&self, fd: i32, readable: bool, writable: bool) -> Result<()> {
+    pub(crate) fn add(&self, fd: i32, readable: bool, writable: bool) {
         unsafe {
             self.poller
                 .add_with_mode(
@@ -60,7 +58,7 @@ impl EventLoop {
                     Event::new(Self::WS_ID as usize, readable, writable),
                     PollMode::Level,
                 )
-                .context("failed to add FD to Poller")
+                .expect("bug: failed to add FD to Poller")
         }
     }
 
@@ -70,22 +68,22 @@ impl EventLoop {
         }
     }
 
-    pub(crate) fn modify(&self, fd: i32, readable: bool, writable: bool) -> Result<()> {
+    pub(crate) fn modify(&self, fd: i32, readable: bool, writable: bool) {
         self.poller
             .modify_with_mode(
                 unsafe { BorrowedFd::borrow_raw(fd) },
                 Event::new(Self::WS_ID as usize, readable, writable),
                 PollMode::Level,
             )
-            .context("failed to modify FD in Poller")
+            .expect("bug: failed to modify FD in Poller")
     }
 
-    pub(crate) fn read(&self) -> Result<EventLoopEvent> {
+    pub(crate) fn read(&self) -> EventLoopEvent {
         let mut events = Events::new();
 
         self.poller
             .wait(&mut events, None)
-            .context("failed to read")?;
+            .expect("bug: failed to read");
 
         let mut tick = None;
         let mut ws = None;
@@ -94,19 +92,19 @@ impl EventLoop {
             match event.key as u32 {
                 Self::TIMER_ID => {
                     self.ticks.set(self.ticks.get() + 1);
-                    self.drain_timer()?;
+                    self.drain_timer();
                     tick = Some(self.ticks.get());
                 }
 
                 Self::WS_ID => ws = Some((event.readable, event.writable)),
 
                 _ => {
-                    bail!("unknown event: {event:?}")
+                    panic!("bug: unknown event: {event:?}")
                 }
             }
         }
 
-        Ok(EventLoopEvent { tick, ws })
+        EventLoopEvent { tick, ws }
     }
 }
 

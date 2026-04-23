@@ -1,5 +1,5 @@
 use crate::{
-    Config,
+    Config, Connectivity, Output,
     event_loop::EventLoop,
     state::{Disconnected, Handshaking, Ready, State},
     tls::TLS,
@@ -25,7 +25,11 @@ impl Connected {
         }
     }
 
-    pub(crate) fn start_handshake(&mut self, config: &Config, tls: &TLS) -> State {
+    pub(crate) fn start_handshake(
+        &mut self,
+        config: &Config,
+        tls: &TLS,
+    ) -> (State, Option<Output>) {
         let fd = self.fd.take().expect("bug: malformed state in Connected");
         let rawfd = fd.as_raw_fd();
 
@@ -33,7 +37,12 @@ impl Connected {
             ($err:expr) => {{
                 log::error!("{:?}", $err);
                 self.event_loop.remove(rawfd);
-                return State::Disconnected(Disconnected);
+                return (
+                    State::Disconnected(Disconnected),
+                    Some(Output::ConnectivityChanged {
+                        connectivity: Connectivity::Disconnected,
+                    }),
+                );
             }};
         }
 
@@ -69,18 +78,22 @@ impl Connected {
             Ok((ws, response)) => {
                 log::trace!("handshake completed: {}", response.status());
                 let event_loop = Rc::clone(&self.event_loop);
-                State::Ready(Ready::new(ws, rawfd, event_loop))
+                (
+                    State::Ready(Ready::new(ws, rawfd, event_loop)),
+                    Some(Output::ConnectivityChanged {
+                        connectivity: Connectivity::Connected,
+                    }),
+                )
             }
             Err(HandshakeError::Interrupted(handshake)) => {
                 log::trace!("handshake interrupted");
                 let event_loop = Rc::clone(&self.event_loop);
-                State::Handshaking(Handshaking::new(handshake, rawfd, event_loop))
+                (
+                    State::Handshaking(Handshaking::new(handshake, rawfd, event_loop)),
+                    None,
+                )
             }
-            Err(HandshakeError::Failure(err)) => {
-                log::error!("{err:?}");
-                self.event_loop.remove(rawfd);
-                State::Disconnected(Disconnected)
-            }
+            Err(HandshakeError::Failure(err)) => disconnect!(err),
         }
     }
 }

@@ -20,7 +20,7 @@ impl Context {
         let remote_addr = config.remote_addr()?;
         log::trace!("remote_addr = {remote_addr:?}");
 
-        let event_loop = EventLoop::new()?;
+        let event_loop = EventLoop::new();
 
         Ok(Self {
             config,

@@ -1,8 +1,9 @@
 use crate::{
+    Connectivity, Output,
     event_loop::EventLoop,
     state::{Disconnected, State},
 };
-use clip::Clip;
+use clip::{Clip, TextOrBinary};
 use std::{io::ErrorKind, net::TcpStream, os::fd::AsRawFd, rc::Rc};
 use tungstenite::{Message, stream::MaybeTlsStream};
 
@@ -27,8 +28,8 @@ impl Ready {
         readable: bool,
         writable: bool,
         pending_message_to_send: &mut Option<Message>,
-        write_blocked: &mut bool,
-    ) -> (State, Option<Clip>) {
+        last_received_clip_ts: &mut u128,
+    ) -> (State, Option<Output>) {
         let (mut ws, rawfd) = self
             .ws_and_fd
             .take()
@@ -38,9 +39,16 @@ impl Ready {
             ($err:expr) => {{
                 log::error!("{:?}", $err);
                 self.event_loop.remove(rawfd);
-                return (State::Disconnected(Disconnected), None);
+                return (
+                    State::Disconnected(Disconnected),
+                    Some(Output::ConnectivityChanged {
+                        connectivity: Connectivity::Disconnected,
+                    }),
+                );
             }};
         }
+
+        let mut write_blocked = false;
 
         if writable
             && ws.can_write()
@@ -50,7 +58,7 @@ impl Ready {
                 Ok(()) => match ws.flush() {
                     Ok(()) => {}
                     Err(tungstenite::Error::Io(err)) if err.kind() == ErrorKind::WouldBlock => {
-                        *write_blocked = true
+                        write_blocked = true
                     }
                     Err(tungstenite::Error::WriteBufferFull(write_me_back)) => {
                         *pending_message_to_send = Some(*write_me_back);
@@ -59,7 +67,7 @@ impl Ready {
                 },
 
                 Err(tungstenite::Error::Io(err)) if err.kind() == ErrorKind::WouldBlock => {
-                    *write_blocked = true
+                    write_blocked = true
                 }
                 Err(tungstenite::Error::WriteBufferFull(write_me_back)) => {
                     *pending_message_to_send = Some(*write_me_back);
@@ -88,9 +96,25 @@ impl Ready {
             };
         }
 
+        let wants_write = write_blocked || pending_message_to_send.is_some();
+        self.event_loop.modify(rawfd, true, wants_write);
+
+        let output = if let Some(clip) = clip
+            && clip.timestamp > *last_received_clip_ts
+        {
+            *last_received_clip_ts = clip.timestamp;
+
+            match clip.text_or_binary {
+                TextOrBinary::Text(text) => Some(Output::NewText { text }),
+                TextOrBinary::Binary(bytes) => Some(Output::NewBinary { bytes }),
+            }
+        } else {
+            None
+        };
+
         (
             State::Ready(Ready::new(ws, rawfd, Rc::clone(&self.event_loop))),
-            clip,
+            output,
         )
     }
 }

@@ -1,12 +1,12 @@
 use crate::{
-    Config, Connectivity, Context, Output,
+    Config, Context, Output,
     event_loop::EventLoop,
     logger::Logger,
-    state::{Disconnected, State, StateTag},
+    state::{Disconnected, State},
     tls::TLS,
 };
 use anyhow::Result;
-use clip::{Clip, TextOrBinary};
+use clip::Clip;
 use std::{
     net::SocketAddr,
     os::fd::{AsFd, AsRawFd, BorrowedFd},
@@ -45,7 +45,7 @@ impl MPClipboard {
             event_loop,
         } = context;
 
-        let state = Disconnected::connect(remote_addr, Rc::clone(&event_loop));
+        let (state, _output) = Disconnected::connect(remote_addr, Rc::clone(&event_loop));
 
         Self {
             config,
@@ -60,140 +60,39 @@ impl MPClipboard {
         }
     }
 
-    fn connectivity(&self) -> Connectivity {
-        Connectivity::from(&self.state)
-    }
-
-    fn set_state(
-        &mut self,
-        state: State,
-        state_was: StateTag,
-        connectivity_was: Connectivity,
-    ) -> Option<Connectivity> {
-        self.state = state;
-
-        let state_now = self.state.tag();
-        if state_was != state_now {
-            log::trace!("state changed: {state_was:?} -> {state_now:?}");
-        }
-
-        let connectivity_now = self.connectivity();
-        if connectivity_was != connectivity_now {
-            log::trace!("connectivity changed: {connectivity_was:?} -> {connectivity_now:?}");
-            return Some(connectivity_now);
-        }
-
-        None
-    }
-
-    fn disconnect(&mut self) -> Option<Connectivity> {
-        self.set_state(
-            State::Disconnected(Disconnected),
-            self.state.tag(),
-            self.connectivity(),
-        )
-    }
-    fn reconnect(&mut self) -> Option<Connectivity> {
-        self.set_state(
-            Disconnected::connect(self.remote_addr, Rc::clone(&self.event_loop)),
-            self.state.tag(),
-            self.connectivity(),
-        )
-    }
-
     /// Reads data from WebSocket connection, returns Output
     pub fn read(&mut self) -> Option<Output> {
-        let state_was = self.state.tag();
-        let connectivity_was = self.connectivity();
-
-        let event = match self.event_loop.read() {
-            Ok(event) => event,
-            Err(err) => {
-                log::error!("{err:?}");
-                return self
-                    .disconnect()
-                    .map(|connectivity| Output::ConnectivityChanged { connectivity });
-            }
-        };
+        let event = self.event_loop.read();
 
         if let Some(tick) = event.tick {
             log::trace!("tick {tick}");
 
             if tick.is_multiple_of(5) && matches!(self.state, State::Disconnected(_)) {
-                return self
-                    .reconnect()
-                    .map(|connectivity| Output::ConnectivityChanged { connectivity });
+                let (state, output) =
+                    Disconnected::connect(self.remote_addr, Rc::clone(&self.event_loop));
+                self.state = state;
+                return output;
             }
         }
 
         if let Some((readable, writable)) = event.ws {
-            let output = match &mut self.state {
-                State::Connecting(connecting) => {
-                    let state = connecting.finish();
-                    let output = self
-                        .set_state(state, state_was, connectivity_was)
-                        .map(|connectivity| Output::ConnectivityChanged { connectivity });
-                    self.update_fd_interest(false);
-                    output
-                }
-                State::Connected(connected) => {
-                    let state = connected.start_handshake(&self.config, &self.tls);
-                    let output = self
-                        .set_state(state, state_was, connectivity_was)
-                        .map(|connectivity| Output::ConnectivityChanged { connectivity });
-                    self.update_fd_interest(false);
-                    output
-                }
-                State::Handshaking(handshaking) => {
-                    let state = handshaking.finish_handshake();
-                    let output = self
-                        .set_state(state, state_was, connectivity_was)
-                        .map(|connectivity| Output::ConnectivityChanged { connectivity });
-                    self.update_fd_interest(false);
-                    output
-                }
-                State::Ready(ready) => {
-                    let mut write_blocked = false;
-
-                    let (state, clip) = ready.read_write(
-                        readable,
-                        writable,
-                        &mut self.pending_message_to_send,
-                        &mut write_blocked,
-                    );
-
-                    let connectivity = self.set_state(state, state_was, connectivity_was);
-                    self.update_fd_interest(write_blocked);
-
-                    if let Some(clip) = clip
-                        && clip.timestamp > self.last_received_clip_ts
-                    {
-                        self.last_received_clip_ts = clip.timestamp;
-
-                        match (clip.text_or_binary, connectivity) {
-                            (TextOrBinary::Text(text), None) => Some(Output::NewText { text }),
-                            (TextOrBinary::Text(text), Some(connectivity)) => {
-                                Some(Output::NewTextAndConnectivityChanged { text, connectivity })
-                            }
-                            (TextOrBinary::Binary(bytes), None) => {
-                                Some(Output::NewBinary { bytes })
-                            }
-                            (TextOrBinary::Binary(bytes), Some(connectivity)) => {
-                                Some(Output::NewBinaryAndConnectivityChanged {
-                                    bytes,
-                                    connectivity,
-                                })
-                            }
-                        }
-                    } else {
-                        connectivity
-                            .map(|connectivity| Output::ConnectivityChanged { connectivity })
-                    }
-                }
+            let (state, output) = match &mut self.state {
+                State::Connecting(connecting) => connecting.finish(),
+                State::Connected(connected) => connected.start_handshake(&self.config, &self.tls),
+                State::Handshaking(handshaking) => handshaking.finish_handshake(),
+                State::Ready(ready) => ready.read_write(
+                    readable,
+                    writable,
+                    &mut self.pending_message_to_send,
+                    &mut self.last_received_clip_ts,
+                ),
                 State::Disconnected(_) => {
                     unreachable!("bug: reading in Disconnected state");
                 }
             };
+
+            log::trace!("{:?} -> {:?}", self.state.tag(), state.tag());
+            self.state = state;
 
             return output;
         }
@@ -201,27 +100,15 @@ impl MPClipboard {
         None
     }
 
-    fn update_fd_interest(&mut self, write_blocked: bool) {
-        let has_pending_message = self.pending_message_to_send.is_some();
-
-        let Some((readable, writable, fd)) =
-            self.state.interests(write_blocked, has_pending_message)
-        else {
-            return;
-        };
-
-        if let Err(err) = self.event_loop.modify(fd, readable, writable) {
-            log::error!("{err:?}");
-            self.disconnect();
-        }
-    }
-
     /// Pushes a new binary Clip with provided bytes.
     /// There's NO queue internally, so this this method overrides previously pushed-but-not-sent Clip.
     pub fn push_binary(&mut self, bytes: Vec<u8>) {
         let clip = Clip::binary(bytes);
         self.pending_message_to_send = Some(Message::Binary(Bytes::from(clip.encode())));
-        self.update_fd_interest(false);
+
+        if let State::Ready(ready) = &self.state {
+            self.event_loop.modify(ready.as_raw_fd(), true, true);
+        }
     }
 
     /// Pushes a new text Clip with provided content.
@@ -229,7 +116,10 @@ impl MPClipboard {
     pub fn push_text(&mut self, text: String) {
         let clip = Clip::text(text);
         self.pending_message_to_send = Some(Message::Binary(Bytes::from(clip.encode())));
-        self.update_fd_interest(false);
+
+        if let State::Ready(ready) = &self.state {
+            self.event_loop.modify(ready.as_raw_fd(), true, true);
+        }
     }
 }
 
