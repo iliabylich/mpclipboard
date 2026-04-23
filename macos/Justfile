@@ -34,42 +34,37 @@ upload version ref="master":
     gh workflow run release-macos --ref {{ref}} -f version={{version}}
 
 baseicon := 'icon_512x512.png'
+assetsdir := 'mpclipboard/Assets.xcassets'
 
-generate-icon name rgb:
-    #!/usr/bin/env bash
-    rm -rf mpclipboard/Assets.xcassets/{{name}}.imageset
-    mkdir -p mpclipboard/Assets.xcassets/{{name}}.imageset
+generate-imageset-variant rgb density size outpath:
+    magick {{baseicon}} \
+        -density {{density}} \
+        -resize {{size}} \
+        -alpha set \
+        -channel rgba \
+        -fill "{{rgb}}" \
+        -colorize 100% \
+        {{outpath}}
 
-    variant() {
-        local density=$1
-        local size=$2
-        local filename=$3
-        magick {{baseicon}} \
-            -density $density \
-            -resize $size \
-            -alpha set \
-            -channel rgba \
-            -fill "{{rgb}}" \
-            -colorize 100% \
-            mpclipboard/Assets.xcassets/{{name}}.imageset/$filename
-    }
+generate-imageset name rgb:
+    mkdir -p {{assetsdir}}/{{name}}.imageset
 
-    variant 72  24x24 {{name}}.png
-    variant 144 48x48 {{name}}@2x.png
-    variant 216 72x72 {{name}}@3x.png
+    @just generate-imageset-variant "{{rgb}}" 72  24x24 {{assetsdir}}/{{name}}.imageset/{{name}}.png
+    @just generate-imageset-variant "{{rgb}}" 144 48x48 {{assetsdir}}/{{name}}.imageset/{{name}}@2x.png
+    @just generate-imageset-variant "{{rgb}}" 216 72x72 {{assetsdir}}/{{name}}.imageset/{{name}}@3x.png
 
-    cat > mpclipboard/Assets.xcassets/{{name}}.imageset/Contents.json <<EOF
-        {
-        "images": [
-            { "filename": "{{name}}.png",    "idiom": "universal", "scale": "1x" },
-            { "filename": "{{name}}@2x.png", "idiom": "universal", "scale": "2x" },
-            { "filename": "{{name}}@3x.png", "idiom": "universal", "scale": "3x" }
-        ],
-        "info": { "version": 1, "author": "xcode" }
-        }
-    EOF
+generate-iconset rgb:
+    magick {{baseicon}} \
+        -resize 32x32 \
+        -alpha set \
+        -channel rgba \
+        -fill "{{rgb}}" \
+        -colorize 100% \
+        {{assetsdir}}/AppIcon.appiconset/icon-32x32.png
 
-icons:
-    @just generate-icon green "rgb(23, 199, 23)"
-    @just generate-icon red "rgb(195, 40, 40)"
-    @just generate-icon yellow "rgb(236, 223, 41)"
+generate-all-resources:
+    @just generate-imageset green  "rgb(23, 199, 23)"
+    @just generate-imageset red    "rgb(195, 40, 40)"
+    @just generate-imageset yellow "rgb(236, 223, 41)"
+
+    @just generate-iconset "rgb(55, 54, 46)"
