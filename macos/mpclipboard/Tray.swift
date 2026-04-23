@@ -3,6 +3,7 @@ import Cocoa
 class Tray {
     var redImage: NSImage? = NSImage(named: "red")
     var greenImage: NSImage? = NSImage(named: "green")
+    var yellowImage: NSImage? = NSImage(named: "yellow")
 
     var statusItem: NSStatusItem
     var trayButton: NSStatusBarButton?
@@ -27,7 +28,7 @@ class Tray {
             case .connected:
                 greenImage
             case .connecting:
-                redImage
+                yellowImage
             case .disconnected:
                 redImage
             }
