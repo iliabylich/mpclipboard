@@ -1,7 +1,0 @@
-lib := '../generic-client/target/debug/libmpclipboard_generic_client.a'
-
-[macos]
-dev:
-    cd ../generic-client && cargo build
-    clang -fuse-ld=lld kqueue.c {{lib}} -framework Security -framework CoreFoundation -o kqueue
-    RUST_LOG=info ./kqueue

@@ -1,0 +1,7 @@
+lib := '../generic-client/target/debug/libmpclipboard_generic_client.a'
+
+[macos]
+dev:
+    cd ../generic-client && cargo build
+    clang -fuse-ld=lld poll-cli.c {{lib}} -framework Security -framework CoreFoundation -o poll-cli
+    RUST_LOG=info ./poll-cli

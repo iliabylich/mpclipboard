@@ -1,6 +1,6 @@
 mod generic-client 'generic-client/Justfile'
 mod server         'server/Justfile'
-mod kqueue-cli     'kqueue-cli/Justfile'
+mod poll-cli       'poll-cli/Justfile'
 mod macos          'macos/Justfile'
 
 clippy:
