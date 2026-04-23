@@ -3,7 +3,6 @@
 #![warn(unused_qualifications)]
 #![warn(deprecated_in_future)]
 #![warn(unused_lifetimes)]
-#![expect(clippy::result_large_err)]
 #![doc = include_str!("../README.md")]
 
 pub use config::Config;

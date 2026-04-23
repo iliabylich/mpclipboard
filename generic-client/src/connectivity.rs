@@ -20,7 +20,6 @@ impl From<&State> for Connectivity {
             State::Handshaking(_) => Self::Connecting,
             State::Ready(_) => Self::Connected,
             State::Disconnected(_) => Self::Disconnected,
-            State::Taken => unreachable!(),
         }
     }
 }

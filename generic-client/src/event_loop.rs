@@ -7,14 +7,6 @@ use std::{
     time::Duration,
 };
 
-mod mid_handshake;
-mod owned_fd;
-mod websocket;
-
-pub(crate) use mid_handshake::EventLoopAwareMidHandshake;
-pub(crate) use owned_fd::EventLoopAwareOwnedFd;
-pub(crate) use websocket::{EventLoopAwareWebSocket, ReadResult, WriteResult};
-
 pub(crate) struct EventLoop {
     poller: Poller,
     ticks: Cell<u64>,

@@ -103,8 +103,6 @@ impl MPClipboard {
 
     /// Reads data from WebSocket connection, returns Output
     pub fn read(&mut self) -> Option<Output> {
-        assert!(self.state.tag() != StateTag::Taken);
-
         let state_was = self.state.tag();
         let connectivity_was = self.connectivity();
 
@@ -129,7 +127,7 @@ impl MPClipboard {
         }
 
         if let Some((readable, writable)) = event.ws {
-            let output = match std::mem::take(&mut self.state) {
+            let output = match &mut self.state {
                 State::Connecting(connecting) => {
                     let state = connecting.finish();
                     let output = self
@@ -195,12 +193,8 @@ impl MPClipboard {
                 State::Disconnected(_) => {
                     unreachable!("bug: reading in Disconnected state");
                 }
-                State::Taken => {
-                    unreachable!("bug: reading in Taken state");
-                }
             };
 
-            assert!(!matches!(self.state, State::Taken));
             return output;
         }
 
