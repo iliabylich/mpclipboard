@@ -23,6 +23,15 @@ jobs:
       - run: find /Applications -name "Xcode*.app" -type d
       - run: sudo xcode-select -switch /Applications/Xcode_16.2.app/Contents/Developer
       - run: just macos::release
+      - run: cp mpclipboard.dmg mpclipboard_${{ inputs.version }}.dmg
+
+      - uses: mknejp/delete-release-assets@v1
+        with:
+          tag: latest
+          assets: mpclipboard_*.dmg
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fail-if-no-assets: false
+          fail-if-no-release: false
 
       - name: release (for version)
         uses: ncipollo/release-action@v1
@@ -30,7 +39,7 @@ jobs:
           allowUpdates: false
           artifactErrorsFailBuild: true
           tag: server-v${{ inputs.version }}
-          artifacts: mpclipboard.dmg
+          artifacts: mpclipboard_${{ inputs.version }}.dmg
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: release (latest)
@@ -38,6 +47,6 @@ jobs:
         with:
           allowUpdates: true
           artifactErrorsFailBuild: true
-          tag: server-latest
-          artifacts: mpclipboard.dmg
+          tag: latest
+          artifacts: mpclipboard_${{ inputs.version }}.dmg
           token: ${{ secrets.GITHUB_TOKEN }}
