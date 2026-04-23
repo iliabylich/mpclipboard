@@ -1,3 +1,1 @@
-uri = "ws://127.0.0.1:3000"
-token = "sekret"
-name = "generic-client"
+client.toml

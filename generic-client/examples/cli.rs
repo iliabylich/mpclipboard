@@ -48,13 +48,6 @@ fn main() -> Result<()> {
                             }
                             Output::NewText { text } => log::info!("[{text}]"),
                             Output::NewBinary { bytes } => log::info!("[{bytes:?}]"),
-                            Output::NewTextAndConnectivityChanged { text, connectivity } => {
-                                log::info!("{connectivity:?} [{text}]")
-                            }
-                            Output::NewBinaryAndConnectivityChanged {
-                                bytes,
-                                connectivity,
-                            } => log::info!("{connectivity:?} [{bytes:?}]"),
                         }
                     }
                 }

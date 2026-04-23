@@ -68,14 +68,6 @@ typedef enum {
    */
   MPCLIPBOARD_OUTPUT_NEW_BINARY,
   /**
-   * New text + connectivity
-   */
-  MPCLIPBOARD_OUTPUT_NEW_TEXT_AND_CONNECTIVITY_CHANGED,
-  /**
-   * New binary + connectivity
-   */
-  MPCLIPBOARD_OUTPUT_NEW_BINARY_AND_CONNECTIVITY_CHANGED,
-  /**
    * Internal
    */
   MPCLIPBOARD_OUTPUT_INTERNAL,
@@ -111,43 +103,11 @@ typedef struct {
 } mpclipboard_NewBinary_Body;
 
 typedef struct {
-  /**
-   * New text
-   */
-  char *ptr;
-  /**
-   * and its length
-   */
-  size_t len;
-  /**
-   * New connectivity
-   */
-  mpclipboard_Connectivity connectivity;
-} mpclipboard_NewTextAndConnectivityChanged_Body;
-
-typedef struct {
-  /**
-   * New bytes
-   */
-  char *ptr;
-  /**
-   * and its length
-   */
-  size_t len;
-  /**
-   * New connectivity
-   */
-  mpclipboard_Connectivity connectivity;
-} mpclipboard_NewBinaryAndConnectivityChanged_Body;
-
-typedef struct {
   mpclipboard_Output_Tag tag;
   union {
     mpclipboard_ConnectivityChanged_Body CONNECTIVITY_CHANGED;
     mpclipboard_NewText_Body NEW_TEXT;
     mpclipboard_NewBinary_Body NEW_BINARY;
-    mpclipboard_NewTextAndConnectivityChanged_Body NEW_TEXT_AND_CONNECTIVITY_CHANGED;
-    mpclipboard_NewBinaryAndConnectivityChanged_Body NEW_BINARY_AND_CONNECTIVITY_CHANGED;
   };
 } mpclipboard_Output;
 

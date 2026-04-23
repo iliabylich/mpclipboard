@@ -19,18 +19,4 @@ pub enum Output {
         /// New bytes
         bytes: Vec<u8>,
     },
-    /// New text + connectivity
-    NewTextAndConnectivityChanged {
-        /// New text
-        text: String,
-        /// New connectivity
-        connectivity: Connectivity,
-    },
-    /// New binary + connectivity
-    NewBinaryAndConnectivityChanged {
-        /// New bytes
-        bytes: Vec<u8>,
-        /// New connectivity
-        connectivity: Connectivity,
-    },
 }

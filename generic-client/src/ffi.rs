@@ -111,24 +111,6 @@ pub enum COutput {
         /// and its length
         len: usize,
     },
-    /// New text + connectivity
-    NewTextAndConnectivityChanged {
-        /// New text
-        ptr: *mut c_char,
-        /// and its length
-        len: usize,
-        /// New connectivity
-        connectivity: Connectivity,
-    },
-    /// New binary + connectivity
-    NewBinaryAndConnectivityChanged {
-        /// New bytes
-        ptr: *mut c_char,
-        /// and its length
-        len: usize,
-        /// New connectivity
-        connectivity: Connectivity,
-    },
     /// Internal
     Internal,
 }
@@ -145,25 +127,6 @@ impl From<Output> for COutput {
             Output::NewBinary { bytes } => {
                 let (ptr, len) = bytes_to_c(bytes);
                 Self::NewBinary { ptr, len }
-            }
-            Output::NewTextAndConnectivityChanged { text, connectivity } => {
-                let (ptr, len) = string_to_c(text);
-                Self::NewTextAndConnectivityChanged {
-                    ptr,
-                    len,
-                    connectivity,
-                }
-            }
-            Output::NewBinaryAndConnectivityChanged {
-                bytes,
-                connectivity,
-            } => {
-                let (ptr, len) = bytes_to_c(bytes);
-                Self::NewBinaryAndConnectivityChanged {
-                    ptr,
-                    len,
-                    connectivity,
-                }
             }
         }
     }

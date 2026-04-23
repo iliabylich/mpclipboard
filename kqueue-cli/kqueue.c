@@ -1,4 +1,4 @@
-#include "../bindings.h"
+#include "../generic-client/bindings.h"
 #include <errno.h>
 #include <pthread.h>
 #include <stdio.h>
@@ -138,18 +138,6 @@ void print_output(mpclipboard_Output output) {
   }
   case MPCLIPBOARD_OUTPUT_NEW_BINARY: {
     print_string(output.NEW_BINARY.ptr, output.NEW_BINARY.len);
-    break;
-  }
-  case MPCLIPBOARD_OUTPUT_NEW_TEXT_AND_CONNECTIVITY_CHANGED: {
-    print_connectivity(output.NEW_TEXT_AND_CONNECTIVITY_CHANGED.connectivity);
-    print_string(output.NEW_TEXT_AND_CONNECTIVITY_CHANGED.ptr,
-                 output.NEW_TEXT_AND_CONNECTIVITY_CHANGED.len);
-    break;
-  }
-  case MPCLIPBOARD_OUTPUT_NEW_BINARY_AND_CONNECTIVITY_CHANGED: {
-    print_connectivity(output.NEW_BINARY_AND_CONNECTIVITY_CHANGED.connectivity);
-    print_string(output.NEW_BINARY_AND_CONNECTIVITY_CHANGED.ptr,
-                 output.NEW_BINARY_AND_CONNECTIVITY_CHANGED.len);
     break;
   }
   case MPCLIPBOARD_OUTPUT_INTERNAL: {
