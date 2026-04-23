@@ -70,7 +70,7 @@ impl Clip {
 
     /// Returns true if self has a timestamp greater than the one in the given Clip
     pub fn newer_than(&self, other: &Clip) -> bool {
-        self.timestamp > other.timestamp
+        self.timestamp > other.timestamp && self.text_or_binary != other.text_or_binary
     }
 
     /// Builds a dummy Clip with zero timestamp

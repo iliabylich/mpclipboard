@@ -1,4 +1,4 @@
-name: release-server
+name: release-macos
 
 on:
   workflow_dispatch:
@@ -13,26 +13,16 @@ defaults:
     shell: bash
 
 jobs:
-  release-server:
-    runs-on: ubuntu-latest
+  release-macos:
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-
-      - run: sudo apt update
-      - run: sudo apt install musl musl-dev
-
       - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: x86_64-unknown-linux-musl
-
       - uses: extractions/setup-just@v3
 
-      - name: install cargo-deb
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-deb
-
-      - run: just server::release ${{ inputs.version }}
+      - run: find /Applications -name "Xcode*.app" -type d
+      - run: sudo xcode-select -switch /Applications/Xcode_16.2.app/Contents/Developer
+      - run: just macos::release
 
       - name: release (for version)
         uses: ncipollo/release-action@v1
@@ -40,7 +30,7 @@ jobs:
           allowUpdates: false
           artifactErrorsFailBuild: true
           tag: server-v${{ inputs.version }}
-          artifacts: mpclipboard-server.deb
+          artifacts: mpclipboard.dmg
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: release (latest)
@@ -49,5 +39,5 @@ jobs:
           allowUpdates: true
           artifactErrorsFailBuild: true
           tag: server-latest
-          artifacts: mpclipboard-server.deb
+          artifacts: mpclipboard.dmg
           token: ${{ secrets.GITHUB_TOKEN }}

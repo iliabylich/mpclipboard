@@ -55,7 +55,7 @@ fn main() -> Result<()> {
                     tick += 1;
 
                     if tick % 2 == 0 {
-                        mpclipboard.push_text(format!("{flood}-tick-{tick}"));
+                        let _ = mpclipboard.push_text(format!("{flood}-tick-{tick}"));
                         // OR
                         // mpclipboard.push_binary(vec![1, 2, 3]);
                     }

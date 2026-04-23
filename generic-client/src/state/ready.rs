@@ -28,7 +28,7 @@ impl Ready {
         readable: bool,
         writable: bool,
         pending_message_to_send: &mut Option<Message>,
-        last_received_clip_ts: &mut u128,
+        last_clip: &mut Clip,
     ) -> (State, Option<Output>) {
         let (mut ws, rawfd) = self
             .ws_and_fd
@@ -100,9 +100,9 @@ impl Ready {
         self.event_loop.modify(rawfd, true, wants_write);
 
         let output = if let Some(clip) = clip
-            && clip.timestamp > *last_received_clip_ts
+            && clip.newer_than(last_clip)
         {
-            *last_received_clip_ts = clip.timestamp;
+            *last_clip = clip.clone();
 
             match clip.text_or_binary {
                 TextOrBinary::Text(text) => Some(Output::NewText { text }),

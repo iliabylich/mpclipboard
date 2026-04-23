@@ -1,0 +1,34 @@
+# configuration is either "Debug" or "Release"
+[macos]
+build configuration:
+    xcodebuild -configuration {{configuration}}
+[macos]
+run configuration:
+    ./build/{{configuration}}/mpclipboard.app/Contents/MacOS/mpclipboard
+
+[macos]
+dev:
+    cd ../generic-client && cargo build
+    @just build Debug
+    @just run Debug
+
+[macos]
+release:
+    cd ../generic-client && cargo build --release
+    @just build Release
+
+    cd build/Release && \
+        rm -rf dmg-root mpclipboard.dmg && \
+        mkdir -p dmg-root && \
+        cp -R mpclipboard.app dmg-root/ && \
+        ln -s /Applications dmg-root/Applications && \
+        hdiutil create -volname mpclipboard -srcfolder dmg-root -ov -format UDZO mpclipboard.dmg
+
+    mv build/Release/mpclipboard.dmg ..
+
+clean:
+    rm -rf build
+    rm -f mpclipboard.app.zip
+
+upload version ref="master":
+    gh workflow run release-macos --ref {{ref}} -f version={{version}}

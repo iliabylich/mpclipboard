@@ -1,5 +1,4 @@
 use crate::{Config, ConfigReadOption, Connectivity, Context, MPClipboard, Output};
-use anyhow::{Context as _, Result};
 use std::{ffi::c_char, os::fd::AsRawFd};
 
 macro_rules! try_or_null {
@@ -14,11 +13,10 @@ macro_rules! try_or_null {
     };
 }
 
-fn cstring_to_string(s: *const c_char) -> Result<String> {
-    Ok(unsafe { std::ffi::CStr::from_ptr(s) }
-        .to_str()
-        .context("failed to convert *char to String")?
-        .to_string())
+fn cstring_to_string(s: *const c_char) -> String {
+    unsafe { std::ffi::CStr::from_ptr(s) }
+        .to_string_lossy()
+        .to_string()
 }
 fn string_to_c(s: String) -> (*mut c_char, usize) {
     let (ptr, len, _capacity) = s.into_raw_parts();
@@ -57,9 +55,9 @@ pub extern "C" fn mpclipboard_config_new(
     token: *const c_char,
     name: *const c_char,
 ) -> *mut Config {
-    let uri = try_or_null!(cstring_to_string(uri));
-    let token = try_or_null!(cstring_to_string(token));
-    let name = try_or_null!(cstring_to_string(name));
+    let uri = cstring_to_string(uri);
+    let token = cstring_to_string(token);
+    let name = cstring_to_string(name);
     let config = try_or_null!(Config::new(uri, token, name));
     Box::leak(Box::new(config))
 }
@@ -142,25 +140,20 @@ pub extern "C" fn mpclipboard_read(mpclipboard: *mut MPClipboard) -> COutput {
     }
 }
 
-/// Pushes text from NULL-terminated C-style string
+/// Pushes text from NULL-terminated C-style string,
+/// returns false if given text isn't new
 #[unsafe(no_mangle)]
 pub extern "C" fn mpclipboard_push_text1(
     mpclipboard: *mut MPClipboard,
     text: *const c_char,
 ) -> bool {
     let mpclipboard = unsafe { &mut *mpclipboard };
-    let text = match cstring_to_string(text) {
-        Ok(text) => text,
-        Err(err) => {
-            log::error!("{err:?}");
-            return false;
-        }
-    };
-    mpclipboard.push_text(text);
-    true
+    let text = cstring_to_string(text);
+    mpclipboard.push_text(text)
 }
 
 /// Pushes text from pointer + length
+/// returns false if given text isn't new
 #[unsafe(no_mangle)]
 pub extern "C" fn mpclipboard_push_text2(
     mpclipboard: *mut MPClipboard,
@@ -169,18 +162,12 @@ pub extern "C" fn mpclipboard_push_text2(
 ) -> bool {
     let mpclipboard = unsafe { &mut *mpclipboard };
     let bytes = unsafe { core::slice::from_raw_parts(ptr.cast::<u8>(), len) };
-    let text = match std::str::from_utf8(bytes) {
-        Ok(s) => s.to_string(),
-        Err(err) => {
-            log::error!("{err:?}");
-            return false;
-        }
-    };
-    mpclipboard.push_text(text);
-    true
+    let text = unsafe { std::str::from_utf8_unchecked(bytes) };
+    mpclipboard.push_text(text.to_string())
 }
 
 /// Pushes binary
+/// returns false if given blob isn't new
 #[unsafe(no_mangle)]
 pub extern "C" fn mpclipboard_push_binary(
     mpclipboard: *mut MPClipboard,
@@ -189,8 +176,7 @@ pub extern "C" fn mpclipboard_push_binary(
 ) -> bool {
     let mpclipboard = unsafe { &mut *mpclipboard };
     let bytes = unsafe { core::slice::from_raw_parts(ptr.cast::<u8>(), len) }.to_vec();
-    mpclipboard.push_binary(bytes);
-    true
+    mpclipboard.push_binary(bytes)
 }
 
 /// Drops an instance of MPClipboard, frees memory, closes files

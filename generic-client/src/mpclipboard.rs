@@ -24,7 +24,7 @@ pub struct MPClipboard {
     state: State,
 
     pending_message_to_send: Option<Message>,
-    last_received_clip_ts: u128,
+    last_clip: Clip,
 }
 
 impl MPClipboard {
@@ -56,7 +56,7 @@ impl MPClipboard {
             state,
 
             pending_message_to_send: None,
-            last_received_clip_ts: 0,
+            last_clip: Clip::zero(),
         }
     }
 
@@ -84,7 +84,7 @@ impl MPClipboard {
                     readable,
                     writable,
                     &mut self.pending_message_to_send,
-                    &mut self.last_received_clip_ts,
+                    &mut self.last_clip,
                 ),
                 State::Disconnected(_) => {
                     unreachable!("bug: reading in Disconnected state");
@@ -102,24 +102,32 @@ impl MPClipboard {
 
     /// Pushes a new binary Clip with provided bytes.
     /// There's NO queue internally, so this this method overrides previously pushed-but-not-sent Clip.
-    pub fn push_binary(&mut self, bytes: Vec<u8>) {
-        let clip = Clip::binary(bytes);
-        self.pending_message_to_send = Some(Message::Binary(Bytes::from(clip.encode())));
-
-        if let State::Ready(ready) = &self.state {
-            self.event_loop.modify(ready.as_raw_fd(), true, true);
-        }
+    #[must_use]
+    pub fn push_binary(&mut self, bytes: Vec<u8>) -> bool {
+        self.push_clip(Clip::binary(bytes))
     }
 
     /// Pushes a new text Clip with provided content.
     /// There's NO queue internally, so this this method overrides previously pushed-but-not-sent Clip.
-    pub fn push_text(&mut self, text: String) {
-        let clip = Clip::text(text);
+    #[must_use]
+    pub fn push_text(&mut self, text: String) -> bool {
+        self.push_clip(Clip::text(text))
+    }
+
+    #[must_use]
+    fn push_clip(&mut self, clip: Clip) -> bool {
+        if !clip.newer_than(&self.last_clip) {
+            return false;
+        }
+        self.last_clip = clip.clone();
+
         self.pending_message_to_send = Some(Message::Binary(Bytes::from(clip.encode())));
 
         if let State::Ready(ready) = &self.state {
             self.event_loop.modify(ready.as_raw_fd(), true, true);
         }
+
+        true
     }
 }
 
