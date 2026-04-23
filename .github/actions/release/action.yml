@@ -19,7 +19,7 @@ runs:
         fail-if-no-assets: false
         fail-if-no-release: false
 
-    - name: release (for version)
+    - name: release (create new for version)
       uses: ncipollo/release-action@v1
       with:
         allowUpdates: false
@@ -28,7 +28,7 @@ runs:
         artifacts: ${{ inputs.filename }}
         token: ${{ inputs.token }}
 
-    - name: release (latest)
+    - name: release (append to latest)
       uses: ncipollo/release-action@v1
       with:
         allowUpdates: true
@@ -37,3 +37,11 @@ runs:
         artifacts: ${{ inputs.filename }}
         token: ${{ inputs.token }}
 
+    - name: restore a release called "latest" as in fact latest
+      env:
+        GH_TOKEN: ${{ github.token }}
+      shell: bash
+      run:
+        rid=$(gh api repos/${{ github.repository }}/releases --jq '.[] | select(.name=="latest") | .id')
+
+        gh api --method PATCH repos/${{ github.repository }}/releases/$rid -f make_latest=true
