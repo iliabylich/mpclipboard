@@ -23,7 +23,6 @@ jobs:
       # - run: find /Applications -name "Xcode*.app" -type d
       - run: sudo xcode-select -switch /Applications/Xcode_16.2.app/Contents/Developer
       - run: just macos::release $PWD/mpclipboard_${{ inputs.version }}.dmg
-      - run: cp mpclipboard.dmg mpclipboard_${{ inputs.version }}.dmg
 
       - uses: ./.github/actions/release
         with:
