@@ -14,10 +14,12 @@ impl ksni::Tray for TrayState {
     }
 
     fn icon_pixmap(&self) -> Vec<ksni::Icon> {
-        const GREEN: &[u8] = include_bytes!("../../assets/green-32x32.rgba");
-        const RED: &[u8] = include_bytes!("../../assets/red-32x32.rgba");
+        const GREEN: &[u8] = include_bytes!("../../assets/green.argb32");
+        const RED: &[u8] = include_bytes!("../../assets/red.argb32");
+        const YELLOW: &[u8] = include_bytes!("../../assets/yellow.argb32");
+
         let bytes = match self.connectivity {
-            Connectivity::Connecting => RED,
+            Connectivity::Connecting => YELLOW,
             Connectivity::Connected => GREEN,
             Connectivity::Disconnected => RED,
         };

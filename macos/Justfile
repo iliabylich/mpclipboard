@@ -33,7 +33,7 @@ clean:
 upload version ref="master":
     gh workflow run release-macos --ref {{ref}} -f version={{version}}
 
-baseicon := 'icon_512x512.png'
+baseicon := '../icon_512x512.png'
 assetsdir := 'mpclipboard/Assets.xcassets'
 
 generate-imageset-variant rgb density size outpath:

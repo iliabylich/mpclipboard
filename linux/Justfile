@@ -6,4 +6,22 @@ dev:
 release version out:
     cargo build --release
     cargo deb --deb-version {{version}} -p mpclipboard-client
-    mv target/debian/mpclipboard-client_{{version}}_amd64.deb {{out}}
+    mv target/debian/deb-client_{{version}}_amd64.deb {{out}}
+
+baseicon := '../icon_512x512.png'
+
+generate-icon name rgb:
+    magick {{baseicon}} \
+        -resize 32x32 \
+        -alpha extract \
+        -background '{{rgb}}' \
+        -alpha shape \
+        -channel-fx "alpha=>red,red=>green,green=>blue,blue=>alpha" \
+        -define quantum:format=unsigned \
+        -depth 8 \
+        rgba:{{name}}
+
+generate-all-resources:
+    @just generate-icon assets/green.argb32 'rgb(23, 199, 23)'
+    @just generate-icon assets/red.argb32 'rgb(195, 40, 40)'
+    @just generate-icon assets/yellow.argb32 'rgb(236, 223, 41)'
