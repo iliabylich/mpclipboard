@@ -1,0 +1,9 @@
+[Unit]
+Description=MPClipboard Client
+AssertPathExists=/usr/bin/mpclipboard-server
+
+[Service]
+ExecStart=/usr/bin/mpclipboard-server
+WorkingDirectory=%h
+Restart=on-failure
+RestartSec=5s

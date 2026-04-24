@@ -1,0 +1,9 @@
+[linux]
+dev:
+    RUST_LOG=debug cargo run
+
+[linux]
+release version out:
+    cargo build --release
+    cargo deb --deb-version {{version}} -p mpclipboard-client
+    mv target/debian/mpclipboard-client_{{version}}_amd64.deb {{out}}

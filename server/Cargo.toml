@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 authors = ["Ilya Bylich"]
 license = "MIT"
+description = "MPClipboard server"
 
 [dependencies]
 anyhow = "1"
@@ -30,3 +31,4 @@ assets = [
         "644",
     ],
 ]
+extended-description = ""

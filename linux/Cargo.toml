@@ -1,0 +1,36 @@
+[package]
+name = "mpclipboard-client"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "MPClipboard client for Linux"
+authors = ["Ilya Bylich"]
+
+[dependencies]
+ksni = { version = "0.3" }
+log = "0.4"
+anyhow = "1"
+wl-clipboard-rs = "0.9"
+wayland-protocols = "0.32.8"
+wayland-client = "0.31.10"
+wayland-protocols-wlr = "0.3.8"
+os_pipe = "1.2.2"
+tokio = { version = "1.46.1", features = ["full"] }
+tokio-util = "0.7.15"
+
+mpclipboard-generic-client = { path = "../generic-client" }
+
+[package.metadata.deb]
+assets = [
+    [
+        "target/release/mpclipboard-client",
+        "usr/bin/mpclipboard-client",
+        "755",
+    ],
+    [
+        "debian/mpclipboard-client.service",
+        "usr/lib/systemd/user/mpclipboard-client.service",
+        "644",
+    ],
+]
+extended-description = ""
