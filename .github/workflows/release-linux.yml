@@ -1,0 +1,33 @@
+name: release-linux
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: release version in MAJOR.MINOR.PATCH version
+        required: true
+        type: string
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  release-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: extractions/setup-just@v3
+
+      - uses: taiki-e/install-action@v2
+        with: { tool: cargo-deb }
+
+      - run: just linux::release ${{ inputs.version }} $PWD/mpclipboard-client_${{ inputs.version }}.deb
+
+      - uses: ./.github/actions/release
+        with:
+          filename: mpclipboard-client_${{ inputs.version }}.deb
+          own-release-name: linux-v${{ inputs.version }}
+          previous-files-pattern: mpclipboard-client_*.deb
+          token: ${{ secrets.GITHUB_TOKEN }}

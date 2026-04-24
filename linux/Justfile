@@ -6,7 +6,7 @@ dev:
 release version out:
     cargo build --release
     cargo deb --deb-version {{version}} -p mpclipboard-client
-    mv target/debian/deb-client_{{version}}_amd64.deb {{out}}
+    mv target/debian/mpclipboard-client_{{version}}_amd64.deb {{out}}
 
 baseicon := '../icon_512x512.png'
 
@@ -25,3 +25,6 @@ generate-all-resources:
     @just generate-icon assets/green.argb32 'rgb(23, 199, 23)'
     @just generate-icon assets/red.argb32 'rgb(195, 40, 40)'
     @just generate-icon assets/yellow.argb32 'rgb(236, 223, 41)'
+
+upload version ref="master":
+    gh workflow run release-linux --ref {{ref}} -f version={{version}}
