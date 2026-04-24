@@ -8,10 +8,9 @@ else()
     set(USER_HOME "$ENV{HOME}")
 endif()
 
-find_program(RUSTUP_EXECUTABLE NAMES rustup HINTS "${USER_HOME}/.cargo/bin")
 find_program(CARGO_EXECUTABLE NAMES cargo HINTS "${USER_HOME}/.cargo/bin")
-if(NOT RUSTUP_EXECUTABLE OR NOT CARGO_EXECUTABLE)
-    message(FATAL_ERROR "Rust toolchain not found on this system.")
+if(NOT CARGO_EXECUTABLE)
+    message(FATAL_ERROR "Cargo not found on this system.")
 endif()
 
 set(GENERIC_CLIENT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../../generic-client")
@@ -39,15 +38,12 @@ get_filename_component(LLVM_TOOLCHAIN ${CMAKE_C_COMPILER} DIRECTORY)
 set(GENERIC_CLIENT_RUST_PATH "${GENERIC_CLIENT_DIR}/target/${RUST_TARGET}/release/libmpclipboard_generic_client.a")
 
 add_custom_target(
-    setup_rust_target ALL
-    COMMAND ${RUSTUP_EXECUTABLE} target add ${RUST_TARGET}
-)
-
-add_custom_target(
     mpclipboard_generic_client_build ALL
-    COMMAND ${CARGO_EXECUTABLE} rustc --release --locked --target ${RUST_TARGET} --
-        -C linker="${LLVM_TOOLCHAIN}/${ANDROID_TARGET}${CMAKE_ANDROID_API}-clang"
-    DEPENDS setup_rust_target
+    COMMAND ${CARGO_EXECUTABLE} ndk
+        -t ${CMAKE_ANDROID_ARCH_ABI}
+        build
+        --release
+        --locked
     BYPRODUCTS ${GENERIC_CLIENT_RUST_PATH}
     WORKING_DIRECTORY ${GENERIC_CLIENT_DIR}
 )

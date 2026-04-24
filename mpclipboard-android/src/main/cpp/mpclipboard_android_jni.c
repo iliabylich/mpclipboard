@@ -5,6 +5,8 @@
 
 #include "bindings.h"
 
+void mpclipboard_setup_rustls_on_jvm(JNIEnv *env, jobject context);
+
 static char *copy_bytes_as_c_string(JNIEnv *env, jbyteArray array) {
     if (array == NULL) {
         return NULL;

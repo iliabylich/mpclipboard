@@ -10,7 +10,7 @@ sealed interface Output {
     ) : Output
 
     companion object {
-        fun from(nativeOutput: NativeOutput): Output? {
+        internal fun from(nativeOutput: NativeOutput): Output? {
             return when (nativeOutput.tag) {
                 Ffi.MPCLIPBOARD_OUTPUT_CONNECTIVITY_CHANGED -> {
                     ConnectivityChanged(Connectivity.from(nativeOutput.connectivity))

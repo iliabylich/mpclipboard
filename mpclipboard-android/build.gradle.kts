@@ -3,6 +3,7 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 plugins {
     id("com.android.library") version "8.12.0"
     id("org.jetbrains.kotlin.android") version "2.2.20"
+    id("com.android.application") version "8.12.0" apply false
 }
 
 kotlin {
@@ -22,6 +23,10 @@ android {
             cmake {
                 arguments += "-DANDROID_STL=c++_shared"
             }
+        }
+
+        ndk {
+            abiFilters += listOf("arm64-v8a")
         }
     }
 

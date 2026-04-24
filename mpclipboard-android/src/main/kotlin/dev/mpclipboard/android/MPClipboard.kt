@@ -14,7 +14,7 @@ class MPClipboard private constructor(
         @JvmStatic
         fun init(context: Context): Boolean {
             synchronized(lock) {
-                Ffi.loadLibrary()
+                Ffi.loadLibrary(context.applicationContext)
                 Ffi.mpclipboard_setup_rustls_on_jvm(context.applicationContext)
 
                 if (didInit) {
