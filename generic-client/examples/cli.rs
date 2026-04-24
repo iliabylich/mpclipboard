@@ -52,6 +52,7 @@ fn main() -> Result<()> {
                 }
                 TIMER => {
                     tick += 1;
+                    drain_timer();
 
                     if tick % 2 == 0 {
                         let _ = mpclipboard.push_text(format!("{flood}-tick-{tick}"));
@@ -64,6 +65,9 @@ fn main() -> Result<()> {
         }
     }
 }
+
+#[cfg(target_os = "linux")]
+static mut TIMERFD: i32 = -1;
 
 fn setup_external_event_loop(mpclipboard_fd: i32) -> Result<Poller> {
     let poller = Poller::new()?;
@@ -89,5 +93,58 @@ fn setup_external_event_loop(mpclipboard_fd: i32) -> Result<Poller> {
         )?;
     }
 
+    #[cfg(target_os = "linux")]
+    {
+        use rustix::time::{
+            Itimerspec, TimerfdClockId, TimerfdFlags, TimerfdTimerFlags, Timespec, timerfd_create,
+            timerfd_settime,
+        };
+        use std::os::fd::IntoRawFd;
+
+        let timerfd = timerfd_create(TimerfdClockId::Monotonic, TimerfdFlags::NONBLOCK)
+            .expect("bug: failed to create timerfd");
+
+        timerfd_settime(
+            &timerfd,
+            TimerfdTimerFlags::ABSTIME,
+            &Itimerspec {
+                it_interval: Timespec {
+                    tv_sec: 1,
+                    tv_nsec: 0,
+                },
+                it_value: Timespec {
+                    tv_sec: 1,
+                    tv_nsec: 0,
+                },
+            },
+        )
+        .expect("bug: failed to configure timer");
+
+        unsafe {
+            poller
+                .add_with_mode(
+                    &timerfd,
+                    Event::new(TIMER as usize, true, false),
+                    PollMode::Level,
+                )
+                .expect("bug: failed to add timer to epoll")
+        };
+
+        unsafe { TIMERFD = timerfd.into_raw_fd() }
+    }
+
     Ok(poller)
+}
+
+#[cfg(target_os = "macos")]
+fn drain_timer() {}
+
+#[cfg(target_os = "linux")]
+fn drain_timer() {
+    use std::os::fd::BorrowedFd;
+
+    let mut buf = [0_u8; 8];
+    let bytes_read = rustix::io::read(unsafe { BorrowedFd::borrow_raw(TIMERFD) }, &mut buf)
+        .expect("bug: failed to read from timer");
+    assert_eq!(bytes_read, 8);
 }
