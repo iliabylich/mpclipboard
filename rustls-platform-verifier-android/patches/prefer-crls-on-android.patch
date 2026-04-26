@@ -1,0 +1,24 @@
+From 9c1cd1a8871830c59bb2535c4b4d94fa5ce0fd49 Mon Sep 17 00:00:00 2001
+From: stormshield-gt <tudy.gourmelen@stormshield.eu>
+Date: Mon, 2 Jun 2025 17:21:58 +0200
+Subject: [PATCH] Use CRL by default instead of OCSP on android
+
+---
+ .../java/org/rustls/platformverifier/CertificateVerifier.kt   | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/android/rustls-platform-verifier/src/main/java/org/rustls/platformverifier/CertificateVerifier.kt b/android/rustls-platform-verifier/src/main/java/org/rustls/platformverifier/CertificateVerifier.kt
+index da2f34e6..3f129772 100644
+--- a/android/rustls-platform-verifier/src/main/java/org/rustls/platformverifier/CertificateVerifier.kt
++++ b/android/rustls-platform-verifier/src/main/java/org/rustls/platformverifier/CertificateVerifier.kt
+@@ -330,7 +330,9 @@ internal object CertificateVerifier {
+ 
+             revocationChecker.options = EnumSet.of(
+                 PKIXRevocationChecker.Option.SOFT_FAIL,
+-                PKIXRevocationChecker.Option.ONLY_END_ENTITY
++                PKIXRevocationChecker.Option.ONLY_END_ENTITY,
++                PKIXRevocationChecker.Option.PREFER_CRLS,
++                PKIXRevocationChecker.Option.NO_FALLBACK
+             )
+ 
+             // Use the OCSP data `rustls` provided, if present.

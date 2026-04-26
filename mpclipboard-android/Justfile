@@ -4,8 +4,8 @@ package := 'dev.mpclipboard.android.cli'
 build:
     ./gradlew -p . :cli:assembleDebug
 
-install: build
+install:
     adb install -r {{apk}}
 
-run host token name: install
+run host token name:
     adb shell 'APK=$(pm path {{package}} | sed "s/package://"); CLASSPATH=$APK app_process /system/bin dev.mpclipboard.android.cli.Main {{host}} {{token}} {{name}}'
