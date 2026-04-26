@@ -14,5 +14,9 @@ enum class Connectivity {
                 else -> Disconnected
             }
         }
+
+        fun valueOfOrNull(value: String): Connectivity? {
+            return entries.firstOrNull { it.name == value }
+        }
     }
 }
