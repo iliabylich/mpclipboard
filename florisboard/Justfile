@@ -1,0 +1,21 @@
+repo := 'https://github.com/florisboard/florisboard.git'
+branch := 'v0.5.2'
+
+clone-and-patch:
+    rm -rf src
+    git clone --depth 1 --branch {{branch}} {{repo}} src
+    cd src && git apply ../integrate-mpclipboard.patch
+
+debug:
+    rm -f florisboard-debug.apk
+    cd ../android && just debug
+    @just clone-and-patch
+    cd src && ./gradlew :app:assembleDebug
+    cp src/app/build/outputs/apk/debug/app-debug.apk florisboard-debug.apk
+
+release out:
+    rm -f florisboard-release.apk
+    cd ../android && just release
+    @just clone-and-patch
+    cd src && ./gradlew :app:assembleRelease
+    cp src/app/build/outputs/apk/release/app-release.apk {{out}}

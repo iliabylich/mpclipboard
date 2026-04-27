@@ -1,0 +1,172 @@
+From 2c5edb400fb5b311d5b626ce9144a2a7fee1ff80 Mon Sep 17 00:00:00 2001
+From: Ilya Bylich <ibylich@gmail.com>
+Date: Mon, 27 Apr 2026 22:26:05 +0200
+Subject: [PATCH] integrate mpclipboard
+
+---
+ app/build.gradle.kts                             | 13 +++++++++++++
+ app/proguard-rules.pro                           |  5 +++++
+ .../patrickgold/florisboard/FlorisApplication.kt |  2 ++
+ .../dev/patrickgold/florisboard/app/Routes.kt    | 16 ++++++++++++++++
+ .../florisboard/app/settings/HomeScreen.kt       |  6 ++++++
+ gradle/libs.versions.toml                        |  2 +-
+ 6 files changed, 43 insertions(+), 1 deletion(-)
+
+diff --git a/app/build.gradle.kts b/app/build.gradle.kts
+index 34c4cbd..3dbced9 100644
+--- a/app/build.gradle.kts
++++ b/app/build.gradle.kts
+@@ -105,6 +105,15 @@ android {
+         compose = true
+     }
+ 
++    signingConfigs {
++        create("release") {
++            storeFile = file(System.getenv("ANDROID_KEYSTORE_PATH"))
++            storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
++            keyAlias = System.getenv("ANDROID_KEY_ALIAS")
++            keyPassword = System.getenv("ANDROID_KEY_PASSWORD")
++        }
++    }
++
+     buildTypes {
+         named("debug") {
+             applicationIdSuffix = ".debug"
+@@ -134,6 +143,7 @@ android {
+         }
+ 
+         named("release") {
++            signingConfig = signingConfigs.getByName("release")
+             versionNameSuffix = projectVersionNameSuffix
+ 
+             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+@@ -212,6 +222,9 @@ dependencies {
+     ksp(libs.patrickgold.jetpref.datastore.model.processor)
+     implementation(libs.patrickgold.jetpref.datastore.ui)
+     implementation(libs.patrickgold.jetpref.material.ui)
++    implementation("androidx.datastore:datastore-preferences:1.1.7")
++    implementation(files("../../../android/mpclipboard.aar"))
++    implementation(files("../../../rustls-platform-verifier/rustls-platform-verifier.aar"))
+ 
+     implementation(projects.lib.android)
+     implementation(projects.lib.color)
+diff --git a/app/proguard-rules.pro b/app/proguard-rules.pro
+index 8b77e57..41fc48c 100644
+--- a/app/proguard-rules.pro
++++ b/app/proguard-rules.pro
+@@ -27,3 +27,8 @@
+ 
+ # @Serializable and @Polymorphic are used at runtime for polymorphic serialization.
+ -keepattributes RuntimeVisibleAnnotations,AnnotationDefault
++
++# rustls-platform-verifier is called from Rust/JNI by exact class and method names.
++-keep class org.rustls.platformverifier.** {
++    *;
++}
+diff --git a/app/src/main/kotlin/dev/patrickgold/florisboard/FlorisApplication.kt b/app/src/main/kotlin/dev/patrickgold/florisboard/FlorisApplication.kt
+index 31a5cc4..abde54e 100644
+--- a/app/src/main/kotlin/dev/patrickgold/florisboard/FlorisApplication.kt
++++ b/app/src/main/kotlin/dev/patrickgold/florisboard/FlorisApplication.kt
+@@ -25,6 +25,7 @@ import android.content.IntentFilter
+ import android.os.Handler
+ import android.util.Log
+ import androidx.core.os.UserManagerCompat
++import dev.mpclipboard.android.MPClipboardAndroidSync
+ import dev.patrickgold.florisboard.app.FlorisPreferenceModel
+ import dev.patrickgold.florisboard.app.FlorisPreferenceStore
+ import dev.patrickgold.florisboard.ime.clipboard.ClipboardManager
+@@ -124,6 +125,7 @@ class FlorisApplication : Application() {
+         }
+         extensionManager.value.init()
+         clipboardManager.value.initializeForContext(this)
++        MPClipboardAndroidSync.startShared(this)
+         DictionaryManager.init(this)
+     }
+ 
+diff --git a/app/src/main/kotlin/dev/patrickgold/florisboard/app/Routes.kt b/app/src/main/kotlin/dev/patrickgold/florisboard/app/Routes.kt
+index b64b836..571b315 100644
+--- a/app/src/main/kotlin/dev/patrickgold/florisboard/app/Routes.kt
++++ b/app/src/main/kotlin/dev/patrickgold/florisboard/app/Routes.kt
+@@ -36,6 +36,7 @@ import androidx.navigation.compose.NavHost
+ import androidx.navigation.compose.composable
+ import androidx.navigation.navDeepLink
+ import androidx.navigation.toRoute
++import dev.mpclipboard.android.ui.MPClipboardSettingsScreen
+ import dev.patrickgold.florisboard.app.devtools.AndroidLocalesScreen
+ import dev.patrickgold.florisboard.app.devtools.AndroidSettingsScreen
+ import dev.patrickgold.florisboard.app.devtools.DevtoolsScreen
+@@ -76,6 +77,7 @@ import dev.patrickgold.florisboard.app.settings.theme.ThemeManagerScreenAction
+ import dev.patrickgold.florisboard.app.settings.theme.ThemeScreen
+ import dev.patrickgold.florisboard.app.settings.typing.TypingScreen
+ import dev.patrickgold.florisboard.app.setup.SetupScreen
++import dev.patrickgold.florisboard.lib.compose.FlorisScreen
+ import kotlinx.serialization.SerialName
+ import kotlinx.serialization.Serializable
+ import kotlin.reflect.KClass
+@@ -168,6 +170,10 @@ object Routes {
+         @Deeplink("settings/clipboard")
+         object Clipboard
+ 
++        @Serializable
++        @Deeplink("settings/mpclipboard")
++        object MPClipboard
++
+         @Serializable
+         @Deeplink("settings/media")
+         object Media
+@@ -311,6 +317,16 @@ object Routes {
+             composableWithDeepLink(Settings.Gestures::class) { GesturesScreen() }
+ 
+             composableWithDeepLink(Settings.Clipboard::class) { ClipboardScreen() }
++            composableWithDeepLink(Settings.MPClipboard::class) {
++                FlorisScreen {
++                    title = "MPClipboard"
++                    previewFieldVisible = true
++
++                    content {
++                        MPClipboardSettingsScreen()
++                    }
++                }
++            }
+ 
+             composableWithDeepLink(Settings.Media::class) { MediaScreen() }
+ 
+diff --git a/app/src/main/kotlin/dev/patrickgold/florisboard/app/settings/HomeScreen.kt b/app/src/main/kotlin/dev/patrickgold/florisboard/app/settings/HomeScreen.kt
+index 5364b4f..8f8b4b9 100644
+--- a/app/src/main/kotlin/dev/patrickgold/florisboard/app/settings/HomeScreen.kt
++++ b/app/src/main/kotlin/dev/patrickgold/florisboard/app/settings/HomeScreen.kt
+@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Language
+ import androidx.compose.material.icons.filled.SentimentSatisfiedAlt
+ import androidx.compose.material.icons.filled.SmartButton
+ import androidx.compose.material.icons.filled.Spellcheck
++import androidx.compose.material.icons.filled.Sync
+ import androidx.compose.material.icons.outlined.Build
+ import androidx.compose.material.icons.outlined.Info
+ import androidx.compose.material.icons.outlined.Keyboard
+@@ -140,6 +141,11 @@ fun HomeScreen() = FlorisScreen {
+             title = stringRes(R.string.settings__clipboard__title),
+             onClick = { navController.navigate(Routes.Settings.Clipboard) },
+         )
++        Preference(
++            icon = Icons.Default.Sync,
++            title = "MPClipboard",
++            onClick = { navController.navigate(Routes.Settings.MPClipboard) },
++        )
+         Preference(
+             icon = Icons.Default.SentimentSatisfiedAlt,
+             title = stringRes(R.string.settings__media__title),
+diff --git a/gradle/libs.versions.toml b/gradle/libs.versions.toml
+index 71225ae..226b6e2 100644
+--- a/gradle/libs.versions.toml
++++ b/gradle/libs.versions.toml
+@@ -21,7 +21,7 @@ ksp = "2.2.20-2.0.3"
+ material-kolor = "4.0.5"
+ mikepenz-aboutlibraries = "13.1.0"
+ patrickgold-compose-tooltip = "0.2.0-rc02"
+-patrickgold-jetpref = "20251119T222500Z-SNAPSHOT"
++patrickgold-jetpref = "0.3.0"
+ 
+ # Testing
+ androidx-benchmark = "1.3.4"
+-- 
+2.53.0
