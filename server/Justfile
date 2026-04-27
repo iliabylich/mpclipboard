@@ -8,7 +8,7 @@ release version out:
     mv target/debian/mpclipboard-server_{{version}}_amd64.deb {{out}}
 
 container-build version:
-    docker build -t ghcr.io/iliabylich/mpclipboard:{{version}} .
+    cd .. && docker build -t ghcr.io/iliabylich/mpclipboard:{{version}} -f server/Dockerfile .
 
 container-push version:
     docker push ghcr.io/iliabylich/mpclipboard:{{version}}
