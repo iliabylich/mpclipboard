@@ -36,6 +36,7 @@ runs:
         tag: latest
         artifacts: ${{ inputs.filename }}
         token: ${{ inputs.token }}
+        body: This is the latest release of both server and all the clients
 
     - name: restore a release called "latest" as in fact latest
       env:
