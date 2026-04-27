@@ -25,4 +25,5 @@ mod logger;
 mod mpclipboard;
 mod output;
 mod state;
+mod timer;
 mod tls;

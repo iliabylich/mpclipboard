@@ -1,8 +1,7 @@
 use crate::{
-    Config, Connectivity, Output,
+    Connectivity, Context, Output,
     event_loop::EventLoop,
-    state::{Disconnected, Handshaking, Ready, State},
-    tls::TLS,
+    state::{Handshaking, Ready, State, StateVariant},
 };
 use anyhow::Context as _;
 use std::{
@@ -13,44 +12,26 @@ use std::{
 use tungstenite::{HandshakeError, client::IntoClientRequest as _};
 
 pub(crate) struct Connected {
-    fd: Option<OwnedFd>,
-    event_loop: Rc<EventLoop>,
+    fd: OwnedFd,
+    context: Context,
 }
 
 impl Connected {
-    pub(crate) fn new(fd: OwnedFd, event_loop: Rc<EventLoop>) -> Self {
-        Self {
-            fd: Some(fd),
-            event_loop,
-        }
+    pub(crate) fn new(fd: OwnedFd, context: Context) -> Self {
+        Self { fd, context }
     }
 
-    pub(crate) fn start_handshake(
-        &mut self,
-        config: &Config,
-        tls: &TLS,
-    ) -> (State, Option<Output>) {
-        let fd = self.fd.take().expect("bug: malformed state in Connected");
-        let rawfd = fd.as_raw_fd();
-
-        macro_rules! disconnect {
-            ($err:expr) => {{
-                log::error!("{:?}", $err);
-                self.event_loop.remove(rawfd);
-                return (
-                    State::Disconnected(Disconnected),
-                    Some(Output::ConnectivityChanged {
-                        connectivity: Connectivity::Disconnected,
-                    }),
-                );
-            }};
-        }
+    fn start_handshake(self) -> (State, Option<Output>) {
+        log::trace!("starting handshake");
 
         macro_rules! ok_or_disconnect {
             ($v:expr) => {
                 match $v {
                     Ok(v) => v,
-                    Err(err) => disconnect!(err),
+                    Err(err) => {
+                        log::error!("{err:?}");
+                        return self.disconnect();
+                    }
                 }
             };
         }
@@ -58,28 +39,29 @@ impl Connected {
         log::trace!("starting handshaking");
 
         let mut request = ok_or_disconnect!(
-            config
+            self.context
+                .config
                 .uri
                 .clone()
                 .into_client_request()
                 .context("failed to create client request")
         );
 
-        let token = ok_or_disconnect!(config.token.parse().context("non-ASCII token"));
+        let token = ok_or_disconnect!(self.context.config.token.parse().context("non-ASCII token"));
         request.headers_mut().insert("Token", token);
 
-        let name = ok_or_disconnect!(config.name.parse().context("non-ASCII name"));
+        let name = ok_or_disconnect!(self.context.config.name.parse().context("non-ASCII name"));
         request.headers_mut().insert("Name", name);
 
-        let stream = unsafe { TcpStream::from_raw_fd(fd.into_raw_fd()) };
-        let tls = tls.clone().0;
+        let fd = self.fd.into_raw_fd();
+        let stream = unsafe { TcpStream::from_raw_fd(fd) };
+        let tls = self.context.tls.clone().0;
 
         match tungstenite::client_tls_with_config(request, stream, None, Some(tls)) {
             Ok((ws, response)) => {
                 log::trace!("handshake completed: {}", response.status());
-                let event_loop = Rc::clone(&self.event_loop);
                 (
-                    State::Ready(Ready::new(ws, rawfd, event_loop)),
+                    State::Ready(Ready::new(ws, fd, self.context)),
                     Some(Output::ConnectivityChanged {
                         connectivity: Connectivity::Connected,
                     }),
@@ -87,19 +69,47 @@ impl Connected {
             }
             Err(HandshakeError::Interrupted(handshake)) => {
                 log::trace!("handshake interrupted");
-                let event_loop = Rc::clone(&self.event_loop);
                 (
-                    State::Handshaking(Handshaking::new(handshake, rawfd, event_loop)),
+                    State::Handshaking(Handshaking::new(handshake, fd, self.context)),
                     None,
                 )
             }
-            Err(HandshakeError::Failure(err)) => disconnect!(err),
+            Err(HandshakeError::Failure(err)) => {
+                log::error!("{:?}", err);
+                Self::disconnect_by(self.context, fd)
+            }
         }
+    }
+
+    fn disconnect(self) -> (State, Option<Output>) {
+        Self::disconnect_by(self.context, self.fd.as_raw_fd())
     }
 }
 
 impl AsRawFd for Connected {
     fn as_raw_fd(&self) -> std::os::unix::prelude::RawFd {
-        self.fd.as_ref().unwrap().as_raw_fd()
+        self.fd.as_raw_fd()
+    }
+}
+
+impl StateVariant for Connected {
+    fn tag(&self) -> &'static str {
+        "Connected"
+    }
+
+    fn context(&mut self) -> &mut Context {
+        &mut self.context
+    }
+
+    fn event_loop(&self) -> Rc<EventLoop> {
+        Rc::clone(&self.context.event_loop)
+    }
+
+    fn transition(self, _readable: bool, _writable: bool) -> (State, Option<Output>) {
+        self.start_handshake()
+    }
+
+    fn flip(self) -> (State, Option<Output>) {
+        self.disconnect()
     }
 }

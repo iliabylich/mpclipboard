@@ -1,6 +1,8 @@
-use crate::{Config, event_loop::EventLoop, tls::TLS};
+use crate::{Config, event_loop::EventLoop, timer::Timer, tls::TLS};
 use anyhow::Result;
+use clip::Clip;
 use std::{net::SocketAddr, rc::Rc};
+use tungstenite::Message;
 
 /// Execution context of MPClipboard, once constructed nothing can fail
 pub struct Context {
@@ -8,6 +10,10 @@ pub struct Context {
     pub(crate) remote_addr: SocketAddr,
     pub(crate) tls: TLS,
     pub(crate) event_loop: Rc<EventLoop>,
+    pub(crate) timer: Timer,
+    pub(crate) pending_message_to_send: Option<Message>,
+    pub(crate) last_clip: Clip,
+    pub(crate) last_time_worked_with_ws_at: u64,
 }
 
 impl Context {
@@ -21,12 +27,17 @@ impl Context {
         log::trace!("remote_addr = {remote_addr:?}");
 
         let event_loop = EventLoop::new();
+        let timer = event_loop.timer();
 
         Ok(Self {
             config,
             remote_addr,
             tls,
             event_loop,
+            timer,
+            pending_message_to_send: None,
+            last_clip: Clip::zero(),
+            last_time_worked_with_ws_at: 0,
         })
     }
 }

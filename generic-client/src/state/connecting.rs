@@ -1,7 +1,7 @@
 use crate::{
-    Connectivity, Output,
+    Context, Output,
     event_loop::EventLoop,
-    state::{Connected, Disconnected, State},
+    state::{Connected, State, StateVariant},
 };
 use std::{
     os::fd::{AsRawFd, OwnedFd},
@@ -9,53 +9,63 @@ use std::{
 };
 
 pub(crate) struct Connecting {
-    fd: Option<OwnedFd>,
-    event_loop: Rc<EventLoop>,
+    fd: OwnedFd,
+    context: Context,
 }
 
 impl Connecting {
-    pub(crate) fn new(fd: OwnedFd, event_loop: Rc<EventLoop>) -> Self {
-        Self {
-            fd: Some(fd),
-            event_loop,
-        }
+    pub(crate) fn new(fd: OwnedFd, context: Context) -> Self {
+        Self { fd, context }
     }
 
-    pub(crate) fn finish(&mut self) -> (State, Option<Output>) {
-        let fd = self.fd.take().expect("bug: malformed state in Connecting");
-        let rawfd = fd.as_raw_fd();
+    fn finish_connecting(self) -> (State, Option<Output>) {
+        log::trace!("finish connecting");
 
-        macro_rules! disconnect {
-            ($err:expr) => {{
-                log::error!("{:?}", $err);
-                self.event_loop.remove(rawfd);
-
-                return (
-                    State::Disconnected(Disconnected),
-                    Some(Output::ConnectivityChanged {
-                        connectivity: Connectivity::Disconnected,
-                    }),
-                );
-            }};
-        }
-
-        match rustix::net::sockopt::socket_error(&fd) {
+        match rustix::net::sockopt::socket_error(&self.fd) {
             Ok(Ok(())) => {
-                self.event_loop.modify(rawfd, true, true);
+                self.context.event_loop.modify(self.as_raw_fd(), true, true);
 
                 (
-                    State::Connected(Connected::new(fd, Rc::clone(&self.event_loop))),
+                    State::Connected(Connected::new(self.fd, self.context)),
                     None,
                 )
             }
-            Ok(Err(err)) => disconnect!(err),
-            Err(err) => disconnect!(err),
+            Ok(Err(err)) | Err(err) => {
+                log::error!("{err:?}");
+                self.disconnect()
+            }
         }
+    }
+
+    fn disconnect(self) -> (State, Option<Output>) {
+        Self::disconnect_by(self.context, self.fd.as_raw_fd())
     }
 }
 
 impl AsRawFd for Connecting {
     fn as_raw_fd(&self) -> std::os::unix::prelude::RawFd {
-        self.fd.as_ref().unwrap().as_raw_fd()
+        self.fd.as_raw_fd()
+    }
+}
+
+impl StateVariant for Connecting {
+    fn tag(&self) -> &'static str {
+        "Connecting"
+    }
+
+    fn context(&mut self) -> &mut Context {
+        &mut self.context
+    }
+
+    fn event_loop(&self) -> Rc<EventLoop> {
+        Rc::clone(&self.context.event_loop)
+    }
+
+    fn transition(self, _readable: bool, _writable: bool) -> (State, Option<Output>) {
+        self.finish_connecting()
+    }
+
+    fn flip(self) -> (State, Option<Output>) {
+        self.disconnect()
     }
 }

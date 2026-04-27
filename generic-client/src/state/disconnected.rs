@@ -1,7 +1,7 @@
 use crate::{
-    Connectivity, Output,
+    Connectivity, Context, Output,
     event_loop::EventLoop,
-    state::{Connected, Connecting, State},
+    state::{Connected, Connecting, State, StateVariant},
 };
 use anyhow::Context as _;
 use rustix::{
@@ -9,22 +9,27 @@ use rustix::{
     io::FdFlags,
     net::{AddressFamily, SocketType},
 };
-use std::{net::SocketAddr, os::fd::AsRawFd as _, rc::Rc};
+use std::{os::fd::AsRawFd as _, rc::Rc};
 
-#[derive(Clone, Copy)]
-pub(crate) struct Disconnected;
+pub(crate) struct Disconnected {
+    context: Context,
+}
 
 impl Disconnected {
-    pub(crate) fn connect(
-        remote_addr: SocketAddr,
-        event_loop: Rc<EventLoop>,
-    ) -> (State, Option<Output>) {
+    pub(crate) fn new(context: Context) -> Self {
+        Self { context }
+    }
+
+    fn connect(self) -> (State, Option<Output>) {
         log::trace!("connect");
+
+        let context = self.context;
+        let event_loop = Rc::clone(&context.event_loop);
 
         macro_rules! disconnect {
             ($err:expr) => {{
                 log::error!("{:?}", $err);
-                return (State::Disconnected(Disconnected), None);
+                return (State::Disconnected(Disconnected::new(context)), None);
             }};
         }
 
@@ -37,7 +42,7 @@ impl Disconnected {
             };
         }
 
-        let domain = if remote_addr.is_ipv4() {
+        let domain = if context.remote_addr.is_ipv4() {
             AddressFamily::INET
         } else {
             AddressFamily::INET6
@@ -57,7 +62,7 @@ impl Disconnected {
             rustix::fs::fcntl_setfl(&fd, flags | OFlags::NONBLOCK).context("F_SETFL(O_NONBLOCK)")
         );
 
-        let connected = match rustix::net::connect(&fd, &remote_addr) {
+        let connected = match rustix::net::connect(&fd, &context.remote_addr) {
             Ok(()) => true,
             Err(err) if err.raw_os_error() == rustix::io::Errno::INPROGRESS.raw_os_error() => false,
             Err(err) => disconnect!(err),
@@ -67,10 +72,10 @@ impl Disconnected {
 
         let state = if connected {
             log::trace!("connected; fd: {rawfd}");
-            State::Connected(Connected::new(fd, Rc::clone(&event_loop)))
+            State::Connected(Connected::new(fd, context))
         } else {
             log::trace!("connecting; fd: {rawfd}");
-            State::Connecting(Connecting::new(fd, Rc::clone(&event_loop)))
+            State::Connecting(Connecting::new(fd, context))
         };
 
         event_loop.add(rawfd, true, true);
@@ -81,5 +86,27 @@ impl Disconnected {
                 connectivity: Connectivity::Connecting,
             }),
         )
+    }
+}
+
+impl StateVariant for Disconnected {
+    fn tag(&self) -> &'static str {
+        "Disconnected"
+    }
+
+    fn context(&mut self) -> &mut Context {
+        &mut self.context
+    }
+
+    fn event_loop(&self) -> Rc<EventLoop> {
+        Rc::clone(&self.context.event_loop)
+    }
+
+    fn transition(self, _readable: bool, _writable: bool) -> (State, Option<Output>) {
+        self.connect()
+    }
+
+    fn flip(self) -> (State, Option<Output>) {
+        self.connect()
     }
 }

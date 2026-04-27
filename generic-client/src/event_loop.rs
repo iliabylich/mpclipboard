@@ -1,20 +1,21 @@
 use polling::{Event, Events, PollMode, Poller};
 use std::{
-    cell::Cell,
     os::fd::{AsRawFd, BorrowedFd, OwnedFd},
     rc::Rc,
 };
 
+use crate::timer::Timer;
+
 pub(crate) struct EventLoop {
     poller: Poller,
-    ticks: Cell<u64>,
+    timer: Timer,
     #[allow(dead_code)]
     timerfd: Option<OwnedFd>,
 }
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct EventLoopEvent {
-    pub(crate) tick: Option<u64>,
+    pub(crate) timer: bool,
     pub(crate) ws: Option<(bool, bool)>,
 }
 
@@ -25,13 +26,17 @@ impl EventLoop {
     pub(crate) fn new() -> Rc<Self> {
         let mut this = Self {
             poller: Poller::new().expect("bug: failed to instantiate event loop"),
-            ticks: Cell::new(0),
+            timer: Timer::new(),
             timerfd: None,
         };
         log::trace!("Supports edge: {}", this.poller.supports_edge());
         log::trace!("Supports level: {}", this.poller.supports_level());
         this.add_timer();
         Rc::new(this)
+    }
+
+    pub(crate) fn timer(&self) -> Timer {
+        self.timer.clone()
     }
 
     #[cfg(target_os = "macos")]
@@ -71,7 +76,7 @@ impl EventLoop {
                     tv_nsec: 0,
                 },
                 it_value: Timespec {
-                    tv_sec: 10,
+                    tv_sec: 1,
                     tv_nsec: 0,
                 },
             },
@@ -137,18 +142,20 @@ impl EventLoop {
             .wait(&mut events, None)
             .expect("bug: failed to read");
 
-        let mut tick = None;
-        let mut ws = None;
+        let mut out = EventLoopEvent {
+            timer: false,
+            ws: None,
+        };
 
         for event in events.iter() {
             match event.key as u32 {
                 Self::TIMER_ID => {
-                    self.ticks.set(self.ticks.get() + 1);
+                    self.timer.tick();
                     self.drain_timer();
-                    tick = Some(self.ticks.get());
+                    out.timer = true;
                 }
 
-                Self::WS_ID => ws = Some((event.readable, event.writable)),
+                Self::WS_ID => out.ws = Some((event.readable, event.writable)),
 
                 _ => {
                     panic!("bug: unknown event: {event:?}")
@@ -156,7 +163,7 @@ impl EventLoop {
             }
         }
 
-        EventLoopEvent { tick, ws }
+        out
     }
 }
 
