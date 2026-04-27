@@ -8,10 +8,15 @@ impl Logger {
             use android_logger::Config;
             use log::LevelFilter;
 
+            #[cfg(debug_assertions)]
+            let max_level = LevelFilter::Trace;
+            #[cfg(not(debug_assertions))]
+            let max_level = LevelFilter::Error;
+
             android_logger::init_once(
                 Config::default()
                     .with_tag("RUST")
-                    .with_max_level(LevelFilter::Trace),
+                    .with_max_level(max_level),
             );
         }
 

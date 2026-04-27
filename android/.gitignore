@@ -3,3 +3,4 @@
 local.properties
 build
 mpclipboard.aar
+libmpclipboard_generic_client.a

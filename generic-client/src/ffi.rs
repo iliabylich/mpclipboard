@@ -164,6 +164,7 @@ pub extern "C" fn mpclipboard_logger_test() {
     log::error!("error example");
 }
 
+/// Configures rustls on JVM
 #[cfg(target_os = "android")]
 #[unsafe(no_mangle)]
 pub extern "C" fn mpclipboard_setup_rustls_on_jvm(
