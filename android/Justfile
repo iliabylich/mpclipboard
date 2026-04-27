@@ -1,0 +1,8 @@
+mod cli 'cli/Justfile'
+
+clean:
+    rm -rf .cxx .gradle .kotlin build mpclipboard.aar
+
+build:
+    ./gradlew -q assembleRelease
+    cp build/outputs/aar/mpclipboard-release.aar ./mpclipboard.aar

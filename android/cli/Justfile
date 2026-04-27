@@ -1,8 +1,8 @@
-apk := 'cli/build/outputs/apk/debug/cli-debug.apk'
+apk := 'build/outputs/apk/debug/cli-debug.apk'
 package := 'dev.mpclipboard.android.cli'
 
 build:
-    ./gradlew -p . :cli:assembleDebug
+    ../gradlew -p .. :cli:assembleDebug
 
 install:
     adb install -r {{apk}}

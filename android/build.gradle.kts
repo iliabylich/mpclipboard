@@ -62,5 +62,4 @@ dependencies {
     implementation("androidx.compose.runtime:runtime")
     implementation("androidx.datastore:datastore-preferences:1.1.7")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
-    implementation(files("../rustls-platform-verifier-android/build/rustls-platform-verifier.aar"))
 }

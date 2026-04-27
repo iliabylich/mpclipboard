@@ -57,25 +57,22 @@ class MPClipboardWidgetProvider : AppWidgetProvider() {
         }
 
         private fun remoteViews(context: Context, connectivity: Connectivity): RemoteViews {
-            val isConnected = connectivity == Connectivity.Connected
+            val (icon, description) = when (connectivity) {
+                Connectivity.Connecting -> R.drawable.mpclipboard_widget_connecting to
+                    R.string.mpclipboard_widget_connecting
+                Connectivity.Connected -> R.drawable.mpclipboard_widget_connected to
+                    R.string.mpclipboard_widget_connected
+                Connectivity.Disconnected -> R.drawable.mpclipboard_widget_disconnected to
+                    R.string.mpclipboard_widget_disconnected
+            }
             val remoteViews = RemoteViews(context.packageName, R.layout.mpclipboard_widget)
             remoteViews.setImageViewResource(
                 R.id.mpclipboard_widget_icon,
-                if (isConnected) {
-                    R.drawable.mpclipboard_widget_connected
-                } else {
-                    R.drawable.mpclipboard_widget_disconnected
-                },
+                icon,
             )
             remoteViews.setContentDescription(
                 R.id.mpclipboard_widget_icon,
-                context.getString(
-                    if (isConnected) {
-                        R.string.mpclipboard_widget_connected
-                    } else {
-                        R.string.mpclipboard_widget_disconnected
-                    },
-                ),
+                context.getString(description),
             )
             remoteViews.setOnClickPendingIntent(
                 R.id.mpclipboard_widget_root,

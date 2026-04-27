@@ -4,6 +4,7 @@ mod poll-cli                 'poll-cli/Justfile'
 mod macos                    'macos/Justfile'
 mod linux                    'linux/Justfile'
 mod rustls-platform-verifier 'rustls-platform-verifier/Justfile'
+mod android                  'android'
 
 clippy:
     cd generic-client && cargo clippy

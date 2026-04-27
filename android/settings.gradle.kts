@@ -1,4 +1,4 @@
-rootProject.name = "mpclipboard-android"
+rootProject.name = "mpclipboard"
 
 pluginManagement {
     repositories {

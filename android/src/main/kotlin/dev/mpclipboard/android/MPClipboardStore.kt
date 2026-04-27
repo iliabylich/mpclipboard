@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 
 private val Context.mpClipboardDataStore: DataStore<Preferences> by preferencesDataStore(
@@ -16,17 +17,21 @@ private val Context.mpClipboardDataStore: DataStore<Preferences> by preferencesD
 class MPClipboardStore private constructor(
     private val dataStore: DataStore<Preferences>,
 ) {
-    val config: Flow<MPClipboardConfig> = dataStore.data.map { preferences ->
-        MPClipboardConfig(
-            host = preferences[HOST].orEmpty(),
-            token = preferences[TOKEN].orEmpty(),
-            name = preferences[NAME].orEmpty(),
-        )
-    }
+    val config: Flow<MPClipboardConfig> = dataStore.data
+        .map { preferences ->
+            MPClipboardConfig(
+                host = preferences[HOST].orEmpty(),
+                token = preferences[TOKEN].orEmpty(),
+                name = preferences[NAME].orEmpty(),
+            )
+        }
+        .distinctUntilChanged()
 
-    val connectivity: Flow<Connectivity> = dataStore.data.map { preferences ->
-        preferences[CONNECTIVITY]?.let(Connectivity::valueOfOrNull) ?: Connectivity.Disconnected
-    }
+    val connectivity: Flow<Connectivity> = dataStore.data
+        .map { preferences ->
+            preferences[CONNECTIVITY]?.let(Connectivity::valueOfOrNull) ?: Connectivity.Disconnected
+        }
+        .distinctUntilChanged()
 
     suspend fun saveConfig(config: MPClipboardConfig) {
         dataStore.edit { preferences ->

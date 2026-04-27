@@ -44,17 +44,16 @@ fun MPClipboardSettingsScreen(
     val savedConfig by store.config.collectAsState(initial = MPClipboardConfig())
     val connectivity by store.connectivity.collectAsState(initial = Connectivity.Disconnected)
     val scope = rememberCoroutineScope()
-    var didLoadSavedConfig by rememberSaveable { mutableStateOf(false) }
+    var hasUserEdited by rememberSaveable { mutableStateOf(false) }
     var host by rememberSaveable { mutableStateOf("") }
     var token by rememberSaveable { mutableStateOf("") }
     var name by rememberSaveable { mutableStateOf("") }
 
     LaunchedEffect(savedConfig) {
-        if (!didLoadSavedConfig) {
+        if (!hasUserEdited && savedConfig.isComplete) {
             host = savedConfig.host
             token = savedConfig.token
             name = savedConfig.name
-            didLoadSavedConfig = true
         }
     }
 
@@ -69,7 +68,10 @@ fun MPClipboardSettingsScreen(
 
         OutlinedTextField(
             value = host,
-            onValueChange = { host = it },
+            onValueChange = {
+                host = it
+                hasUserEdited = true
+            },
             modifier = Modifier.fillMaxWidth(),
             label = { Text("Host") },
             singleLine = true,
@@ -77,7 +79,10 @@ fun MPClipboardSettingsScreen(
 
         OutlinedTextField(
             value = token,
-            onValueChange = { token = it },
+            onValueChange = {
+                token = it
+                hasUserEdited = true
+            },
             modifier = Modifier.fillMaxWidth(),
             label = { Text("Token") },
             singleLine = true,
@@ -86,7 +91,10 @@ fun MPClipboardSettingsScreen(
 
         OutlinedTextField(
             value = name,
-            onValueChange = { name = it },
+            onValueChange = {
+                name = it
+                hasUserEdited = true
+            },
             modifier = Modifier.fillMaxWidth(),
             label = { Text("Name") },
             singleLine = true,
@@ -105,13 +113,16 @@ fun MPClipboardSettingsScreen(
             Button(
                 onClick = {
                     scope.launch {
-                        store.saveConfig(
-                            MPClipboardConfig(
-                                host = host.trim(),
-                                token = token.trim(),
-                                name = name.trim(),
-                            ),
+                        val config = MPClipboardConfig(
+                            host = host.trim(),
+                            token = token.trim(),
+                            name = name.trim(),
                         )
+                        store.saveConfig(config)
+                        host = config.host
+                        token = config.token
+                        name = config.name
+                        hasUserEdited = false
                     }
                 },
             ) {
