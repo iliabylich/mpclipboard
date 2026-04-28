@@ -42,3 +42,11 @@ build-in-docker keyfile out:
         florisboard-builder \
         release /out/florisboard.apk
     mv out/florisboard.apk {{out}}
+
+build-locally out:
+    cd ../generic-client && just release-android ../android/libmpclipboard_generic_client.a
+    cp ../generic-client/bindings.h ../android/bindings.h
+    cd ../rustls-platform-verifier && just release ../android/rustls-platform-verifier.aar
+    cd ../android && just release ../florisboard/mpclipboard.aar
+    cp ../android/rustls-platform-verifier.aar rustls-platform-verifier.aar
+    @just release {{out}}
