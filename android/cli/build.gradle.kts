@@ -50,5 +50,5 @@ android {
 
 dependencies {
     implementation(project(":"))
-    implementation(files("../../rustls-platform-verifier/rustls-platform-verifier.aar"))
+    implementation(files("../rustls-platform-verifier.aar"))
 }

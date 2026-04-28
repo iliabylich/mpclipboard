@@ -13,3 +13,7 @@ valgrind:
 
 build:
     cargo build
+
+release-android out:
+    cargo ndk -t arm64-v8a build --release
+    mv target/aarch64-linux-android/release/libmpclipboard_generic_client.a {{out}}

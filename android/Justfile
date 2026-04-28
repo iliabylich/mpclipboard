@@ -1,25 +1,12 @@
 mod cli 'cli/Justfile'
 
 clean:
-    rm -rf .cxx .gradle .kotlin build mpclipboard.aar
+    rm -rf .cxx .gradle .kotlin build *.aar
 
-rustls-platform-verifier:
-    cd ../rustls-platform-verifier && just build
+release out:
+    ./gradlew --no-daemon assembleRelease
+    cp build/outputs/aar/mpclipboard-release.aar {{out}}
 
-release:
-    cd ../generic-client && \
-        cargo ndk -t arm64-v8a build --release && \
-        cp target/aarch64-linux-android/release/libmpclipboard_generic_client.a ../android/
-
-    @just rustls-platform-verifier
-    ./gradlew -q assembleRelease
-    cp build/outputs/aar/mpclipboard-release.aar ./mpclipboard.aar
-
-debug:
-    cd ../generic-client && \
-        cargo ndk -t arm64-v8a build && \
-        cp target/aarch64-linux-android/debug/libmpclipboard_generic_client.a ../android/
-
-    @just rustls-platform-verifier
-    ./gradlew -q assembleDebug
-    cp build/outputs/aar/mpclipboard-debug.aar ./mpclipboard.aar
+debug out:
+    ./gradlew --no-daemon assembleDebug
+    cp build/outputs/aar/mpclipboard-debug.aar {{out}}

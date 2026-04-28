@@ -4,9 +4,9 @@ branch := 'v/0.7.0'
 clean:
     rm -rf build src rustls-platform-verifier.aar
 
-build:
+release out:
     rm -rf src
     git clone --depth 1 --branch {{branch}} {{repo}} src
     cd src && git apply ../patches/prefer-crls-on-android.patch
-    ./gradlew -p src/android :rustls-platform-verifier:assembleRelease
-    cp src/android/rustls-platform-verifier/build/outputs/aar/rustls-platform-verifier-release.aar ./rustls-platform-verifier.aar
+    ./gradlew --no-daemon -p src/android :rustls-platform-verifier:assembleRelease
+    mv src/android/rustls-platform-verifier/build/outputs/aar/rustls-platform-verifier-release.aar {{out}}

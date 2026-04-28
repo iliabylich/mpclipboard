@@ -6,16 +6,39 @@ clone-and-patch:
     git clone --depth 1 --branch {{branch}} {{repo}} src
     cd src && git apply ../integrate-mpclipboard.patch
 
-debug:
-    rm -f florisboard-debug.apk
-    cd ../android && just debug
+debug out:
     @just clone-and-patch
-    cd src && ./gradlew :app:assembleDebug
-    cp src/app/build/outputs/apk/debug/app-debug.apk florisboard-debug.apk
+    cd src && ./gradlew --no-daemon :app:assembleDebug
+    mv src/app/build/outputs/apk/debug/app-debug.apk {{out}}
 
 release out:
-    rm -f florisboard-release.apk
-    cd ../android && just release
     @just clone-and-patch
-    cd src && ./gradlew :app:assembleRelease
-    cp src/app/build/outputs/apk/release/app-release.apk {{out}}
+    cd src && ./gradlew --no-daemon :app:assembleRelease
+    mv src/app/build/outputs/apk/release/app-release.apk {{out}}
+
+build-in-docker keyfile out:
+    #!/usr/bin/env -S bash -eu
+
+    read -s -p "Keystore password: " KEYSTORE_PASSWORD
+
+    rm -rf out
+    mkdir -p out
+
+    cd ..
+    # docker image rm -f florisboard-builder
+    docker build -t florisboard-builder:latest -f florisboard/Dockerfile .
+
+    cd florisboard
+    docker run \
+        --rm \
+        --tty \
+        --volume "{{keyfile}}:/florisboard/release-key.jks:ro" \
+        --volume "$PWD/out:/out" \
+        --env "ANDROID_KEYSTORE_PATH=/florisboard/release-key.jks" \
+        --env "ANDROID_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD" \
+        --env "ANDROID_KEY_ALIAS=release" \
+        --env "ANDROID_KEY_PASSWORD=$KEYSTORE_PASSWORD" \
+        --entrypoint just \
+        florisboard-builder \
+        release /out/florisboard.apk
+    mv out/florisboard.apk {{out}}
