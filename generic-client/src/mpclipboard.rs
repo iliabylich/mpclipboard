@@ -13,8 +13,12 @@ pub struct MPClipboard {
 }
 
 impl MPClipboard {
-    /// Initializes MPClipboard, must be called once at the start of the program.
+    /// Initializes `MPClipboard`, must be called once at the start of the program.
     /// Internally initializes logger and TLS.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if TLS initialization fails.
     pub fn init() -> Result<()> {
         Logger::init();
         TLS::init()?;
@@ -24,36 +28,43 @@ impl MPClipboard {
     /// Constructs a new instance
     pub fn new(context: Context) -> Self {
         let event_loop = Rc::clone(&context.event_loop);
-        let state = State::start(context);
+        let state = State::start(context, Rc::clone(&event_loop));
 
         Self { event_loop, state }
     }
 
     /// Reads data from WebSocket connection, returns Output
-    pub fn read(&mut self) -> Option<Output> {
-        let event = self.event_loop.read();
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if OS-specific event loop (epoll/kqueue) returns an error
+    pub fn read(&mut self) -> Result<Option<Output>> {
+        let event = self.event_loop.read()?;
 
         if event.timer {
             return self.state.tick();
         }
 
         if let Some((readable, writable)) = event.ws {
-            return self.state.transition(readable, writable);
+            return Ok(self.state.transition(readable, writable));
         }
 
-        None
+        Ok(None)
     }
 
     /// Pushes a new text Clip with provided content.
     /// There's NO queue internally, so this this method overrides previously pushed-but-not-sent Clip.
-    #[must_use]
-    pub fn push_text(&mut self, text: String) -> bool {
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if OS-specific event loop (epoll/kqueue) returns an error
+    pub fn push_text(&mut self, text: String) -> Result<bool> {
         self.state.push(Clip::text(text))
     }
 }
 
 impl AsRawFd for MPClipboard {
-    fn as_raw_fd(&self) -> std::os::unix::prelude::RawFd {
+    fn as_raw_fd(&self) -> i32 {
         self.event_loop.as_raw_fd()
     }
 }

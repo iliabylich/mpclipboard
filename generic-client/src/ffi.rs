@@ -23,7 +23,7 @@ fn string_to_c(s: String) -> (*mut c_char, usize) {
     (ptr.cast(), len)
 }
 
-/// Initializes MPClipboard, must be called once at startup
+/// Initializes `MPClipboard`, must be called once at startup
 #[unsafe(no_mangle)]
 pub extern "C" fn mpclipboard_init() -> bool {
     if let Err(err) = MPClipboard::init() {
@@ -54,11 +54,11 @@ pub extern "C" fn mpclipboard_config_new(
     let uri = cstring_to_string(uri);
     let token = cstring_to_string(token);
     let name = cstring_to_string(name);
-    let config = try_or_null!(Config::new(uri, token, name));
+    let config = try_or_null!(Config::new(&uri, token, name));
     Box::leak(Box::new(config))
 }
 
-/// Constructs a new MPClipboard context.
+/// Constructs a new `MPClipboard` context.
 /// Consumes config.
 #[unsafe(no_mangle)]
 pub extern "C" fn mpclipboard_context_new(config: *mut Config) -> *mut Context {
@@ -67,7 +67,7 @@ pub extern "C" fn mpclipboard_context_new(config: *mut Config) -> *mut Context {
     Box::leak(Box::new(context))
 }
 
-/// Constructs a new MPClipboard.
+/// Constructs a new `MPClipboard`.
 /// Consumes context.
 #[unsafe(no_mangle)]
 pub extern "C" fn mpclipboard_new(context: *mut Context) -> *mut MPClipboard {
@@ -75,7 +75,7 @@ pub extern "C" fn mpclipboard_new(context: *mut Context) -> *mut MPClipboard {
     Box::leak(Box::new(MPClipboard::new(context)))
 }
 
-/// Constructs a new MPClipboard.
+/// Constructs a new `MPClipboard`.
 /// Consumes context.
 #[unsafe(no_mangle)]
 pub extern "C" fn mpclipboard_get_fd(mpclipboard: *mut MPClipboard) -> i32 {
@@ -98,8 +98,10 @@ pub enum COutput {
         /// and its length
         len: usize,
     },
-    /// Internal
-    Internal,
+    /// Ignore
+    Ignore,
+    /// Error
+    Error,
 }
 impl From<Output> for COutput {
     fn from(output: Output) -> Self {
@@ -115,14 +117,29 @@ impl From<Output> for COutput {
     }
 }
 
-/// Reads from a given MPClipboard instance.
+/// Reads from a given `MPClipboard` instance.
 #[unsafe(no_mangle)]
 pub extern "C" fn mpclipboard_read(mpclipboard: *mut MPClipboard) -> COutput {
     let mpclipboard = unsafe { &mut *mpclipboard };
     match mpclipboard.read() {
-        Some(output) => output.into(),
-        None => COutput::Internal,
+        Ok(Some(output)) => output.into(),
+        Ok(None) => COutput::Ignore,
+        Err(err) => {
+            log::error!("{err:?}");
+            COutput::Error
+        }
     }
+}
+
+#[repr(C)]
+/// Result of pushing text to `MPClipboard`.
+pub enum PushResult {
+    /// The text is new, it has been sent.
+    Sent,
+    /// The text is stale, it's been dropped.
+    DroppedAsStale,
+    /// Internal error, `MPClipboard` is now in malformed state
+    Error,
 }
 
 /// Pushes text from NULL-terminated C-style string,
@@ -131,10 +148,18 @@ pub extern "C" fn mpclipboard_read(mpclipboard: *mut MPClipboard) -> COutput {
 pub extern "C" fn mpclipboard_push_text1(
     mpclipboard: *mut MPClipboard,
     text: *const c_char,
-) -> bool {
+) -> PushResult {
     let mpclipboard = unsafe { &mut *mpclipboard };
     let text = cstring_to_string(text);
-    mpclipboard.push_text(text)
+
+    match mpclipboard.push_text(text) {
+        Ok(true) => PushResult::Sent,
+        Ok(false) => PushResult::DroppedAsStale,
+        Err(err) => {
+            log::error!("{err:?}");
+            PushResult::Error
+        }
+    }
 }
 
 /// Pushes text from pointer + length
@@ -144,14 +169,22 @@ pub extern "C" fn mpclipboard_push_text2(
     mpclipboard: *mut MPClipboard,
     ptr: *const c_char,
     len: usize,
-) -> bool {
+) -> PushResult {
     let mpclipboard = unsafe { &mut *mpclipboard };
     let bytes = unsafe { core::slice::from_raw_parts(ptr.cast::<u8>(), len) };
     let text = unsafe { std::str::from_utf8_unchecked(bytes) };
-    mpclipboard.push_text(text.to_string())
+
+    match mpclipboard.push_text(text.to_string()) {
+        Ok(true) => PushResult::Sent,
+        Ok(false) => PushResult::DroppedAsStale,
+        Err(err) => {
+            log::error!("{err:?}");
+            PushResult::Error
+        }
+    }
 }
 
-/// Drops an instance of MPClipboard, frees memory, closes files
+/// Drops an instance of `MPClipboard`, frees memory, closes files
 #[unsafe(no_mangle)]
 pub extern "C" fn mpclipboard_drop(mpclipboard: *mut MPClipboard) {
     unsafe { core::ptr::drop_in_place(mpclipboard) };

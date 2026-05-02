@@ -1,134 +1,197 @@
-mod connected;
-mod connecting;
 mod disconnected;
+mod established;
+mod establishing;
 mod handshaking;
 mod ready;
 
-pub(crate) use connected::Connected;
-pub(crate) use connecting::Connecting;
-pub(crate) use disconnected::Disconnected;
-pub(crate) use handshaking::Handshaking;
-pub(crate) use ready::Ready;
+use disconnected::Disconnected;
+use established::Established;
+use establishing::Establishing;
+use handshaking::Handshaking;
+use ready::Ready;
 
 use crate::{Connectivity, Context, Output, event_loop::EventLoop};
+use anyhow::{Context as _, Result};
 use clip::Clip;
-use std::{os::fd::AsRawFd as _, rc::Rc};
+use std::{os::fd::AsRawFd, rc::Rc};
 use tungstenite::{Bytes, Message};
 
-#[derive(Default)]
-pub(crate) enum State {
-    Connected(Connected),
-    Connecting(Connecting),
+pub(crate) enum Connected {
+    Established(Established),
+    Establishing(Establishing),
     Handshaking(Handshaking),
     Ready(Ready),
-    Disconnected(Disconnected),
-    #[default]
-    None,
 }
-
-macro_rules! for_each_variant {
-    ($value:expr => |$var:ident| $eval:expr) => {
-        match $value {
-            Self::Connected($var) => $eval,
-            Self::Connecting($var) => $eval,
-            Self::Handshaking($var) => $eval,
-            Self::Ready($var) => $eval,
-            Self::Disconnected($var) => $eval,
-            Self::None => panic!("bug: no state"),
+impl Connected {
+    const fn tag(&self) -> &'static str {
+        match self {
+            Self::Established(_) => "Established",
+            Self::Establishing(_) => "Establishing",
+            Self::Handshaking(_) => "Handshaking",
+            Self::Ready(_) => "Ready",
         }
-    };
-}
-
-impl std::fmt::Debug for State {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for_each_variant!(self => |inner| write!(f, "{}", inner.tag()))
     }
-}
-
-trait StateVariant {
-    fn tag(&self) -> &'static str;
-    fn context(&mut self) -> &mut Context;
-    fn event_loop(&self) -> Rc<EventLoop>;
-
-    fn transition(self, readable: bool, writable: bool) -> (State, Option<Output>);
-
-    fn disconnect_by(context: Context, fd: i32) -> (State, Option<Output>) {
-        context.event_loop.remove(fd);
+    fn try_transition(
+        self,
+        context: &mut Context,
+        readable: bool,
+        writable: bool,
+    ) -> Result<(Self, Option<Output>)> {
+        match self {
+            Self::Established(s) => s.start_handshake(context),
+            Self::Establishing(s) => s.finish_connecting(context),
+            Self::Handshaking(s) => s.finish_handshake(),
+            Self::Ready(s) => s.read_write(context, readable, writable),
+        }
+    }
+    fn disconnect(self, context: &Context) -> (Connection, Option<Output>) {
+        context.event_loop.remove(self.as_raw_fd());
         (
-            State::Disconnected(Disconnected::new(context)),
+            Connection::Disconnected,
             Some(Output::ConnectivityChanged {
                 connectivity: Connectivity::Disconnected,
             }),
         )
     }
-    fn flip(self) -> (State, Option<Output>);
+}
+impl AsRawFd for Connected {
+    fn as_raw_fd(&self) -> i32 {
+        match self {
+            Self::Established(s) => s.as_raw_fd(),
+            Self::Establishing(s) => s.as_raw_fd(),
+            Self::Handshaking(s) => s.as_raw_fd(),
+            Self::Ready(s) => s.as_raw_fd(),
+        }
+    }
+}
+
+#[derive(Default)]
+pub(crate) enum Connection {
+    Connected(Box<Connected>),
+    #[default]
+    Disconnected,
+}
+impl std::fmt::Debug for Connection {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.tag())
+    }
+}
+impl Connection {
+    fn tag(&self) -> &'static str {
+        match self {
+            Self::Connected(s) => s.tag(),
+            Self::Disconnected => Disconnected::tag(),
+        }
+    }
+    fn transition(
+        self,
+        readable: bool,
+        writable: bool,
+        context: &mut Context,
+    ) -> (Self, Option<Output>) {
+        match self {
+            Self::Connected(connected) => {
+                let fd = connected.as_raw_fd();
+
+                match connected.try_transition(context, readable, writable) {
+                    Ok((connected, output)) => (Self::Connected(Box::new(connected)), output),
+                    Err(err) => {
+                        log::error!("{err:?}");
+                        context.event_loop.remove(fd);
+                        (
+                            Self::Disconnected,
+                            Some(Output::ConnectivityChanged {
+                                connectivity: Connectivity::Disconnected,
+                            }),
+                        )
+                    }
+                }
+            }
+
+            Self::Disconnected => Disconnected::connect(context),
+        }
+    }
+    fn flip(self, context: &Context) -> (Self, Option<Output>) {
+        match self {
+            Self::Connected(connected) => connected.disconnect(context),
+            Self::Disconnected => Disconnected::connect(context),
+        }
+    }
+}
+
+pub(crate) struct State {
+    connection: Connection,
+    context: Context,
+    event_loop: Rc<EventLoop>,
 }
 
 impl State {
-    pub(crate) fn start(context: Context) -> Self {
-        let (this, _) = Disconnected::new(context).transition(true, true);
-        this
-    }
-
-    pub(crate) fn tag(&self) -> &'static str {
-        for_each_variant!(self => |inner| inner.tag())
-    }
-
-    pub(crate) fn context(&mut self) -> &mut Context {
-        for_each_variant!(self => |inner| inner.context())
-    }
-
-    pub(crate) fn event_loop(&self) -> Rc<EventLoop> {
-        for_each_variant!(self => |inner| inner.event_loop())
-    }
-
-    fn modify(&mut self, f: impl FnOnce(State) -> (State, Option<Output>)) -> Option<Output> {
-        let this = std::mem::take(self);
-        let before = this.tag();
-
-        let (this, output) = f(this);
-
-        let after = this.tag();
-        if before != after {
-            log::trace!("{before:?} -> {after:?}");
+    pub(crate) fn start(context: Context, event_loop: Rc<EventLoop>) -> Self {
+        let (connection, _) = Disconnected::connect(&context);
+        Self {
+            connection,
+            context,
+            event_loop,
         }
-
-        *self = this;
-        output
     }
 
     pub(crate) fn transition(&mut self, readable: bool, writable: bool) -> Option<Output> {
-        self.context().last_time_worked_with_ws_at = self.context().timer.now();
+        self.context.last_time_worked_with_ws_at = self.context.timer.now();
 
-        self.modify(
-            move |this| for_each_variant!(this => |inner| inner.transition(readable, writable)),
-        )
+        let before = self.connection.tag();
+        let connection = std::mem::take(&mut self.connection);
+        let (connection, output) = connection.transition(readable, writable, &mut self.context);
+        self.connection = connection;
+        let after = self.connection.tag();
+
+        if before != after {
+            log::trace!("{before} -> {after}");
+        }
+
+        output
     }
 
-    pub(crate) fn tick(&mut self) -> Option<Output> {
-        let last_time_worked_with_ws_at = self.context().last_time_worked_with_ws_at;
-        let now = self.context().timer.now();
+    pub(crate) fn tick(&mut self) -> Result<Option<Output>> {
+        let last_time_worked_with_ws_at = self.context.last_time_worked_with_ws_at;
+        let now = self.context.timer.now();
 
         log::trace!("state tick {last_time_worked_with_ws_at} <=> {now}");
-        if (now - last_time_worked_with_ws_at) > 5 {
-            self.context().last_time_worked_with_ws_at = now;
-            self.modify(move |this| for_each_variant!(this => |inner| inner.flip()))
+        if now
+            .checked_sub(last_time_worked_with_ws_at)
+            .context("time goes backwards")?
+            > 5
+        {
+            self.context.last_time_worked_with_ws_at = now;
+
+            let before = self.connection.tag();
+            let connection = std::mem::take(&mut self.connection);
+            let (connection, output) = connection.flip(&self.context);
+            self.connection = connection;
+            let after = self.connection.tag();
+
+            if before != after {
+                log::trace!("{before} -> {after}");
+            }
+
+            Ok(output)
         } else {
-            None
+            Ok(None)
         }
     }
 
-    pub(crate) fn push(&mut self, clip: Clip) -> bool {
-        if !clip.newer_than(&self.context().last_clip) {
-            return false;
+    pub(crate) fn push(&mut self, clip: Clip) -> Result<bool> {
+        if !clip.newer_than(&self.context.last_clip) {
+            return Ok(false);
         }
-        self.context().last_clip = clip.clone();
-        self.context().pending_message_to_send = Some(Message::Binary(Bytes::from(clip.encode())));
+        self.context.last_clip = clip.clone();
+        self.context.pending_message_to_send = Some(Message::Binary(Bytes::from(clip.encode())));
 
-        if let State::Ready(ready) = &self {
-            self.event_loop().modify(ready.as_raw_fd(), true, true);
+        if let Connection::Connected(connected) = &self.connection
+            && let Connected::Ready(ready) = connected.as_ref()
+        {
+            self.event_loop.modify(ready.as_raw_fd(), true, true)?;
         }
 
-        true
+        Ok(true)
     }
 }

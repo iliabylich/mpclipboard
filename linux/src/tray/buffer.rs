@@ -3,7 +3,7 @@ pub(crate) struct Buffer<const N: usize, T> {
 }
 
 impl<const N: usize, T> Buffer<N, T> {
-    pub(crate) fn new() -> Self {
+    pub(crate) const fn new() -> Self {
         Self { buf: vec![] }
     }
 

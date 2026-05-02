@@ -1,8 +1,19 @@
+#![warn(missing_docs)]
 #![warn(trivial_casts)]
 #![warn(trivial_numeric_casts)]
 #![warn(unused_qualifications)]
 #![warn(deprecated_in_future)]
 #![warn(unused_lifetimes)]
+#![warn(clippy::unwrap_used)]
+#![warn(clippy::expect_used)]
+#![warn(clippy::panic)]
+#![warn(clippy::indexing_slicing)]
+#![warn(clippy::arithmetic_side_effects)]
+#![warn(clippy::pedantic)]
+#![warn(clippy::nursery)]
+#![allow(clippy::redundant_pub_crate)]
+#![allow(clippy::future_not_send)]
+#![doc = include_str!("../README.md")]
 
 use crate::{config::Config, state::State};
 use anyhow::{Context as _, Result};
@@ -24,7 +35,7 @@ async fn main() -> Result<()> {
 
     let Config { port, token } = Config::read().await?;
 
-    log::info!("Starting server on http://127.0.0.1:{}", port);
+    log::info!("Starting server on http://127.0.0.1:{port}");
     let listener = TcpListener::bind(("127.0.0.1", port))
         .await
         .context("failed to bind")?;

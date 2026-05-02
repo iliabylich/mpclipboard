@@ -33,10 +33,10 @@ impl MPClipboardStream {
         let mut guard = self.fd.readable().await.context("failed to wait")?;
         guard.clear_ready();
 
-        Ok(self.mpclipboard.read())
+        self.mpclipboard.read()
     }
 
-    pub(crate) fn push_text(&mut self, text: String) -> bool {
+    pub(crate) fn push_text(&mut self, text: String) -> Result<bool> {
         self.mpclipboard.push_text(text)
     }
 }

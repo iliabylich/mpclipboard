@@ -27,7 +27,7 @@ pub(crate) struct LocalReader {
 }
 
 impl LocalReader {
-    pub(crate) async fn spawn(token: CancellationToken) -> Self {
+    pub(crate) fn spawn(token: CancellationToken) -> Self {
         let (tx, rx) = channel(255);
         let handle = tokio::spawn(async move {
             let (mut state, mut queue) = match State::new().await {
@@ -55,7 +55,7 @@ impl LocalReader {
                         }
                     }
 
-                    _ = token.cancelled() => {
+                    () = token.cancelled() => {
                         log::info!(target: "LocalReader", "exiting...");
                         break;
                     }
@@ -177,7 +177,7 @@ impl State {
                 && let Ok(string) = String::from_utf8(buf)
             {
                 return Ok(Some(string));
-            };
+            }
         }
 
         Ok(None)
@@ -190,7 +190,7 @@ impl Dispatch<WlRegistry, ()> for State {
         registry: &WlRegistry,
         event: <WlRegistry as Proxy>::Event,
         _data: &(),
-        _conn: &wayland_client::Connection,
+        _conn: &Connection,
         qh: &wayland_client::QueueHandle<Self>,
     ) {
         use wayland_client::protocol::wl_registry::Event;
@@ -219,7 +219,7 @@ impl Dispatch<WlSeat, ()> for State {
         _proxy: &WlSeat,
         event: <WlSeat as Proxy>::Event,
         _data: &(),
-        _conn: &wayland_client::Connection,
+        _conn: &Connection,
         _queue: &wayland_client::QueueHandle<Self>,
     ) {
         use wayland_client::protocol::wl_seat::Event;
@@ -236,7 +236,7 @@ impl Dispatch<ZwlrDataControlManagerV1, ()> for State {
         _proxy: &ZwlrDataControlManagerV1,
         _event: <ZwlrDataControlManagerV1 as Proxy>::Event,
         _data: &(),
-        _conn: &wayland_client::Connection,
+        _conn: &Connection,
         _queue: &wayland_client::QueueHandle<Self>,
     ) {
     }
@@ -270,9 +270,9 @@ impl Dispatch<ZwlrDataControlDeviceV1, ()> for State {
     }
 
     event_created_child!(State,
-        wayland_protocols_wlr::data_control::v1::client::zwlr_data_control_device_v1::ZwlrDataControlDeviceV1, [
+        ZwlrDataControlDeviceV1, [
             wayland_protocols_wlr::data_control::v1::client::zwlr_data_control_device_v1::EVT_DATA_OFFER_OPCODE => (
-                wayland_protocols_wlr::data_control::v1::client::zwlr_data_control_offer_v1::ZwlrDataControlOfferV1,
+                ZwlrDataControlOfferV1,
                 ()
             )
         ]

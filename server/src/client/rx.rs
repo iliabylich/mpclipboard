@@ -15,7 +15,7 @@ pub(crate) struct ClientRx {
 }
 
 impl ClientRx {
-    pub(crate) fn new(name: String, rx: StreamRx) -> Self {
+    pub(crate) const fn new(name: String, rx: StreamRx) -> Self {
         Self { name, rx }
     }
 }
@@ -33,7 +33,7 @@ impl Stream for ClientRx {
         mut self: Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Option<Self::Item>> {
-        use std::task::Poll::*;
+        use std::task::Poll::Ready;
 
         let mut rx = pin!(&mut self.rx);
 
@@ -50,9 +50,9 @@ impl Stream for ClientRx {
                     return Ready(Some(IncomingMessage::Error(anyhow::anyhow!(
                         "disconnected"
                     ))));
-                } else {
-                    return Ready(Some(IncomingMessage::Error(anyhow::anyhow!(err))));
                 }
+
+                return Ready(Some(IncomingMessage::Error(anyhow::anyhow!(err))));
             }
         };
 

@@ -12,7 +12,7 @@ impl TLS {
     pub(crate) fn init() -> Result<()> {
         rustls::crypto::ring::default_provider()
             .install_default()
-            .expect("Failed to install rustls crypto provider");
+            .map_err(|_| anyhow::anyhow!("Failed to install rustls crypto provider"))?;
 
         let client_config = ClientConfig::with_platform_verifier()
             .context("failed to create SSL client with platform verifier")?;

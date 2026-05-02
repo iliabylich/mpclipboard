@@ -5,7 +5,7 @@ pub(crate) struct Store {
 }
 
 impl Store {
-    pub(crate) fn empty() -> Self {
+    pub(crate) const fn empty() -> Self {
         Self { clip: None }
     }
 

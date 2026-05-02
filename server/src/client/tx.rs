@@ -15,7 +15,7 @@ pub(crate) struct ClientTx {
 }
 
 impl ClientTx {
-    pub(crate) fn new(tx: StreamTx) -> Self {
+    pub(crate) const fn new(tx: StreamTx) -> Self {
         Self { tx }
     }
 }

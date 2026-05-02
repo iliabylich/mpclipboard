@@ -19,7 +19,7 @@ typedef enum {
 } mpclipboard_ConfigReadOption;
 
 /**
- * Connectivity of the MPClipboard, emitted in `on_connectivity_changed`
+ * Connectivity of the `MPClipboard`, emitted in `on_connectivity_changed`
  */
 typedef enum {
   /**
@@ -37,12 +37,30 @@ typedef enum {
 } mpclipboard_Connectivity;
 
 /**
+ * Result of pushing text to `MPClipboard`.
+ */
+typedef enum {
+  /**
+   * The text is new, it has been sent.
+   */
+  MPCLIPBOARD_PUSH_RESULT_SENT,
+  /**
+   * The text is stale, it's been dropped.
+   */
+  MPCLIPBOARD_PUSH_RESULT_DROPPED_AS_STALE,
+  /**
+   * Internal error, `MPClipboard` is now in malformed state
+   */
+  MPCLIPBOARD_PUSH_RESULT_ERROR,
+} mpclipboard_PushResult;
+
+/**
  * Representation of a runtime configuration
  */
 typedef struct mpclipboard_Config mpclipboard_Config;
 
 /**
- * Execution context of MPClipboard, once constructed nothing can fail
+ * Execution context of `MPClipboard`, once constructed nothing can fail
  */
 typedef struct mpclipboard_Context mpclipboard_Context;
 
@@ -64,9 +82,13 @@ typedef enum {
    */
   MPCLIPBOARD_OUTPUT_NEW_TEXT,
   /**
-   * Internal
+   * Ignore
    */
-  MPCLIPBOARD_OUTPUT_INTERNAL,
+  MPCLIPBOARD_OUTPUT_IGNORE,
+  /**
+   * Error
+   */
+  MPCLIPBOARD_OUTPUT_ERROR,
 } mpclipboard_Output_Tag;
 
 typedef struct {
@@ -96,7 +118,7 @@ typedef struct {
 } mpclipboard_Output;
 
 /**
- * Initializes MPClipboard, must be called once at startup
+ * Initializes `MPClipboard`, must be called once at startup
  */
 bool mpclipboard_init(void);
 
@@ -114,25 +136,25 @@ mpclipboard_Config *mpclipboard_config_read(mpclipboard_ConfigReadOption option)
 mpclipboard_Config *mpclipboard_config_new(const char *uri, const char *token, const char *name);
 
 /**
- * Constructs a new MPClipboard context.
+ * Constructs a new `MPClipboard` context.
  * Consumes config.
  */
 mpclipboard_Context *mpclipboard_context_new(mpclipboard_Config *config);
 
 /**
- * Constructs a new MPClipboard.
+ * Constructs a new `MPClipboard`.
  * Consumes context.
  */
 mpclipboard_MPClipboard *mpclipboard_new(mpclipboard_Context *context);
 
 /**
- * Constructs a new MPClipboard.
+ * Constructs a new `MPClipboard`.
  * Consumes context.
  */
 int32_t mpclipboard_get_fd(mpclipboard_MPClipboard *mpclipboard);
 
 /**
- * Reads from a given MPClipboard instance.
+ * Reads from a given `MPClipboard` instance.
  */
 mpclipboard_Output mpclipboard_read(mpclipboard_MPClipboard *mpclipboard);
 
@@ -140,16 +162,19 @@ mpclipboard_Output mpclipboard_read(mpclipboard_MPClipboard *mpclipboard);
  * Pushes text from NULL-terminated C-style string,
  * returns false if given text isn't new
  */
-bool mpclipboard_push_text1(mpclipboard_MPClipboard *mpclipboard, const char *text);
+mpclipboard_PushResult mpclipboard_push_text1(mpclipboard_MPClipboard *mpclipboard,
+                                              const char *text);
 
 /**
  * Pushes text from pointer + length
  * returns false if given text isn't new
  */
-bool mpclipboard_push_text2(mpclipboard_MPClipboard *mpclipboard, const char *ptr, size_t len);
+mpclipboard_PushResult mpclipboard_push_text2(mpclipboard_MPClipboard *mpclipboard,
+                                              const char *ptr,
+                                              size_t len);
 
 /**
- * Drops an instance of MPClipboard, frees memory, closes files
+ * Drops an instance of `MPClipboard`, frees memory, closes files
  */
 void mpclipboard_drop(mpclipboard_MPClipboard *mpclipboard);
 

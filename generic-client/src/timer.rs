@@ -17,7 +17,7 @@ impl Timer {
     }
 
     pub(crate) fn tick(&self) {
-        let value = self.inner.get() + 1;
+        let value = self.inner.get().wrapping_add(1);
         log::trace!("tick {value}");
         self.inner.set(value);
     }

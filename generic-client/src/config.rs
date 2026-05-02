@@ -19,19 +19,22 @@ pub enum ConfigReadOption {
 }
 
 impl ConfigReadOption {
-    fn path(self) -> String {
+    fn path(self) -> Result<String> {
         match self {
-            ConfigReadOption::FromLocalFile => "config.toml".to_string(),
-            ConfigReadOption::FromXdgConfigDir => std::env::var("$XDG_CONFIG_HOME")
+            Self::FromLocalFile => Ok("config.toml".to_string()),
+            Self::FromXdgConfigDir => std::env::var("$XDG_CONFIG_HOME")
                 .map(PathBuf::from)
-                .unwrap_or_else(|_| {
-                    PathBuf::from(std::env::var("HOME").expect("no $HOME")).join(".config")
+                .context("no $XDG_CONFIG_HOME is set")
+                .or_else(|_err| {
+                    let home = std::env::var("HOME").context("no $HOME")?;
+                    Result::<_, anyhow::Error>::Ok(PathBuf::from(home).join(".config"))
                 })
+                .context("neither $XDG_CONFIG_HOME nor $HOME is set")?
                 .join("mpclipboard")
                 .join("config.toml")
                 .to_str()
-                .expect("non-utf8 $XDG_CONFIG_HOME or $HOME")
-                .to_string(),
+                .context("non-utf8 $XDG_CONFIG_HOME or $HOME")
+                .map(ToString::to_string),
         }
     }
 }
@@ -64,10 +67,14 @@ impl std::fmt::Debug for Config {
 
 impl Config {
     /// Constructs a new config in-place based on given fields.
-    pub fn new(uri: String, token: String, name: String) -> Result<Self> {
+    ///
+    /// # Errors
+    ///
+    /// Return error if given `uri` is not a valid URI.
+    pub fn new(uri: &str, token: String, name: String) -> Result<Self> {
         log::trace!("config: {uri} {token} {name}");
         Ok(Self {
-            uri: Uri::from_str(&uri).context("invalid URI")?,
+            uri: Uri::from_str(uri).context("invalid URI")?,
             token,
             name,
         })
@@ -75,8 +82,13 @@ impl Config {
 
     /// Reads the config based on the given instruction
     /// (which is either "read from XDG dir" or "read from ./config.toml")
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a file that given `option` is mapped to
+    /// doesn't exist or is invalid.
     pub fn read(option: ConfigReadOption) -> Result<Self> {
-        let path = option.path();
+        let path = option.path()?;
         let content =
             std::fs::read_to_string(&path).with_context(|| format!("failed to read {path}"))?;
         toml::from_str(&content).context("invalid config format")

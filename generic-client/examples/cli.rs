@@ -26,7 +26,7 @@ fn main() -> Result<()> {
         .try_into()
         .unwrap_or_else(|_| print_help_and_exit());
 
-    let config = Config::new(uri, token, name)?;
+    let config = Config::new(&uri, token, name)?;
     let context = Context::new(config)?;
 
     let mut mpclipboard = MPClipboard::new(context);
@@ -41,7 +41,7 @@ fn main() -> Result<()> {
         for event in events.iter() {
             match event.key as u32 {
                 MPCLIPBOARD => {
-                    if let Some(output) = mpclipboard.read() {
+                    if let Some(output) = mpclipboard.read()? {
                         match output {
                             Output::ConnectivityChanged { connectivity } => {
                                 log::info!("{connectivity:?}")
@@ -55,7 +55,7 @@ fn main() -> Result<()> {
                     drain_timer();
 
                     if tick % 2 == 0 {
-                        let _ = mpclipboard.push_text(format!("{flood}-tick-{tick}"));
+                        let _ = mpclipboard.push_text(format!("{flood}-tick-{tick}"))?;
                         // OR
                         // mpclipboard.push_binary(vec![1, 2, 3]);
                     }

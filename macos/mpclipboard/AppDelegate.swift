@@ -46,14 +46,23 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                     self.clipboard.writeText(text)
                     self.tray.pushReceived(text)
                     self.showNotification(text)
-                case .newBinary(let data):
-                    print("TODO: received data: \(data)")
+                case .error:
+                    fatalError("MPClipboard return error from .read()")
                 }
             }
         })
 
         clipboardTimer = clipboard.startPolling(onCopy: { text in
-            if self.mpclipboard?.pushText(text) ?? false {
+            guard let push_result = self.mpclipboard?.pushText(text) else {
+                return;
+            }
+
+            switch push_result {
+            case .droppedAsStale:
+                return;
+            case .error:
+                fatalError("MPClipboard return error from .push_text()")
+            case .sent:
                 self.tray.pushSent(text)
             }
         })

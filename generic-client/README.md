@@ -1,6 +1,6 @@
-# MPClipboard, shared and generic part
+# `MPClipboard`, shared and generic part
 
-This is a shared part of all apps that implement MPClipboard's communication protocol.
+This is a shared part of all apps that implement `MPClipboard`'s communication protocol.
 
 It has both Rust and C APIs.
 

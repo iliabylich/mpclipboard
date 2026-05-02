@@ -32,7 +32,7 @@ impl ksni::Tray for TrayState {
     }
 
     fn menu(&self) -> Vec<ksni::MenuItem<Self>> {
-        use ksni::menu::*;
+        use ksni::menu::{MenuItem, StandardItem};
 
         self.buffer
             .iter()
@@ -53,7 +53,7 @@ impl ksni::Tray for TrayState {
 }
 
 impl TrayState {
-    pub(crate) fn new(token: CancellationToken) -> Self {
+    pub(crate) const fn new(token: CancellationToken) -> Self {
         Self {
             connectivity: Connectivity::Disconnected,
             buffer: Buffer::new(),

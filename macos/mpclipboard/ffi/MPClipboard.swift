@@ -36,9 +36,9 @@ class MPClipboard {
         return mpclipboard_get_fd(mpclipboard)
     }
 
-    func pushText(_ text: String) -> Bool {
+    func pushText(_ text: String) -> PushResult {
         text.withCString { ptr in
-            return mpclipboard_push_text1(mpclipboard, ptr)
+            return PushResult.from(mpclipboard_push_text1(mpclipboard, ptr))
         }
     }
 

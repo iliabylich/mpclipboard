@@ -34,7 +34,7 @@ impl State {
     pub(crate) async fn register(&mut self, stream: TcpStream, remote_addr: SocketAddr) {
         log::info!("new connection from {remote_addr:?}");
 
-        let mut auth = Auth::new(self.token.to_string());
+        let mut auth = Auth::new(self.token.clone());
 
         let ws = match accept_hdr_async(stream, &mut auth).await {
             Ok(ws) => ws,
@@ -69,7 +69,7 @@ impl State {
 
         let mut failed = vec![];
 
-        for (name, tx) in self.name_to_tx.iter_mut() {
+        for (name, tx) in &mut self.name_to_tx {
             if name != &received_from
                 && let Err(err) = tx.send(OutgoingMessage::Clip(clip.clone())).await
             {
@@ -93,11 +93,11 @@ impl State {
 
         let mut failed = vec![];
 
-        for (name, tx) in self.name_to_tx.iter_mut() {
+        for (name, tx) in &mut self.name_to_tx {
             log::info!(target: name, "sending ping");
             if let Err(err) = tx.send(OutgoingMessage::Ping).await {
                 log::error!(target: name, "failed to send ping: {err:?}");
-                failed.push(name.to_string());
+                failed.push(name.clone());
             }
         }
 
@@ -112,7 +112,7 @@ impl Stream for State {
     type Item = (String, Clip);
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        use Poll::*;
+        use Poll::{Pending, Ready};
 
         let mut newest = (String::new(), Clip::zero());
 
@@ -126,13 +126,12 @@ impl Stream for State {
                     }
                 }
                 Ready(Some(IncomingMessage::Error(err))) => {
-                    log::error!(target: name, "error: {err:?}")
+                    log::error!(target: name, "error: {err:?}");
                 }
-                Ready(Some(IncomingMessage::Skip)) => {}
                 Ready(None) => {
                     log::error!(target: name, "closed");
                 }
-                Pending => {}
+                Ready(Some(IncomingMessage::Skip)) | Pending => {}
             }
         }
 

@@ -1,4 +1,4 @@
-# MPClipboard server
+# `MPClipboard` server
 
 This is a central part in communication process, a server that connects clients of all flavors.
 

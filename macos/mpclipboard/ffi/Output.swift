@@ -3,7 +3,7 @@ import Foundation
 enum Output {
     case connectivityChanged(Connectivity)
     case newText(String)
-    case newBinary(Data)
+    case error
 
     static func from(_ output: mpclipboard_Output) -> Self? {
         switch (output.tag) {
@@ -19,8 +19,10 @@ enum Output {
             } else {
                 fatalError("non-utf8 new text in output")
             }
-        case MPCLIPBOARD_OUTPUT_INTERNAL:
+        case MPCLIPBOARD_OUTPUT_IGNORE:
             return nil
+        case MPCLIPBOARD_OUTPUT_ERROR:
+            return .error
         default:
             fatalError("unnsupported Output")
         }

@@ -27,7 +27,7 @@ impl MainLoop {
         let token = CancellationToken::new();
         let mpclipboard = MPClipboardStream::new()?;
         let tray = Tray::spawn(token.clone()).await?;
-        let clipboard = LocalReader::spawn(token.clone()).await;
+        let clipboard = LocalReader::spawn(token.clone());
         let sigterm = tokio::signal::unix::signal(SignalKind::terminate())
             .context("failed to construct SIGTERM handler")?;
         let sigint = tokio::signal::unix::signal(SignalKind::interrupt())
@@ -43,7 +43,7 @@ impl MainLoop {
         })
     }
 
-    pub(crate) async fn start(mut self) {
+    pub(crate) async fn start(mut self) -> Result<()> {
         loop {
             tokio::select! {
                 output = self.mpclipboard.read() => {
@@ -51,13 +51,13 @@ impl MainLoop {
                 }
 
                 Some(text) = self.clipboard.recv() => {
-                    self.on_text_from_local_clipboard(text).await;
+                    self.on_text_from_local_clipboard(text).await?;
                 }
 
                 _ = self.sigterm.recv() => self.on_signal("SIGTERM"),
                 _ = self.sigint.recv() => self.on_signal("SIGINT"),
 
-                _ = self.token.cancelled() => {
+                () = self.token.cancelled() => {
                     log::info!("exiting...");
                     break;
                 }
@@ -65,9 +65,10 @@ impl MainLoop {
         }
 
         self.stop().await;
+        Ok(())
     }
 
-    async fn on_output_from_mpclipboard(&mut self, output: Result<Option<Output>>) {
+    async fn on_output_from_mpclipboard(&self, output: Result<Option<Output>>) {
         let output = match output {
             Ok(Some(output)) => output,
             Ok(None) => return,
@@ -91,11 +92,12 @@ impl MainLoop {
         }
     }
 
-    async fn on_text_from_local_clipboard(&mut self, text: String) {
+    async fn on_text_from_local_clipboard(&mut self, text: String) -> Result<()> {
         log::info!(target: "LocalReader", "{text}");
-        if self.mpclipboard.push_text(text.clone()) {
+        if self.mpclipboard.push_text(text.clone())? {
             self.tray.push_sent(&text).await;
         }
+        Ok(())
     }
 
     fn on_signal(&self, signal: &str) {

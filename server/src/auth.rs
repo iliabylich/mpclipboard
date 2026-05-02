@@ -8,7 +8,7 @@ pub(crate) struct Auth {
 }
 
 impl Auth {
-    pub(crate) fn new(token: String) -> Self {
+    pub(crate) const fn new(token: String) -> Self {
         Self {
             name: String::new(),
             token,
@@ -23,6 +23,9 @@ impl Auth {
 impl Callback for &mut Auth {
     fn on_request(self, request: &Request, response: Response) -> Result<Response, ErrorResponse> {
         let auth_err = |body: &str| -> ErrorResponse {
+            // All params are static and valid, so unwrapping on a valid builder
+            // is valid as long as all fields have been set (which is true in this case)
+            #[expect(clippy::unwrap_used)]
             Response::builder()
                 .status(401)
                 .body(Some(body.to_string()))
@@ -38,6 +41,10 @@ impl Callback for &mut Auth {
 
         let auth_err = |body: &str| -> ErrorResponse {
             log::error!(target: name, "{body}");
+
+            // All params are static and valid, so unwrapping on a valid builder
+            // is valid as long as all fields have been set (which is true in this case)
+            #[expect(clippy::unwrap_used)]
             Response::builder()
                 .status(401)
                 .body(Some(body.to_string()))
