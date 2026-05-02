@@ -7,18 +7,46 @@
 
 void mpclipboard_setup_rustls_on_jvm(JNIEnv *env, jobject context);
 
+static void throw_java_exception(JNIEnv *env, const char *class_name, const char *message) {
+    if ((*env)->ExceptionCheck(env)) {
+        return;
+    }
+
+    jclass cls = (*env)->FindClass(env, class_name);
+    if (cls == NULL) {
+        return;
+    }
+
+    (*env)->ThrowNew(env, cls, message);
+}
+
+static void throw_runtime_exception(JNIEnv *env, const char *message) {
+    throw_java_exception(env, "java/lang/RuntimeException", message);
+}
+
+static void throw_out_of_memory_error(JNIEnv *env, const char *message) {
+    throw_java_exception(env, "java/lang/OutOfMemoryError", message);
+}
+
 static char *copy_bytes_as_c_string(JNIEnv *env, jbyteArray array) {
     if (array == NULL) {
+        throw_runtime_exception(env, "byte array argument must not be null");
         return NULL;
     }
 
     jsize len = (*env)->GetArrayLength(env, array);
     char *buffer = calloc((size_t) len + 1U, sizeof(char));
     if (buffer == NULL) {
+        throw_out_of_memory_error(env, "failed to allocate string buffer");
         return NULL;
     }
 
     (*env)->GetByteArrayRegion(env, array, 0, len, (jbyte *) buffer);
+    if ((*env)->ExceptionCheck(env)) {
+        free(buffer);
+        return NULL;
+    }
+
     buffer[len] = '\0';
     return buffer;
 }
@@ -147,11 +175,20 @@ Java_dev_mpclipboard_android_Ffi_mpclipboard_1read(
                 len,
                 (const jbyte *) output.NEW_TEXT.ptr
             );
+            if ((*env)->ExceptionCheck(env)) {
+                return NULL;
+            }
+
             return new_output(env, (jint) output.tag, 0, text);
         }
-        case MPCLIPBOARD_OUTPUT_INTERNAL:
+        case MPCLIPBOARD_OUTPUT_IGNORE:
+            return NULL;
+        case MPCLIPBOARD_OUTPUT_ERROR:
+            throw_runtime_exception(env, "mpclipboard_read failed");
+            return NULL;
         default:
-            return new_output(env, (jint) output.tag, 0, NULL);
+            throw_runtime_exception(env, "mpclipboard_read returned unknown output tag");
+            return NULL;
     }
 }
 
@@ -165,6 +202,7 @@ Java_dev_mpclipboard_android_Ffi_mpclipboard_1push_1text2(
     (void) clazz;
 
     if (text == NULL) {
+        throw_runtime_exception(env, "text must not be null");
         return JNI_FALSE;
     }
 
@@ -174,11 +212,23 @@ Java_dev_mpclipboard_android_Ffi_mpclipboard_1push_1text2(
         return JNI_FALSE;
     }
 
-    jboolean result = mpclipboard_push_text2(
+    mpclipboard_PushResult result = mpclipboard_push_text2(
         (mpclipboard_MPClipboard *) (intptr_t) client_ptr,
         (const char *) bytes,
         (size_t) len
     );
     (*env)->ReleaseByteArrayElements(env, text, bytes, JNI_ABORT);
-    return result;
+
+    switch (result) {
+        case MPCLIPBOARD_PUSH_RESULT_SENT:
+            return JNI_TRUE;
+        case MPCLIPBOARD_PUSH_RESULT_DROPPED_AS_STALE:
+            return JNI_FALSE;
+        case MPCLIPBOARD_PUSH_RESULT_ERROR:
+            throw_runtime_exception(env, "mpclipboard_push_text2 failed");
+            return JNI_FALSE;
+        default:
+            throw_runtime_exception(env, "mpclipboard_push_text2 returned unknown result");
+            return JNI_FALSE;
+    }
 }

@@ -19,7 +19,9 @@ sealed interface Output {
                     val text = nativeOutput.text?.toString(Charsets.UTF_8) ?: return null
                     NewText(text)
                 }
-                else -> null
+                Ffi.MPCLIPBOARD_OUTPUT_IGNORE -> null
+                Ffi.MPCLIPBOARD_OUTPUT_ERROR -> throw RuntimeException("mpclipboard_read failed")
+                else -> throw RuntimeException("unknown native output tag: ${nativeOutput.tag}")
             }
         }
     }

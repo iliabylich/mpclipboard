@@ -10,7 +10,8 @@ internal object Ffi {
 
     const val MPCLIPBOARD_OUTPUT_CONNECTIVITY_CHANGED = 0
     const val MPCLIPBOARD_OUTPUT_NEW_TEXT = 1
-    const val MPCLIPBOARD_OUTPUT_INTERNAL = 2
+    const val MPCLIPBOARD_OUTPUT_IGNORE = 2
+    const val MPCLIPBOARD_OUTPUT_ERROR = 3
 
     fun loadLibrary(context: Context) {
         try {
