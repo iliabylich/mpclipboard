@@ -41,12 +41,12 @@ impl MPClipboard {
     pub fn read(&mut self) -> Result<Option<Output>> {
         let event = self.event_loop.read()?;
 
-        if event.timer {
-            return self.state.tick();
-        }
-
         if let Some((readable, writable)) = event.ws {
             return Ok(self.state.transition(readable, writable));
+        }
+
+        if event.timer {
+            return self.state.tick();
         }
 
         Ok(None)
