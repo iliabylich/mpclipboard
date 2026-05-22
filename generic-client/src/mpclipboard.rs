@@ -46,7 +46,7 @@ impl MPClipboard {
         }
 
         if event.timer {
-            return self.state.tick();
+            return Ok(self.state.tick());
         }
 
         Ok(None)

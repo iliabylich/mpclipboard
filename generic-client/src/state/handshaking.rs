@@ -1,5 +1,5 @@
 use crate::{
-    Connectivity, Output,
+    Connectivity, Context, Output,
     state::{Connected, Ready},
 };
 use anyhow::Result;
@@ -13,19 +13,26 @@ type MidHandshake =
 pub(crate) struct Handshaking {
     handshake: MidHandshake,
     fd: i32,
+    started_at: u64,
 }
 
 impl Handshaking {
-    pub(crate) const fn new(handshake: MidHandshake, fd: i32) -> Self {
-        Self { handshake, fd }
+    pub(crate) const fn new(handshake: MidHandshake, fd: i32, now: u64) -> Self {
+        Self {
+            handshake,
+            fd,
+            started_at: now,
+        }
     }
 
-    pub(crate) fn finish_handshake(self) -> Result<(Connected, Option<Output>)> {
+    pub(crate) fn finish_handshake(self, context: &Context) -> Result<(Connected, Option<Output>)> {
+        let now = context.timer.now();
+
         match self.handshake.handshake() {
             Ok((ws, response)) => {
                 log::trace!("completed: {}", response.status());
                 Ok((
-                    Connected::Ready(Ready::new(ws, self.fd)),
+                    Connected::Ready(Ready::new(ws, self.fd, now)),
                     Some(Output::ConnectivityChanged {
                         connectivity: Connectivity::Connected,
                     }),
@@ -33,10 +40,17 @@ impl Handshaking {
             }
             Err(HandshakeError::Interrupted(handshake)) => {
                 log::trace!("interrupted");
-                Ok((Connected::Handshaking(Self::new(handshake, self.fd)), None))
+                Ok((
+                    Connected::Handshaking(Self::new(handshake, self.fd, self.started_at)),
+                    None,
+                ))
             }
             Err(HandshakeError::Failure(err)) => Err(anyhow::anyhow!(err)),
         }
+    }
+
+    pub(crate) const fn should_disconnect_at(&self) -> u64 {
+        self.started_at.wrapping_add(5)
     }
 }
 

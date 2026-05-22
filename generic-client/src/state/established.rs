@@ -11,15 +11,21 @@ use tungstenite::{HandshakeError, client::IntoClientRequest as _};
 
 pub(crate) struct Established {
     fd: OwnedFd,
+    started_at: u64,
 }
 
 impl Established {
-    pub(crate) const fn new(fd: OwnedFd) -> Self {
-        Self { fd }
+    pub(crate) const fn new(fd: OwnedFd, now: u64) -> Self {
+        Self {
+            fd,
+            started_at: now,
+        }
     }
 
     pub(crate) fn start_handshake(self, context: &Context) -> Result<(Connected, Option<Output>)> {
         log::trace!("starting handshake");
+
+        let now = context.timer.now();
 
         let mut request = context
             .config
@@ -42,7 +48,7 @@ impl Established {
             Ok((ws, response)) => {
                 log::trace!("handshake completed: {}", response.status());
                 Ok((
-                    Connected::Ready(Ready::new(ws, fd)),
+                    Connected::Ready(Ready::new(ws, fd, now)),
                     Some(Output::ConnectivityChanged {
                         connectivity: Connectivity::Connected,
                     }),
@@ -51,12 +57,16 @@ impl Established {
             Err(HandshakeError::Interrupted(handshake)) => {
                 log::trace!("handshake interrupted");
                 Ok((
-                    Connected::Handshaking(Handshaking::new(handshake, fd)),
+                    Connected::Handshaking(Handshaking::new(handshake, fd, now)),
                     None,
                 ))
             }
             Err(HandshakeError::Failure(err)) => Err(anyhow::anyhow!(err)),
         }
+    }
+
+    pub(crate) const fn should_disconnect_at(&self) -> u64 {
+        self.started_at.wrapping_add(5)
     }
 }
 

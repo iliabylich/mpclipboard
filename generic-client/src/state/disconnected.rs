@@ -11,11 +11,20 @@ use rustix::{
 use std::os::fd::AsRawFd as _;
 
 #[derive(Default)]
-pub(crate) struct Disconnected;
+pub(crate) struct Disconnected {
+    disconnected_at: u64,
+}
 
 impl Disconnected {
+    pub(crate) const fn new(now: u64) -> Self {
+        Self {
+            disconnected_at: now,
+        }
+    }
+
     fn try_connect(context: &Context) -> Result<(Connected, Option<Output>)> {
         log::trace!("connect");
+        let now = context.timer.now();
 
         let domain = if context.remote_addr.is_ipv4() {
             AddressFamily::INET
@@ -41,10 +50,10 @@ impl Disconnected {
 
         let state = if connected {
             log::trace!("connected; fd: {rawfd}");
-            Connected::Established(Established::new(fd))
+            Connected::Established(Established::new(fd, now))
         } else {
             log::trace!("connecting; fd: {rawfd}");
-            Connected::Establishing(Establishing::new(fd))
+            Connected::Establishing(Establishing::new(fd, now))
         };
 
         context.event_loop.add(rawfd, true, true)?;
@@ -58,16 +67,22 @@ impl Disconnected {
     }
 
     pub(crate) fn connect(context: &Context) -> (Connection, Option<Output>) {
+        let now = context.timer.now();
+
         match Self::try_connect(context) {
             Ok((conn, output)) => (Connection::Connected(Box::new(conn)), output),
             Err(err) => {
                 log::error!("{err:?}");
-                (Connection::Disconnected, None)
+                (Connection::Disconnected(Self::new(now)), None)
             }
         }
     }
 
     pub(crate) const fn tag() -> &'static str {
         "Disconnected"
+    }
+
+    pub(crate) const fn should_reconnect_at(&self) -> u64 {
+        self.disconnected_at.wrapping_add(5)
     }
 }

@@ -13,7 +13,6 @@ pub struct Context {
     pub(crate) timer: Timer,
     pub(crate) pending_message_to_send: Option<Message>,
     pub(crate) last_clip: Clip,
-    pub(crate) last_time_worked_with_ws_at: u64,
 }
 
 impl Context {
@@ -45,7 +44,6 @@ impl Context {
             timer,
             pending_message_to_send: None,
             last_clip: Clip::zero(),
-            last_time_worked_with_ws_at: 0,
         })
     }
 }

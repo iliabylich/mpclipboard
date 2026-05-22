@@ -11,7 +11,7 @@ use handshaking::Handshaking;
 use ready::Ready;
 
 use crate::{Connectivity, Context, Output, event_loop::EventLoop};
-use anyhow::{Context as _, Result};
+use anyhow::Result;
 use clip::Clip;
 use std::{os::fd::AsRawFd, rc::Rc};
 use tungstenite::{Bytes, Message};
@@ -40,18 +40,27 @@ impl Connected {
         match self {
             Self::Established(s) => s.start_handshake(context),
             Self::Establishing(s) => s.finish_connecting(context),
-            Self::Handshaking(s) => s.finish_handshake(),
+            Self::Handshaking(s) => s.finish_handshake(context),
             Self::Ready(s) => s.read_write(context, readable, writable),
         }
     }
     fn disconnect(self, context: &Context) -> (Connection, Option<Output>) {
         context.event_loop.remove(self.as_raw_fd());
+        let now = context.timer.now();
         (
-            Connection::Disconnected,
+            Connection::Disconnected(Disconnected::new(now)),
             Some(Output::ConnectivityChanged {
                 connectivity: Connectivity::Disconnected,
             }),
         )
+    }
+    const fn should_disconnect_at(&self) -> u64 {
+        match self {
+            Self::Established(s) => s.should_disconnect_at(),
+            Self::Establishing(s) => s.should_disconnect_at(),
+            Self::Handshaking(s) => s.should_disconnect_at(),
+            Self::Ready(s) => s.should_disconnect_at(),
+        }
     }
 }
 impl AsRawFd for Connected {
@@ -65,11 +74,9 @@ impl AsRawFd for Connected {
     }
 }
 
-#[derive(Default)]
 pub(crate) enum Connection {
     Connected(Box<Connected>),
-    #[default]
-    Disconnected,
+    Disconnected(Disconnected),
 }
 impl std::fmt::Debug for Connection {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -80,7 +87,7 @@ impl Connection {
     fn tag(&self) -> &'static str {
         match self {
             Self::Connected(s) => s.tag(),
-            Self::Disconnected => Disconnected::tag(),
+            Self::Disconnected(_) => Disconnected::tag(),
         }
     }
     fn transition(
@@ -89,6 +96,8 @@ impl Connection {
         writable: bool,
         context: &mut Context,
     ) -> (Self, Option<Output>) {
+        let now = context.timer.now();
+
         match self {
             Self::Connected(connected) => {
                 let fd = connected.as_raw_fd();
@@ -99,7 +108,7 @@ impl Connection {
                         log::error!("{err:?}");
                         context.event_loop.remove(fd);
                         (
-                            Self::Disconnected,
+                            Self::Disconnected(Disconnected::new(now)),
                             Some(Output::ConnectivityChanged {
                                 connectivity: Connectivity::Disconnected,
                             }),
@@ -108,13 +117,19 @@ impl Connection {
                 }
             }
 
-            Self::Disconnected => Disconnected::connect(context),
+            Self::Disconnected(_) => Disconnected::connect(context),
         }
     }
     fn flip(self, context: &Context) -> (Self, Option<Output>) {
         match self {
             Self::Connected(connected) => connected.disconnect(context),
-            Self::Disconnected => Disconnected::connect(context),
+            Self::Disconnected(_) => Disconnected::connect(context),
+        }
+    }
+    fn should_flip_at(&self) -> u64 {
+        match self {
+            Self::Connected(connected) => connected.should_disconnect_at(),
+            Self::Disconnected(disconnected) => disconnected.should_reconnect_at(),
         }
     }
 }
@@ -136,10 +151,11 @@ impl State {
     }
 
     pub(crate) fn transition(&mut self, readable: bool, writable: bool) -> Option<Output> {
-        self.context.last_time_worked_with_ws_at = self.context.timer.now();
+        let now = self.context.timer.now();
 
         let before = self.connection.tag();
-        let connection = std::mem::take(&mut self.connection);
+        let mut connection = Connection::Disconnected(Disconnected::new(now));
+        std::mem::swap(&mut self.connection, &mut connection);
         let (connection, output) = connection.transition(readable, writable, &mut self.context);
         self.connection = connection;
         let after = self.connection.tag();
@@ -151,20 +167,15 @@ impl State {
         output
     }
 
-    pub(crate) fn tick(&mut self) -> Result<Option<Output>> {
-        let last_time_worked_with_ws_at = self.context.last_time_worked_with_ws_at;
+    pub(crate) fn tick(&mut self) -> Option<Output> {
+        let should_flip_at = self.connection.should_flip_at();
         let now = self.context.timer.now();
 
-        log::trace!("state tick {last_time_worked_with_ws_at} <=> {now}");
-        if now
-            .checked_sub(last_time_worked_with_ws_at)
-            .context("time goes backwards")?
-            > 5
-        {
-            self.context.last_time_worked_with_ws_at = now;
-
+        log::trace!("state tick {should_flip_at} <=> {now}");
+        if now > should_flip_at {
             let before = self.connection.tag();
-            let connection = std::mem::take(&mut self.connection);
+            let mut connection = Connection::Disconnected(Disconnected::new(0));
+            std::mem::swap(&mut self.connection, &mut connection);
             let (connection, output) = connection.flip(&self.context);
             self.connection = connection;
             let after = self.connection.tag();
@@ -173,9 +184,9 @@ impl State {
                 log::trace!("{before} -> {after}");
             }
 
-            Ok(output)
+            output
         } else {
-            Ok(None)
+            None
         }
     }
 

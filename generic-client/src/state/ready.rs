@@ -10,11 +10,16 @@ type WebSocket = tungstenite::WebSocket<MaybeTlsStream<TcpStream>>;
 pub(crate) struct Ready {
     ws: WebSocket,
     fd: i32,
+    last_message_received_at: u64,
 }
 
 impl Ready {
-    pub(crate) const fn new(ws: WebSocket, fd: i32) -> Self {
-        Self { ws, fd }
+    pub(crate) const fn new(ws: WebSocket, fd: i32, now: u64) -> Self {
+        Self {
+            ws,
+            fd,
+            last_message_received_at: now,
+        }
     }
 
     pub(crate) fn read_write(
@@ -23,6 +28,7 @@ impl Ready {
         readable: bool,
         writable: bool,
     ) -> Result<(Connected, Option<Output>)> {
+        let now = context.timer.now();
         let mut write_blocked = false;
 
         if writable
@@ -57,6 +63,7 @@ impl Ready {
             match self.ws.read() {
                 Ok(message) => {
                     log::trace!("{message:?}");
+                    self.last_message_received_at = now;
 
                     if let Message::Binary(bytes) = message {
                         match Clip::decode(bytes.into()) {
@@ -85,7 +92,11 @@ impl Ready {
             None
         };
 
-        Ok((Connected::Ready(Self::new(self.ws, self.fd)), output))
+        Ok((Connected::Ready(Self::new(self.ws, self.fd, now)), output))
+    }
+
+    pub(crate) const fn should_disconnect_at(&self) -> u64 {
+        self.last_message_received_at.wrapping_add(5)
     }
 }
 
