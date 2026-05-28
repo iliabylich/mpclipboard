@@ -14,6 +14,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var tray: Tray = Tray()
 
     func applicationDidFinishLaunching(_ aNotification: Notification) {
+        ProcessInfo.processInfo.disableAutomaticTermination("MPClipboard runs continuously as a menu bar clipboard sync agent")
+        ProcessInfo.processInfo.disableSuddenTermination()
         // Hide Dock icon
         NSApp.setActivationPolicy(.accessory)
 
@@ -66,6 +68,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 self.tray.pushSent(text)
             }
         })
+    }
+
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        false
+    }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        fputs("MPClipboard applicationShouldTerminate called\n", stderr)
+        return .terminateNow
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        fputs("MPClipboard applicationWillTerminate called\n", stderr)
     }
 
     @objc
