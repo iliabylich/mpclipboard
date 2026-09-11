@@ -40,37 +40,13 @@ impl Message {
 
     #[must_use]
     pub(crate) fn encode(&self) -> [u8; Self::BYTESIZE] {
+        let len = self.string.len().get();
+        let timestamp: [u8; 16] = self.timestamp.to_le_bytes();
+
         let mut buf = [0; Self::BYTESIZE];
-        let text = self.text_as_bytes();
-        let len = u8::try_from(text.len()).unwrap_or_else(|_| unreachable!());
-
-        let mut pos = 0_usize;
-
-        let start = pos;
-        let end = start
-            .checked_add(size_of::<u8>())
-            .unwrap_or_else(|| unreachable!());
-        buf.get_mut(start..end)
-            .unwrap_or_else(|| unreachable!())
-            .copy_from_slice(&len.to_le_bytes());
-        pos = end;
-
-        let start = pos;
-        let end = start
-            .checked_add(size_of::<u128>())
-            .unwrap_or_else(|| unreachable!());
-        buf.get_mut(start..end)
-            .unwrap_or_else(|| unreachable!())
-            .copy_from_slice(&self.timestamp.to_le_bytes());
-        pos = end;
-
-        let start = pos;
-        let end = start
-            .checked_add(len as usize)
-            .unwrap_or_else(|| unreachable!());
-        buf.get_mut(start..end)
-            .unwrap_or_else(|| unreachable!())
-            .copy_from_slice(text);
+        buf[0] = len;
+        buf[1..17].copy_from_slice(&timestamp);
+        buf[17..Self::BYTESIZE].copy_from_slice(self.string.as_fixed_size_bytes());
 
         buf
     }
@@ -84,29 +60,21 @@ impl core::fmt::Debug for Message {
 
 impl Message {
     pub(crate) fn decode(buf: &[u8; Self::BYTESIZE]) -> Result<Self, MessageDecodeError> {
-        let (length, buf) = buf.split_first().unwrap_or_else(|| unreachable!());
-        let length =
-            NonZeroUsize::new(usize::from(*length)).ok_or(MessageDecodeError::MalformedLength)?;
+        let len = buf[0];
 
-        if length.get() > MAX_TEXT_LEN {
-            return Err(MessageDecodeError::MalformedLength);
-        }
+        let mut timestamp: [u8; 16] = [0; _];
+        timestamp.copy_from_slice(&buf[1..17]);
+        let timestamp = u128::from_le_bytes(timestamp);
 
-        let (timestamp, buf) = buf
-            .split_first_chunk::<{ size_of::<u128>() }>()
-            .unwrap_or_else(|| unreachable!());
-        let timestamp = u128::from_le_bytes(*timestamp);
+        let mut bytes: [u8; MAX_TEXT_LEN] = [0; _];
+        bytes.copy_from_slice(&buf[17..Self::BYTESIZE]);
 
-        let buf = buf.get(..length.get()).unwrap_or_else(|| unreachable!());
-        let mut text = [0; MAX_TEXT_LEN];
-        text.get_mut(..length.get())
-            .unwrap_or_else(|| unreachable!())
-            .copy_from_slice(buf);
-
-        let string =
-            core::str::from_utf8(text.get(..length.get()).unwrap_or_else(|| unreachable!()))
-                .map_err(|_| MessageDecodeError::NonUtf8Text)?;
-        let string = NonEmptyInlineString::new(string).unwrap_or_else(|_| unreachable!());
+        let len = NonZeroUsize::new(usize::from(len)).ok_or(MessageDecodeError::MalformedLength)?;
+        let bytes = bytes
+            .get(..len.get())
+            .ok_or(MessageDecodeError::MalformedLength)?;
+        let text = core::str::from_utf8(bytes).map_err(|_| MessageDecodeError::NonUtf8Text)?;
+        let string = NonEmptyInlineString::new(text).unwrap_or_else(|_| unreachable!());
 
         Ok(Self { string, timestamp })
     }

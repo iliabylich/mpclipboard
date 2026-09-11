@@ -12,7 +12,11 @@ impl<const MAXLEN: usize> NonEmptyInlineString<MAXLEN> {
         let mut bytes = [0; MAXLEN];
         let minlen = core::cmp::min(s.len(), MAXLEN);
 
-        let src = match core::str::from_utf8(&s.as_bytes()[..minlen]) {
+        let src = s
+            .as_bytes()
+            .get(..minlen)
+            .unwrap_or_else(|| unreachable!("minlen is capped by strings's length"));
+        let src = match core::str::from_utf8(src) {
             Ok(s) => s.as_bytes(),
             Err(err) => s
                 .as_bytes()
@@ -48,6 +52,11 @@ impl<const MAXLEN: usize> NonEmptyInlineString<MAXLEN> {
         self.bytes
             .get(..usize::from(self.len.get()))
             .unwrap_or_else(|| unreachable!("NonEmptyInlineString always has valid len"))
+    }
+
+    #[must_use]
+    pub const fn as_fixed_size_bytes(&self) -> &[u8; MAXLEN] {
+        &self.bytes
     }
 
     #[must_use]

@@ -13,7 +13,6 @@
 #![warn(clippy::std_instead_of_alloc)]
 #![warn(clippy::std_instead_of_core)]
 #![expect(clippy::missing_errors_doc)]
-#![expect(clippy::missing_panics_doc)]
 #![doc = include_str!("../README.md")]
 
 mod config;
