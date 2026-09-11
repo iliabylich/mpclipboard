@@ -23,9 +23,6 @@ pub use http_lines_buffer::{HttpLinesBufferOverflowError, HttpLinesBufferUnderfl
 mod http_lines_reader;
 pub use http_lines_reader::HttpLinesReaderError;
 
-mod readbuf;
-mod reader;
-
 mod writebuf;
 mod writer;
 

@@ -2,7 +2,7 @@ use crate::NonEmptyInlineString;
 use core::num::NonZeroUsize;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-const MAX_TEXT_LEN: usize = 200;
+const MAX_TEXT_LEN: usize = 255;
 
 #[must_use]
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -52,6 +52,8 @@ impl Message {
     }
 }
 
+const _: () = assert!(Message::BYTESIZE == 272);
+
 impl core::fmt::Debug for Message {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "Text({:?} at {})", self.text_as_str(), self.timestamp)
@@ -61,6 +63,7 @@ impl core::fmt::Debug for Message {
 impl Message {
     pub(crate) fn decode(buf: &[u8; Self::BYTESIZE]) -> Result<Self, MessageDecodeError> {
         let len = buf[0];
+        println!("{len}");
 
         let mut timestamp: [u8; 16] = [0; _];
         timestamp.copy_from_slice(&buf[1..17]);
@@ -113,7 +116,7 @@ mod tests {
     #[test]
     fn test_decode_invalid() {
         assert_eq!(
-            Message::decode(&[b'\xFF'; Message::BYTESIZE])
+            Message::decode(&[0; Message::BYTESIZE])
                 .unwrap_err()
                 .to_string(),
             "malformed message length"
