@@ -44,7 +44,7 @@ mod tests {
     use crate::{NonEmptyInlineString, message::Message};
 
     fn message(text: &str) -> Message {
-        Message::new(NonEmptyInlineString::new(text).unwrap_or_else(|| unreachable!()))
+        Message::new(NonEmptyInlineString::new(text).unwrap_or_else(|_| unreachable!()))
     }
 
     fn encoded(message: Message) -> [u8; Message::BYTESIZE] {

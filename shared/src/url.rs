@@ -1,4 +1,7 @@
-use crate::{Host, NonEmptyInlineString, array_writer::ArrayWriter};
+use crate::{
+    HostPort, MAX_HOST_LENGTH, MAX_HOST_PORT_LENGTH, NonEmptyInlineString,
+    array_writer::ArrayWriter,
+};
 use core::{
     fmt::Write,
     net::{SocketAddr, SocketAddrV4},
@@ -8,9 +11,9 @@ use std::net::ToSocketAddrs;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Url {
     tls: bool,
-    host: NonEmptyInlineString<256>,
+    host: NonEmptyInlineString<MAX_HOST_LENGTH>,
     port: u16,
-    header: Host,
+    header: HostPort,
 }
 
 impl core::error::Error for UrlError {}
@@ -27,16 +30,17 @@ impl Url {
             "https" => true,
             _ => return Err(UrlError::UnknownScheme),
         };
-        let host = NonEmptyInlineString::new(host).ok_or(UrlError::InvalidHost)?;
+        let host = NonEmptyInlineString::<MAX_HOST_LENGTH>::new(host)
+            .map_err(|_| UrlError::InvalidHost)?;
         let port = port.parse::<u16>().map_err(|_| UrlError::InvalidPort)?;
 
-        let mut buf = [0; crate::MAX_HOST_LENGTH];
+        let mut buf = [0; MAX_HOST_PORT_LENGTH];
         let mut writer = ArrayWriter::new(&mut buf);
         write!(writer, "{}:{port}", host.as_str()).unwrap_or_else(|_| unreachable!());
-        let header = core::str::from_utf8(writer.as_bytes())
-            .ok()
-            .and_then(NonEmptyInlineString::new)
-            .unwrap_or_else(|| unreachable!());
+        let header = core::str::from_utf8(writer.as_bytes()).unwrap_or_else(|_| {
+            unreachable!("concatenation of valid utf8 strings must be a valid utf8 string")
+        });
+        let header = NonEmptyInlineString::new(header).unwrap_or_else(|_| unreachable!());
 
         Ok(Self {
             tls,
@@ -69,7 +73,7 @@ impl Url {
         self.host.as_str()
     }
 
-    pub const fn header(&self) -> Host {
+    pub const fn header(&self) -> HostPort {
         self.header
     }
 }

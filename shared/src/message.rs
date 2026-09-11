@@ -106,7 +106,7 @@ impl Message {
         let string =
             core::str::from_utf8(text.get(..length.get()).unwrap_or_else(|| unreachable!()))
                 .map_err(|_| MessageDecodeError::NonUtf8Text)?;
-        let string = NonEmptyInlineString::new(string).unwrap_or_else(|| unreachable!());
+        let string = NonEmptyInlineString::new(string).unwrap_or_else(|_| unreachable!());
 
         Ok(Self { string, timestamp })
     }

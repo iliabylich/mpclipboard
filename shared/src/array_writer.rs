@@ -25,7 +25,10 @@ impl core::fmt::Write for ArrayWriter<'_> {
         let remainder = remainder.get_mut(..bytes.len()).ok_or(core::fmt::Error)?;
         remainder.copy_from_slice(bytes);
 
-        self.offset += bytes.len();
+        self.offset = self
+            .offset
+            .checked_add(bytes.len())
+            .ok_or(core::fmt::Error)?;
         Ok(())
     }
 }

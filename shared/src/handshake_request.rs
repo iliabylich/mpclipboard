@@ -1,17 +1,17 @@
 use crate::{
-    CONNECTION_UPGRADE_HEADER, HOST_PREFIX, Host, ID, ID_PREFIX, MAX_HOST_LENGTH, MAX_ID_LENGTH,
-    MAX_TOKEN_LENGTH, MIN_PADDING_LENGTH, PADDING_PREFIX, START_LINE, TOKEN_PREFIX, Token,
-    UPGRADE_MPCLIPBOARD_RAW_HEADER,
+    CONNECTION_UPGRADE_HEADER, HOST_PREFIX, HostPort, ID, ID_PREFIX, MAX_HOST_PORT_LENGTH,
+    MAX_ID_LENGTH, MAX_TOKEN_LENGTH, MIN_PADDING_LENGTH, PADDING_PREFIX, START_LINE, TOKEN_PREFIX,
+    Token, UPGRADE_MPCLIPBOARD_RAW_HEADER,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct HandshakeRequest {
-    pub host: Host,
+    pub host: HostPort,
     pub token: Token,
     pub id: ID,
 }
 
-const _IGNORE: () = assert!(HandshakeRequest::BYTESIZE == 562);
+const _: () = assert!(HandshakeRequest::BYTESIZE == 555);
 
 const BASE_HANDSHAKE_LENGTH: usize = START_LINE.len() + 2 // start line
     + HOST_PREFIX.len() + 2 // Host: ...
@@ -24,7 +24,7 @@ const BASE_HANDSHAKE_LENGTH: usize = START_LINE.len() + 2 // start line
 
 impl HandshakeRequest {
     pub const BYTESIZE: usize = BASE_HANDSHAKE_LENGTH
-        + MAX_HOST_LENGTH
+        + MAX_HOST_PORT_LENGTH
         + MAX_TOKEN_LENGTH
         + MAX_ID_LENGTH
         + MIN_PADDING_LENGTH;
@@ -85,7 +85,7 @@ impl HandshakeRequest {
 #[cfg(test)]
 mod tests {
     use crate::{
-        MAX_HOST_LENGTH, MAX_ID_LENGTH, MAX_TOKEN_LENGTH, NonEmptyInlineString,
+        MAX_HOST_PORT_LENGTH, MAX_ID_LENGTH, MAX_TOKEN_LENGTH, NonEmptyInlineString,
         handshake_request::HandshakeRequest,
     };
 
@@ -104,7 +104,7 @@ mod tests {
             "ID: i\r\n",
             "Connection: Upgrade\r\n",
             "Upgrade: mpclipboard-raw\r\n",
-            "Padding: PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP\r\n",
+            "Padding: PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP\r\n",
             "\r\n"
         ].join("");
 
@@ -117,14 +117,14 @@ mod tests {
     #[test]
     fn test_encode_max() {
         let max = HandshakeRequest {
-            host: NonEmptyInlineString::new(&"h".repeat(MAX_HOST_LENGTH)).unwrap(),
+            host: NonEmptyInlineString::new(&"h".repeat(MAX_HOST_PORT_LENGTH)).unwrap(),
             token: NonEmptyInlineString::new(&"t".repeat(MAX_TOKEN_LENGTH)).unwrap(),
             id: NonEmptyInlineString::new(&"i".repeat(MAX_ID_LENGTH)).unwrap(),
         };
 
         let expected = [
             "GET / HTTP/1.1\r\n",
-            "Host: hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh\r\n",
+            "Host: hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh\r\n",
             "Token: tttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttt\r\n",
             "ID: iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii\r\n",
             "Connection: Upgrade\r\n",

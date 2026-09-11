@@ -1,5 +1,5 @@
 use crate::{
-    CONNECTION_UPGRADE_HEADER, HOST_PREFIX, HandshakeRequest, Host, ID, ID_PREFIX, START_LINE,
+    CONNECTION_UPGRADE_HEADER, HOST_PREFIX, HandshakeRequest, HostPort, ID, ID_PREFIX, START_LINE,
     TOKEN_PREFIX, Token, UPGRADE_MPCLIPBOARD_RAW_HEADER,
     http_lines_reader::{HttpLinesParser, HttpLinesReader, HttpLinesReaderError},
     strip_prefix_ignore_ascii_case,
@@ -9,7 +9,7 @@ use crate::{
 #[derive(Debug, Clone, Copy)]
 struct HandshakeRequestParser {
     seen_start_line: bool,
-    host: Option<Host>,
+    host: Option<HostPort>,
     token: Option<Token>,
     id: Option<ID>,
     seen_connection_upgrade: bool,
@@ -37,16 +37,17 @@ impl HttpLinesParser for HandshakeRequestParser {
         } else if let Some(value) = strip_prefix_ignore_ascii_case(line, HOST_PREFIX)
             && let Some(value) = value.strip_suffix("\r\n")
         {
-            self.host = Some(Host::new(value).ok_or(HandshakeRequestParserError::MalformedHost)?);
+            self.host =
+                Some(HostPort::new(value).map_err(|_| HandshakeRequestParserError::MalformedHost)?);
         } else if let Some(value) = strip_prefix_ignore_ascii_case(line, TOKEN_PREFIX)
             && let Some(value) = value.strip_suffix("\r\n")
         {
             self.token =
-                Some(Token::new(value).ok_or(HandshakeRequestParserError::MalformedToken)?);
+                Some(Token::new(value).map_err(|_| HandshakeRequestParserError::MalformedToken)?);
         } else if let Some(value) = strip_prefix_ignore_ascii_case(line, ID_PREFIX)
             && let Some(value) = value.strip_suffix("\r\n")
         {
-            self.id = Some(ID::new(value).ok_or(HandshakeRequestParserError::MalformedId)?);
+            self.id = Some(ID::new(value).map_err(|_| HandshakeRequestParserError::MalformedId)?);
         } else if strip_prefix_ignore_ascii_case(line, CONNECTION_UPGRADE_HEADER) == Some("\r\n") {
             self.seen_connection_upgrade = true;
         } else if strip_prefix_ignore_ascii_case(line, UPGRADE_MPCLIPBOARD_RAW_HEADER)
