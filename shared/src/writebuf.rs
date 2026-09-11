@@ -25,7 +25,7 @@ impl<const N: usize> Writebuf<N> {
             Ordering::Less => false,
             Ordering::Equal => {
                 self.pos = 0;
-                self.buf.fill(0);
+                self.buf = [0; _];
                 true
             }
             Ordering::Greater => unreachable!("buffer overflow"),
