@@ -19,14 +19,6 @@
 mod config;
 pub use config::{ConfigParser, ConfigParserError};
 
-mod http_lines_buffer;
-pub use http_lines_buffer::{HttpLinesBufferOverflowError, HttpLinesBufferUnderflowError};
-mod http_lines_reader;
-pub use http_lines_reader::HttpLinesReaderError;
-
-mod writebuf;
-mod writer;
-
 mod array_writer;
 
 mod upgrade_request;
@@ -114,3 +106,6 @@ pub(crate) fn strip_prefix_ignore_ascii_case<'a>(line: &'a str, prefix: &str) ->
         None
     }
 }
+
+#[cfg(test)]
+mod test_helpers;

@@ -1,5 +1,4 @@
 #[must_use]
-#[derive(Debug, Clone, Copy)]
 pub struct UpgradeResponse;
 
 impl UpgradeResponse {
@@ -7,5 +6,4 @@ impl UpgradeResponse {
 Connection: Upgrade\r\n\
 Upgrade: mpclipboard-raw\r\n\
 \r\n";
-    pub(crate) const BYTESIZE: usize = Self::BYTES.len();
 }

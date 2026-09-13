@@ -92,7 +92,7 @@ impl UpgradeRequestReader {
                     self.pos = leftover.len();
                     break;
                 }
-                HttpLine::Error => return UpgradeRequestReaderResult::Error,
+                HttpLine::Other => {}
             }
             self.buf = [0; _];
             self.pos = 0;
@@ -104,6 +104,8 @@ impl UpgradeRequestReader {
                 leftover: self.buf,
                 leftover_len: self.pos,
             }
+        } else if self.seen_eos {
+            UpgradeRequestReaderResult::Error
         } else {
             UpgradeRequestReaderResult::Pending
         }
@@ -153,7 +155,7 @@ enum HttpLine {
     UpgradeMPClipboardRaw,
     EndOfRequest,
 
-    Error,
+    Other,
 }
 
 impl HttpLine {
@@ -169,27 +171,27 @@ impl HttpLine {
         let buf = buf
             .get(..end)
             .unwrap_or_else(|| unreachable!("buf contains at least two bytes"));
-        let buf = core::str::from_utf8(buf).ok()?;
+        let line = core::str::from_utf8(buf).ok()?;
 
-        if buf == START_LINE {
+        if line == START_LINE {
             Some(Self::StartLine)
-        } else if let Some(host) = strip_prefix_ignore_ascii_case(buf, HOST_PREFIX) {
+        } else if let Some(host) = strip_prefix_ignore_ascii_case(line, HOST_PREFIX) {
             let host = HostPort::new(host).ok()?;
             Some(Self::HostPort(host))
-        } else if let Some(value) = strip_prefix_ignore_ascii_case(buf, TOKEN_PREFIX) {
+        } else if let Some(value) = strip_prefix_ignore_ascii_case(line, TOKEN_PREFIX) {
             let token = Token::new(value).ok()?;
             Some(Self::Token(token))
-        } else if let Some(value) = strip_prefix_ignore_ascii_case(buf, ID_PREFIX) {
+        } else if let Some(value) = strip_prefix_ignore_ascii_case(line, ID_PREFIX) {
             let id = ID::new(value).ok()?;
             Some(Self::ID(id))
-        } else if strip_prefix_ignore_ascii_case(buf, CONNECTION_UPGRADE_HEADER) == Some("") {
+        } else if strip_prefix_ignore_ascii_case(line, CONNECTION_UPGRADE_HEADER) == Some("") {
             Some(Self::ConnectionUpgrade)
-        } else if strip_prefix_ignore_ascii_case(buf, UPGRADE_MPCLIPBOARD_RAW_HEADER) == Some("") {
+        } else if strip_prefix_ignore_ascii_case(line, UPGRADE_MPCLIPBOARD_RAW_HEADER) == Some("") {
             Some(Self::UpgradeMPClipboardRaw)
-        } else if buf.is_empty() {
+        } else if line.is_empty() {
             Some(Self::EndOfRequest)
         } else {
-            Some(Self::Error)
+            Some(Self::Other)
         }
     }
 }
@@ -197,7 +199,10 @@ impl HttpLine {
 #[cfg(test)]
 mod tests {
     use super::{UpgradeRequestReader, UpgradeRequestReaderResult};
-    use crate::{HostPort, ID, Token, UpgradeRequest, UpgradeRequestWriter};
+    use crate::{
+        HostPort, ID, Token, UpgradeRequest, UpgradeRequestWriter,
+        test_helpers::as_chunks_with_guaranteed_trailer,
+    };
     use core::num::NonZeroUsize;
 
     fn new_reqwest() -> UpgradeRequest {
@@ -208,33 +213,12 @@ mod tests {
         }
     }
 
-    type Chunk = ([u8; UpgradeRequestReader::BUFFER_SIZE], NonZeroUsize);
-
-    fn as_chunks_with_guaranteed_trailer<const N: usize>(
-        buf: &[u8],
-    ) -> (impl Iterator<Item = Chunk>, Chunk) {
-        let (head, tail) = buf.split_at(buf.len() - N);
-        assert_eq!(tail.len(), N);
-
-        let chunks = head.chunks(N).filter_map(|chunk| {
-            assert!(chunk.len() <= N);
-            let len = NonZeroUsize::new(chunk.len())?;
-            let mut buf = [0; UpgradeRequestReader::BUFFER_SIZE];
-            buf[..chunk.len()].copy_from_slice(chunk);
-            Some((buf, len))
-        });
-
-        let mut trailer = [0; UpgradeRequestReader::BUFFER_SIZE];
-        trailer[..tail.len()].copy_from_slice(tail);
-        let trailer = (trailer, NonZeroUsize::new(tail.len()).unwrap());
-
-        (chunks, trailer)
-    }
-
     #[test]
     fn test_leftover() {
         let w = UpgradeRequestWriter::new(new_reqwest(), [0; 150]).unwrap();
-        let (chunks, trailer) = as_chunks_with_guaranteed_trailer::<30>(w.remainder());
+        let (chunks, trailer) = as_chunks_with_guaranteed_trailer::<
+            { UpgradeRequestReader::BUFFER_SIZE },
+        >(w.remainder());
 
         let mut reader = UpgradeRequestReader::new();
 
@@ -268,7 +252,9 @@ mod tests {
     #[test]
     fn test_no_leftover() {
         let w = UpgradeRequestWriter::new(new_reqwest(), [0; 150]).unwrap();
-        let (chunks, trailer) = as_chunks_with_guaranteed_trailer::<30>(w.remainder());
+        let (chunks, trailer) = as_chunks_with_guaranteed_trailer::<
+            { UpgradeRequestReader::BUFFER_SIZE },
+        >(w.remainder());
 
         let mut reader = UpgradeRequestReader::new();
 
@@ -295,7 +281,7 @@ mod tests {
         let mut reader = UpgradeRequestReader::new();
 
         let mut buf = [0; _];
-        let malformed = b"boo\r\n";
+        let malformed = b"boo\r\n\r\n";
         buf[..malformed.len()].copy_from_slice(malformed);
         let len = NonZeroUsize::new(malformed.len()).unwrap();
 
