@@ -28,7 +28,7 @@ impl EventLoop {
         Ok(this)
     }
 
-    pub fn sync(&mut self, wants: Option<(BorrowedFd<'static>, Wants)>) -> std::io::Result<()> {
+    pub fn sync(&mut self, wants: Option<(RawFd, Wants)>) -> std::io::Result<()> {
         match self.fd.transition(wants) {
             Diff::Add { fd, wants } => {
                 self.add(fd, wants)?;
@@ -104,28 +104,23 @@ impl EventLoop {
         )
     }
 
-    fn add(&self, fd: BorrowedFd<'static>, wants: Wants) -> std::io::Result<()> {
+    fn add(&self, fd: RawFd, wants: Wants) -> std::io::Result<()> {
         self.update_fd(fd, wants, kq::EventFlags::ADD | kq::EventFlags::ENABLE)
     }
 
-    fn delete(&self, fd: BorrowedFd<'static>) {
-        self.delete_filter(kq::EventFilter::Read(fd.as_raw_fd()));
-        self.delete_filter(kq::EventFilter::Write(fd.as_raw_fd()));
+    fn delete(&self, fd: RawFd) {
+        self.delete_filter(kq::EventFilter::Read(fd));
+        self.delete_filter(kq::EventFilter::Write(fd));
     }
 
-    fn modify(&self, fd: BorrowedFd<'static>, wants: Wants) -> std::io::Result<()> {
+    fn modify(&self, fd: RawFd, wants: Wants) -> std::io::Result<()> {
         self.delete(fd);
         self.add(fd, wants)
     }
 
-    fn update_fd(
-        &self,
-        fd: BorrowedFd<'static>,
-        wants: Wants,
-        flags: kq::EventFlags,
-    ) -> std::io::Result<()> {
-        let read = Self::event(kq::EventFilter::Read(fd.as_raw_fd()), flags);
-        let write = Self::event(kq::EventFilter::Write(fd.as_raw_fd()), flags);
+    fn update_fd(&self, fd: RawFd, wants: Wants, flags: kq::EventFlags) -> std::io::Result<()> {
+        let read = Self::event(kq::EventFilter::Read(fd), flags);
+        let write = Self::event(kq::EventFilter::Write(fd), flags);
 
         match (wants.wants_read(), wants.wants_write()) {
             (true, true) => self.kevent(&[read, write]),

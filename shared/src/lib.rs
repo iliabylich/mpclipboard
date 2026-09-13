@@ -22,21 +22,21 @@ pub use config::{ConfigParser, ConfigParserError};
 mod array_writer;
 
 mod upgrade_request;
-pub use upgrade_request::UpgradeRequest;
-
 mod upgrade_request_reader;
-pub use upgrade_request_reader::{UpgradeRequestReader, UpgradeRequestReaderResult};
-
 mod upgrade_request_writer;
-pub use upgrade_request_writer::UpgradeRequestWriter;
+pub use self::{
+    upgrade_request::UpgradeRequest,
+    upgrade_request_reader::{UpgradeRequestReader, UpgradeRequestReaderResult},
+    upgrade_request_writer::{UpgradeRequestWriter, UpgradeRequestWriterResult},
+};
 
 mod upgrade_response;
-
 mod upgrade_response_reader;
-pub use upgrade_response_reader::UpgradeResponseReader;
-
 mod upgrade_response_writer;
-pub use upgrade_response_writer::UpgradeResponseWriter;
+pub use self::{
+    upgrade_response_reader::{UpgradeResponseReader, UpgradeResponseReaderResult},
+    upgrade_response_writer::{UpgradeResponseWriter, UpgradeResponseWriterResult},
+};
 
 mod message;
 pub use message::{Message, MessageDecodeError};

@@ -4,57 +4,58 @@ use crate::{
 };
 use core::num::NonZeroUsize;
 
+#[must_use]
 #[derive(Debug, Clone, Copy)]
-pub struct UpgradeRequestWriter<const N: usize> {
-    buf: [u8; N],
+pub struct UpgradeRequestWriter {
+    buf: [u8; 1_024],
     len: usize,
     pos: usize,
 }
 
-impl<const N: usize> UpgradeRequestWriter<N> {
-    pub fn new(req: UpgradeRequest, mut buf: [u8; N]) -> Result<Self, UpgradeRequestWriterError> {
+impl UpgradeRequestWriter {
+    pub fn new(req: UpgradeRequest) -> Self {
+        let mut buf = [0; 1_024];
         let mut pos = 0;
 
-        let mut append = |pos: &mut usize, s: &str| -> Result<(), UpgradeRequestWriterError> {
+        let mut append = |pos: &mut usize, s: &str| {
             let start = *pos;
             let end = start
                 .checked_add(s.len())
                 .unwrap_or_else(|| unreachable!("length overflow"));
             buf.get_mut(start..end)
-                .ok_or(UpgradeRequestWriterError::BufferIsTooSmall)?
+                .unwrap_or_else(|| unreachable!("must fit into 1kb"))
                 .copy_from_slice(s.as_bytes());
             *pos = end;
-            Ok(())
         };
 
-        append(&mut pos, START_LINE)?;
-        append(&mut pos, "\r\n")?;
+        append(&mut pos, START_LINE);
+        append(&mut pos, "\r\n");
 
-        append(&mut pos, HOST_PREFIX)?;
-        append(&mut pos, req.host.as_str())?;
-        append(&mut pos, "\r\n")?;
+        append(&mut pos, HOST_PREFIX);
+        append(&mut pos, req.host.as_str());
+        append(&mut pos, "\r\n");
 
-        append(&mut pos, TOKEN_PREFIX)?;
-        append(&mut pos, req.token.as_str())?;
-        append(&mut pos, "\r\n")?;
+        append(&mut pos, TOKEN_PREFIX);
+        append(&mut pos, req.token.as_str());
+        append(&mut pos, "\r\n");
 
-        append(&mut pos, ID_PREFIX)?;
-        append(&mut pos, req.id.as_str())?;
-        append(&mut pos, "\r\n")?;
+        append(&mut pos, ID_PREFIX);
+        append(&mut pos, req.id.as_str());
+        append(&mut pos, "\r\n");
 
-        append(&mut pos, CONNECTION_UPGRADE_HEADER)?;
-        append(&mut pos, "\r\n")?;
+        append(&mut pos, CONNECTION_UPGRADE_HEADER);
+        append(&mut pos, "\r\n");
 
-        append(&mut pos, UPGRADE_MPCLIPBOARD_RAW_HEADER)?;
-        append(&mut pos, "\r\n")?;
+        append(&mut pos, UPGRADE_MPCLIPBOARD_RAW_HEADER);
+        append(&mut pos, "\r\n");
 
-        append(&mut pos, "\r\n")?;
+        append(&mut pos, "\r\n");
 
-        Ok(Self {
+        Self {
             buf,
             len: pos,
             pos: 0,
-        })
+        }
     }
 
     #[must_use]
@@ -86,24 +87,9 @@ pub enum UpgradeRequestWriterResult {
     Error,
 }
 
-#[derive(Debug, PartialEq, Eq)]
-pub enum UpgradeRequestWriterError {
-    BufferIsTooSmall,
-}
-
-impl core::fmt::Display for UpgradeRequestWriterError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self {
-            Self::BufferIsTooSmall => f.write_str("buffer is too small"),
-        }
-    }
-}
-
-impl core::error::Error for UpgradeRequestWriterError {}
-
 #[cfg(test)]
 mod tests {
-    use super::{UpgradeRequestWriter, UpgradeRequestWriterError, UpgradeRequestWriterResult};
+    use super::{UpgradeRequestWriter, UpgradeRequestWriterResult};
     use crate::{HostPort, ID, Token, UpgradeRequest};
     use core::num::NonZeroUsize;
 
@@ -117,21 +103,16 @@ mod tests {
 
     #[test]
     fn test_encode() {
-        let writer = UpgradeRequestWriter::new(req(), [0; 200]).unwrap();
+        let writer = UpgradeRequestWriter::new(req());
         assert_eq!(
             &writer.buf[..writer.len],
             b"GET / HTTP/1.1\r\nHost: localhost:3000\r\nToken: sekret\r\nID: test-client\r\nConnection: Upgrade\r\nUpgrade: mpclipboard-raw\r\n\r\n"
-        );
-
-        assert_eq!(
-            UpgradeRequestWriter::new(req(), [0; 5]).unwrap_err(),
-            UpgradeRequestWriterError::BufferIsTooSmall
         );
     }
 
     #[test]
     fn test_write() {
-        let mut writer = UpgradeRequestWriter::new(req(), [0; 200]).unwrap();
+        let mut writer = UpgradeRequestWriter::new(req());
         assert_eq!(
             core::str::from_utf8(writer.remainder()).unwrap(),
             "GET / HTTP/1.1\r\nHost: localhost:3000\r\nToken: sekret\r\nID: test-client\r\nConnection: Upgrade\r\nUpgrade: mpclipboard-raw\r\n\r\n"

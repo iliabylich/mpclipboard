@@ -215,7 +215,7 @@ mod tests {
 
     #[test]
     fn test_leftover() {
-        let w = UpgradeRequestWriter::new(new_reqwest(), [0; 150]).unwrap();
+        let w = UpgradeRequestWriter::new(new_reqwest());
         let (chunks, trailer) = as_chunks_with_guaranteed_trailer::<
             { UpgradeRequestReader::BUFFER_SIZE },
         >(w.remainder());
@@ -251,7 +251,7 @@ mod tests {
 
     #[test]
     fn test_no_leftover() {
-        let w = UpgradeRequestWriter::new(new_reqwest(), [0; 150]).unwrap();
+        let w = UpgradeRequestWriter::new(new_reqwest());
         let (chunks, trailer) = as_chunks_with_guaranteed_trailer::<
             { UpgradeRequestReader::BUFFER_SIZE },
         >(w.remainder());

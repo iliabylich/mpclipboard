@@ -1,5 +1,5 @@
 use crate::Wants;
-use std::os::fd::{AsRawFd, BorrowedFd};
+use std::os::fd::RawFd;
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 mod epoll;
@@ -21,7 +21,7 @@ pub struct EventLoopResult {
 #[derive(Debug, Clone, Copy)]
 enum FdState {
     None,
-    Some(BorrowedFd<'static>, Wants),
+    Some(RawFd, Wants),
 }
 
 impl FdState {
@@ -29,7 +29,7 @@ impl FdState {
         Self::None
     }
 
-    fn transition(&mut self, next: Option<(BorrowedFd<'static>, Wants)>) -> Diff {
+    fn transition(&mut self, next: Option<(RawFd, Wants)>) -> Diff {
         match (*self, next) {
             (Self::None, None) => Diff::Empty,
             (Self::None, Some((fd, wants))) => {
@@ -41,7 +41,7 @@ impl FdState {
                 Diff::Delete { fd: prevfd }
             }
             (Self::Some(prevfd, prevwants), Some((fd, wants))) => {
-                if fd.as_raw_fd() != prevfd.as_raw_fd() {
+                if fd != prevfd {
                     *self = Self::Some(fd, wants);
                     Diff::Replace {
                         prevfd,
@@ -63,19 +63,19 @@ impl FdState {
 #[derive(Debug)]
 enum Diff {
     Add {
-        fd: BorrowedFd<'static>,
+        fd: RawFd,
         wants: Wants,
     },
     Delete {
-        fd: BorrowedFd<'static>,
+        fd: RawFd,
     },
     Modify {
-        fd: BorrowedFd<'static>,
+        fd: RawFd,
         wants: Wants,
     },
     Replace {
-        prevfd: BorrowedFd<'static>,
-        newfd: BorrowedFd<'static>,
+        prevfd: RawFd,
+        newfd: RawFd,
         wants: Wants,
     },
     Empty,
