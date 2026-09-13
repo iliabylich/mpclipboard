@@ -1,5 +1,5 @@
 use crate::Wants;
-use std::os::fd::RawFd;
+use std::os::fd::{AsRawFd, BorrowedFd, RawFd};
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 mod epoll;
@@ -29,28 +29,34 @@ impl FdState {
         Self::None
     }
 
-    fn transition(&mut self, next: Option<(RawFd, Wants)>) -> Diff {
+    fn transition(&mut self, next: Option<(BorrowedFd<'_>, Wants)>) -> Diff {
         match (*self, next) {
             (Self::None, None) => Diff::Empty,
             (Self::None, Some((fd, wants))) => {
-                *self = Self::Some(fd, wants);
-                Diff::Add { fd, wants }
+                *self = Self::Some(fd.as_raw_fd(), wants);
+                Diff::Add {
+                    fd: fd.as_raw_fd(),
+                    wants,
+                }
             }
             (Self::Some(prevfd, _), None) => {
                 *self = Self::None;
                 Diff::Delete { fd: prevfd }
             }
             (Self::Some(prevfd, prevwants), Some((fd, wants))) => {
-                if fd != prevfd {
-                    *self = Self::Some(fd, wants);
+                if fd.as_raw_fd() != prevfd {
+                    *self = Self::Some(fd.as_raw_fd(), wants);
                     Diff::Replace {
                         prevfd,
-                        newfd: fd,
+                        newfd: fd.as_raw_fd(),
                         wants,
                     }
                 } else if wants != prevwants {
-                    *self = Self::Some(fd, wants);
-                    Diff::Modify { fd, wants }
+                    *self = Self::Some(fd.as_raw_fd(), wants);
+                    Diff::Modify {
+                        fd: fd.as_raw_fd(),
+                        wants,
+                    }
                 } else {
                     Diff::Empty
                 }

@@ -14,7 +14,7 @@ use mpclipboard_shared::{
     Message, MessageReader, MessageWriter, UpgradeRequestWriter, UpgradeResponseReader, Wants,
     error,
 };
-use std::os::fd::{AsRawFd, OwnedFd, RawFd};
+use std::os::fd::{AsFd, BorrowedFd, OwnedFd};
 
 mod actions;
 use actions::{ReconnectResult, reconnect};
@@ -316,11 +316,11 @@ impl Connection {
         }
     }
 
-    pub(crate) fn wants(&self) -> Option<(RawFd, Wants)> {
+    pub(crate) fn wants(&self) -> Option<(BorrowedFd<'_>, Wants)> {
         match &self.state {
             ConnectionState::Disconnected { .. } => None,
             ConnectionState::Active { state, fd, stream } => {
-                let fd = fd.as_raw_fd();
+                let fd = fd.as_fd();
                 let wants = match state {
                     ActiveConnectionState::Connecting { .. } => Wants::Write,
                     ActiveConnectionState::TlsHandshake { .. } => stream.tls_wants(),

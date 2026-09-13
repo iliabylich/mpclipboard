@@ -28,7 +28,7 @@ impl EventLoop {
         Ok(this)
     }
 
-    pub fn sync(&mut self, wants: Option<(RawFd, Wants)>) -> std::io::Result<()> {
+    pub fn sync(&mut self, wants: Option<(BorrowedFd<'_>, Wants)>) -> std::io::Result<()> {
         match self.fd.transition(wants) {
             Diff::Add { fd, wants } => {
                 self.add(fd, wants)?;
