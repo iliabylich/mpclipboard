@@ -3,10 +3,7 @@ use rustix::{
     io::Errno,
     net::{AddressFamily, SocketType},
 };
-use std::{
-    net::SocketAddrV4,
-    os::fd::{BorrowedFd, IntoRawFd},
-};
+use std::{net::SocketAddrV4, os::fd::OwnedFd};
 
 pub fn connect(addr: SocketAddrV4) -> ConnectResult {
     let fd = match rustix::net::socket(AddressFamily::INET, SocketType::STREAM, None) {
@@ -31,14 +28,8 @@ pub fn connect(addr: SocketAddrV4) -> ConnectResult {
     }
 
     match rustix::net::connect(&fd, &addr) {
-        Ok(()) => {
-            let fd = unsafe { BorrowedFd::borrow_raw(fd.into_raw_fd()) };
-            ConnectResult::Connected(fd)
-        }
-        Err(Errno::INPROGRESS) => {
-            let fd = unsafe { BorrowedFd::borrow_raw(fd.into_raw_fd()) };
-            ConnectResult::StillPending(fd)
-        }
+        Ok(()) => ConnectResult::Connected(fd),
+        Err(Errno::INPROGRESS) => ConnectResult::StillPending(fd),
         Err(err) => {
             error!("{err:?}");
             ConnectResult::Failed
@@ -47,7 +38,7 @@ pub fn connect(addr: SocketAddrV4) -> ConnectResult {
 }
 
 pub enum ConnectResult {
-    Connected(BorrowedFd<'static>),
-    StillPending(BorrowedFd<'static>),
+    Connected(OwnedFd),
+    StillPending(OwnedFd),
     Failed,
 }

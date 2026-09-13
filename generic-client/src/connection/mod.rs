@@ -1,233 +1,345 @@
-use crate::{Connectivity, config::Config};
-use mpclipboard_shared::{Message, Wants, error, info};
-use std::os::fd::BorrowedFd;
+use crate::{
+    Connectivity,
+    config::Config,
+    connection::{
+        actions::{
+            FinishConnectingResult, ReadMessageResult, ReadUpgradeResponseResult,
+            WriteMessageResult, WriteUpgradeRequestResult, finish_connecting, read_message,
+            read_upgrade_response, write_message, write_upgrade_request,
+        },
+        maybe_tls_stream::TlsHandshakeResult,
+    },
+};
+use mpclipboard_shared::{
+    Message, MessageReader, MessageWriter, UpgradeRequestWriter, UpgradeResponseReader, Wants,
+    error,
+};
+use std::os::fd::{AsRawFd, OwnedFd, RawFd};
 
-mod helpers;
+mod actions;
+use actions::{ReconnectResult, reconnect};
 
 mod maybe_tls_stream;
 use maybe_tls_stream::MaybeTlsStream;
 
-mod disconnected;
-use disconnected::Disconnected;
-
-mod connecting;
-use connecting::Connecting;
-
-mod tls_handshake;
-use tls_handshake::TlsHandshake;
-
-mod writing_handshake_request;
-use writing_handshake_request::WritingHandshakeRequest;
-
-mod reading_handshake_response;
-use reading_handshake_response::ReadingHandshakeResponse;
-
-mod connected;
-use connected::Connected;
-
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug)]
 pub enum ConnectionState {
-    Disconnected(Disconnected),
-    Connecting(Connecting),
-    TlsHandshake(TlsHandshake),
-    WritingHandshakeRequest(WritingHandshakeRequest),
-    ReadingHandshakeResponse(ReadingHandshakeResponse),
-    Connected(Connected),
+    Disconnected {
+        disconnected_at: u64,
+    },
+    Active {
+        fd: OwnedFd,
+        stream: MaybeTlsStream,
+        state: ActiveConnectionState,
+    },
+}
+
+#[derive(Debug)]
+pub enum ActiveConnectionState {
+    Connecting {
+        started_at: u64,
+    },
+    TlsHandshake {
+        last_activity_at: u64,
+    },
+    WritingUpgradeRequest {
+        writer: UpgradeRequestWriter,
+        last_activity_at: u64,
+    },
+    ReadingUpgradeResponse {
+        reader: UpgradeResponseReader,
+        last_activity_at: u64,
+    },
+    Connected {
+        reader: MessageReader,
+        writer: MessageWriter,
+    },
 }
 
 impl ConnectionState {
     const fn name(&self) -> &'static str {
         match self {
-            Self::Disconnected(_) => "Disconnected",
-            Self::Connecting(_) => "Connecting",
-            Self::TlsHandshake(_) => "TlsHandshake",
-            Self::WritingHandshakeRequest(_) => "WritingHandshakeRequest",
-            Self::ReadingHandshakeResponse(_) => "ReadingHandshakeResponse",
-            Self::Connected(_) => "Connected",
+            Self::Disconnected { .. } => "Disconnected",
+            Self::Active { state, .. } => match state {
+                ActiveConnectionState::Connecting { .. } => "Connecting",
+                ActiveConnectionState::TlsHandshake { .. } => "TlsHandshake",
+                ActiveConnectionState::WritingUpgradeRequest { .. } => "WritingUpgradeRequest",
+                ActiveConnectionState::ReadingUpgradeResponse { .. } => "ReadingUpgradeResponse",
+                ActiveConnectionState::Connected { .. } => "Connected",
+            },
         }
     }
 
     const fn connectivity(&self) -> Connectivity {
         match self {
-            Self::Disconnected(_) => Connectivity::Disconnected,
-            Self::Connected(_) => Connectivity::Connected,
+            Self::Disconnected { .. } => Connectivity::Disconnected,
+            Self::Active {
+                state: ActiveConnectionState::Connected { .. },
+                ..
+            } => Connectivity::Connected,
             _ => Connectivity::Connecting,
         }
     }
 }
 
-macro_rules! impl_connection_state_from {
-    ($t:ident) => {
-        impl From<$t> for ConnectionState {
-            fn from(s: $t) -> Self {
-                Self::$t(s)
-            }
-        }
-    };
-}
-impl_connection_state_from!(Disconnected);
-impl_connection_state_from!(Connecting);
-impl_connection_state_from!(TlsHandshake);
-impl_connection_state_from!(WritingHandshakeRequest);
-impl_connection_state_from!(ReadingHandshakeResponse);
-impl_connection_state_from!(Connected);
-
 #[derive(Debug)]
 pub struct Connection {
     state: ConnectionState,
     config: Config,
-    stream: MaybeTlsStream,
 }
 
 impl Connection {
+    const FREEZE_TIME_IN_SECS: u64 = 3;
+
     pub(crate) const fn new(config: Config) -> Self {
         Self {
-            state: ConnectionState::Disconnected(Disconnected::new(0)),
+            state: ConnectionState::Disconnected { disconnected_at: 0 },
             config,
-            stream: MaybeTlsStream::empty(),
+        }
+    }
+
+    fn reconnect(&mut self, now: u64) {
+        match reconnect(&self.config) {
+            ReconnectResult::Failed => {
+                self.state = ConnectionState::Disconnected {
+                    disconnected_at: now,
+                };
+            }
+            ReconnectResult::Connecting { fd, stream } => {
+                self.state = ConnectionState::Active {
+                    fd,
+                    stream,
+                    state: ActiveConnectionState::Connecting { started_at: now },
+                };
+            }
+            ReconnectResult::ConnectedNeedsTlsHandshake { fd, stream } => {
+                self.state = ConnectionState::Active {
+                    fd,
+                    stream,
+                    state: ActiveConnectionState::TlsHandshake {
+                        last_activity_at: now,
+                    },
+                }
+            }
+            ReconnectResult::ConnectedReadyStartHandshake { fd, stream } => {
+                self.state = ConnectionState::Active {
+                    fd,
+                    stream,
+                    state: ActiveConnectionState::WritingUpgradeRequest {
+                        writer: UpgradeRequestWriter::new(self.config.update_request()),
+                        last_activity_at: now,
+                    },
+                }
+            }
         }
     }
 
     pub(crate) fn tick(&mut self, now: u64) {
-        match self.state {
-            ConnectionState::Disconnected(s) => {
-                let (next, stream) = s.try_reconnect(now, &self.config);
-                self.stream = stream;
-                self.transition(next);
+        match &self.state {
+            ConnectionState::Disconnected { disconnected_at } => {
+                let seconds_passed = now
+                    .checked_sub(*disconnected_at)
+                    .unwrap_or_else(|| unreachable!("time goes backwards"));
+
+                if seconds_passed > Self::FREEZE_TIME_IN_SECS {
+                    self.reconnect(now);
+                }
             }
-            ConnectionState::Connecting(s) => {
-                self.transition(s.disconnect_if_stuck(now));
+
+            ConnectionState::Active { state, .. } => {
+                let last_activity_at = match state {
+                    ActiveConnectionState::Connecting { started_at } => *started_at,
+                    ActiveConnectionState::TlsHandshake { last_activity_at } => *last_activity_at,
+                    ActiveConnectionState::WritingUpgradeRequest {
+                        last_activity_at, ..
+                    } => *last_activity_at,
+                    ActiveConnectionState::ReadingUpgradeResponse {
+                        last_activity_at, ..
+                    } => *last_activity_at,
+                    ActiveConnectionState::Connected { .. } => return,
+                };
+
+                let seconds_passed = now
+                    .checked_sub(last_activity_at)
+                    .unwrap_or_else(|| unreachable!("time goes backwards"));
+
+                if seconds_passed > Self::FREEZE_TIME_IN_SECS {
+                    error!("Stuck in {}, disconnecting...", self.state.name());
+                    self.force_disconnect(now);
+                }
             }
-            ConnectionState::TlsHandshake(s) => {
-                self.transition(s.disconnect_if_stuck(now));
-            }
-            ConnectionState::WritingHandshakeRequest(s) => {
-                self.transition(s.disconnect_if_stuck(now));
-            }
-            ConnectionState::ReadingHandshakeResponse(s) => {
-                self.transition(s.disconnect_if_stuck(now));
-            }
-            ConnectionState::Connected(_) => {}
         }
     }
 
     pub(crate) fn push(&mut self, message: Message) -> bool {
-        if let ConnectionState::Connected(s) = &mut self.state {
-            s.push(message);
-            true
-        } else {
-            false
-        }
+        let ConnectionState::Active {
+            state: ActiveConnectionState::Connected { writer, .. },
+            ..
+        } = &mut self.state
+        else {
+            return false;
+        };
+        writer.push(&message);
+        true
     }
 
-    pub(crate) fn disconnect(&mut self, now: u64) {
-        match self.state {
-            ConnectionState::Disconnected(_) => {
-                unreachable!("can't disconnect() in Disconnected state");
-            }
-            ConnectionState::Connecting(s) => {
-                self.transition(s.disconnect(now));
-            }
-            ConnectionState::TlsHandshake(s) => {
-                self.transition(s.disconnect(now));
-            }
-            ConnectionState::WritingHandshakeRequest(s) => {
-                self.transition(s.disconnect(now));
-            }
-            ConnectionState::ReadingHandshakeResponse(s) => {
-                self.transition(s.disconnect(now));
-            }
-            ConnectionState::Connected(s) => {
-                self.transition(s.disconnect(now));
-            }
-        }
+    pub(crate) fn force_disconnect(&mut self, now: u64) {
+        self.state = ConnectionState::Disconnected {
+            disconnected_at: now,
+        };
     }
 
     pub(crate) const fn is_disconnected(&self) -> bool {
-        matches!(self.state, ConnectionState::Disconnected(_))
+        matches!(self.state, ConnectionState::Disconnected { .. })
     }
 
     pub(crate) fn on_readable(&mut self, now: u64) -> Option<Message> {
-        match self.state {
-            ConnectionState::TlsHandshake(s) => {
-                let next = s.finish(now, &self.config, &mut self.stream);
-                self.transition(next);
-                None
-            }
-            ConnectionState::ReadingHandshakeResponse(s) => {
-                let (next, message) = s.read(now, &mut self.stream);
-                self.transition(next);
-                message
-            }
-            ConnectionState::Connected(s) => {
-                let (next, message) = s.read(now, &mut self.stream);
-                self.transition(next);
-                message
+        match &mut self.state {
+            ConnectionState::Disconnected { .. } => {
+                unreachable!("can't read() in Disconnected state")
             }
 
-            ConnectionState::Disconnected(_)
-            | ConnectionState::Connecting(_)
-            | ConnectionState::WritingHandshakeRequest(_) => {
-                unreachable!("can't read() in {} state", self.state.name())
-            }
+            ConnectionState::Active { fd, stream, state } => match state {
+                ActiveConnectionState::TlsHandshake { last_activity_at } => {
+                    match stream.finish_tls_handshake(fd) {
+                        TlsHandshakeResult::Done => {
+                            *state = ActiveConnectionState::WritingUpgradeRequest {
+                                writer: UpgradeRequestWriter::new(self.config.update_request()),
+                                last_activity_at: now,
+                            }
+                        }
+                        TlsHandshakeResult::Pending => *last_activity_at = now,
+                        TlsHandshakeResult::Died => self.force_disconnect(now),
+                    }
+                }
+
+                ActiveConnectionState::ReadingUpgradeResponse {
+                    reader,
+                    last_activity_at,
+                } => match read_upgrade_response(fd, stream, reader) {
+                    ReadUpgradeResponseResult::Done { reader } => {
+                        *state = ActiveConnectionState::Connected {
+                            reader,
+                            writer: MessageWriter::new(),
+                        };
+                    }
+                    ReadUpgradeResponseResult::Pending => *last_activity_at = now,
+                    ReadUpgradeResponseResult::Error => self.force_disconnect(now),
+                },
+
+                ActiveConnectionState::Connected { reader, .. } => {
+                    match read_message(reader, stream, fd) {
+                        ReadMessageResult::Done { message } => return Some(message),
+                        ReadMessageResult::Pending => {}
+                        ReadMessageResult::Error => self.force_disconnect(now),
+                    }
+                }
+
+                ActiveConnectionState::Connecting { .. }
+                | ActiveConnectionState::WritingUpgradeRequest { .. } => {
+                    unreachable!("can't read() in {} state", self.state.name())
+                }
+            },
         }
+
+        None
     }
 
     pub(crate) fn on_writable(&mut self, now: u64) {
-        match self.state {
-            ConnectionState::Connecting(s) => {
-                self.transition(s.finish(now, &self.config, &self.stream));
+        match &mut self.state {
+            ConnectionState::Disconnected { .. } => {
+                unreachable!("can't write() in Disconencted state")
             }
-            ConnectionState::TlsHandshake(s) => {
-                let next = s.finish(now, &self.config, &mut self.stream);
-                self.transition(next);
-            }
-            ConnectionState::WritingHandshakeRequest(s) => {
-                let next = s.write(now, &self.config, &mut self.stream);
-                self.transition(next);
-            }
-            ConnectionState::Connected(s) => {
-                let next = s.write(now, &mut self.stream);
-                self.transition(next);
-            }
-            ConnectionState::ReadingHandshakeResponse(s) => {
-                let next = match self.stream.flush(&s.fd()) {
-                    Ok(()) => s.into(),
+
+            ConnectionState::Active { fd, stream, state } => match state {
+                ActiveConnectionState::Connecting { .. } => {
+                    match (finish_connecting(fd), stream.is_tls()) {
+                        (FinishConnectingResult::Connected, true) => {
+                            *state = ActiveConnectionState::TlsHandshake {
+                                last_activity_at: now,
+                            }
+                        }
+                        (FinishConnectingResult::Connected, false) => {
+                            *state = ActiveConnectionState::WritingUpgradeRequest {
+                                writer: UpgradeRequestWriter::new(self.config.update_request()),
+                                last_activity_at: now,
+                            }
+                        }
+                        (FinishConnectingResult::FailedToConnect, _) => self.force_disconnect(now),
+                    }
+                }
+
+                ActiveConnectionState::TlsHandshake { last_activity_at } => {
+                    match stream.finish_tls_handshake(fd) {
+                        TlsHandshakeResult::Done => {
+                            *state = ActiveConnectionState::WritingUpgradeRequest {
+                                writer: UpgradeRequestWriter::new(self.config.update_request()),
+                                last_activity_at: now,
+                            }
+                        }
+                        TlsHandshakeResult::Pending => *last_activity_at = now,
+                        TlsHandshakeResult::Died => self.force_disconnect(now),
+                    }
+                }
+
+                ActiveConnectionState::WritingUpgradeRequest {
+                    writer,
+                    last_activity_at,
+                } => match write_upgrade_request(fd, stream, writer) {
+                    WriteUpgradeRequestResult::Done => {
+                        *state = ActiveConnectionState::ReadingUpgradeResponse {
+                            reader: UpgradeResponseReader::new(),
+                            last_activity_at: now,
+                        };
+                    }
+                    WriteUpgradeRequestResult::Pending => *last_activity_at = now,
+                    WriteUpgradeRequestResult::Error => self.force_disconnect(now),
+                },
+
+                ActiveConnectionState::ReadingUpgradeResponse {
+                    last_activity_at, ..
+                } => match stream.flush(fd) {
+                    Ok(()) => *last_activity_at = now,
                     Err(err) => {
                         error!("failed to flush TLS data: {err:?}");
-                        s.disconnect(now)
+                        self.force_disconnect(now);
+                    }
+                },
+
+                ActiveConnectionState::Connected { writer, .. } => {
+                    match write_message(writer, stream, fd) {
+                        WriteMessageResult::Ok => {}
+                        WriteMessageResult::Error => self.force_disconnect(now),
+                    }
+                }
+            },
+        }
+    }
+
+    pub(crate) fn wants(&self) -> Option<(RawFd, Wants)> {
+        match &self.state {
+            ConnectionState::Disconnected { .. } => None,
+            ConnectionState::Active { state, fd, stream } => {
+                let fd = fd.as_raw_fd();
+                let wants = match state {
+                    ActiveConnectionState::Connecting { .. } => Wants::Write,
+                    ActiveConnectionState::TlsHandshake { .. } => stream.tls_wants(),
+                    ActiveConnectionState::WritingUpgradeRequest { .. } => {
+                        Wants::Write.merge(stream.tls_wants())
+                    }
+                    ActiveConnectionState::ReadingUpgradeResponse { .. } => {
+                        Wants::Read.merge(stream.tls_wants())
+                    }
+                    ActiveConnectionState::Connected { writer, .. } => {
+                        let mut wants = Wants::Read;
+                        if !writer.is_empty() {
+                            wants = wants.merge(Wants::Write);
+                        }
+                        wants.merge(stream.tls_wants())
                     }
                 };
-                self.transition(next);
+                Some((fd, wants))
             }
-
-            ConnectionState::Disconnected(_) => {
-                unreachable!("can't write() in {} state", self.state.name())
-            }
-        }
-    }
-
-    pub(crate) fn wants(&self) -> Option<(BorrowedFd<'static>, Wants)> {
-        match self.state {
-            ConnectionState::Disconnected(_) => None,
-            ConnectionState::Connecting(s) => Some(s.wants()),
-            ConnectionState::TlsHandshake(s) => Some(s.wants(&self.stream)),
-            ConnectionState::WritingHandshakeRequest(s) => Some(s.wants(&self.stream)),
-            ConnectionState::ReadingHandshakeResponse(s) => Some(s.wants(&self.stream)),
-            ConnectionState::Connected(s) => Some(s.wants(&self.stream)),
-        }
-    }
-
-    fn transition(&mut self, next: ConnectionState) {
-        let prev = self.state;
-        self.state = next;
-
-        if matches!(next, ConnectionState::Disconnected(_)) {
-            self.stream = MaybeTlsStream::empty();
-        }
-
-        if prev.name() != next.name() {
-            info!("Transitioning {} -> {}", prev.name(), next.name());
         }
     }
 
@@ -235,5 +347,3 @@ impl Connection {
         self.state.connectivity()
     }
 }
-
-const FREEZE_TIME_IN_SECS: u64 = 3;

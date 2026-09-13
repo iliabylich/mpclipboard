@@ -122,7 +122,7 @@ impl MPClipboard {
         if let Some((readable, writable, has_error)) = polled.fd {
             if has_error && !self.conn.is_disconnected() {
                 error!("poll() returned connection error, disconnecting");
-                self.conn.disconnect(self.now);
+                self.conn.force_disconnect(self.now);
             }
 
             if readable && !self.conn.is_disconnected() {
@@ -138,7 +138,7 @@ impl MPClipboard {
     }
 
     pub fn push_text(&mut self, text: &str) -> Result<bool> {
-        let Some(text) = NonEmptyInlineString::truncate(text) else {
+        let Ok(text) = NonEmptyInlineString::truncate(text) else {
             info!("Skipping empty text");
             return Ok(false);
         };

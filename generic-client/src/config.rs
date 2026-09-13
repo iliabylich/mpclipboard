@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use mpclipboard_shared::{ConfigParser, ID, Token, Url};
+use mpclipboard_shared::{ConfigParser, ID, Token, UpgradeRequest, Url};
 use std::path::{Path, PathBuf};
 
 #[derive(Clone, Copy)]
@@ -31,7 +31,7 @@ impl Config {
     fn read(path: impl AsRef<Path>) -> Result<Self> {
         ConfigParser::parse(
             path.as_ref().as_os_str().as_encoded_bytes(),
-            &mut [0; _],
+            &mut [0; 1_024],
             ["url", "token", "id"],
             |[url, token, id]| Self::new(url, token, id),
         )
@@ -54,5 +54,13 @@ impl Config {
 
         let path = xdg_config_home.join("mpclipboard").join("config.toml");
         Self::read(path)
+    }
+
+    pub(crate) fn update_request(&self) -> UpgradeRequest {
+        UpgradeRequest {
+            host: self.url.header(),
+            token: self.token,
+            id: self.id,
+        }
     }
 }

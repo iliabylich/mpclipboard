@@ -10,7 +10,6 @@ use std::{
 
 #[derive(Debug)]
 pub enum MaybeTlsStream {
-    Empty,
     Plain,
     Tls(Box<ClientConnection>),
 }
@@ -23,10 +22,6 @@ pub enum TlsHandshakeResult {
 }
 
 impl MaybeTlsStream {
-    pub(crate) const fn empty() -> Self {
-        Self::Empty
-    }
-
     pub(crate) fn new(url: &Url) -> Result<Self> {
         if url.is_tls() {
             let server_name = ServerName::try_from(url.host().to_owned())
@@ -48,7 +43,6 @@ impl MaybeTlsStream {
         let conn = match self {
             Self::Tls(conn) => conn,
             Self::Plain => return TlsHandshakeResult::Done,
-            Self::Empty => unreachable!("empty stream cannot perform TLS handshake"),
         };
 
         match conn.complete_io(&mut StdReadWriteFd(fd)) {
@@ -71,7 +65,6 @@ impl MaybeTlsStream {
         let conn = match self {
             Self::Tls(conn) => conn,
             Self::Plain => return Ok(()),
-            Self::Empty => unreachable!("empty stream cannot flush"),
         };
 
         match conn.complete_io(&mut StdReadWriteFd(fd)) {
@@ -81,23 +74,8 @@ impl MaybeTlsStream {
         }
     }
 
-    pub(crate) fn wants(&self, wants: Wants) -> Wants {
-        match self {
-            Self::Empty => unreachable!("empty stream cannot report wants"),
-            Self::Plain => wants,
-            Self::Tls(conn) => {
-                if conn.wants_write() {
-                    wants.merge(Wants::Write)
-                } else {
-                    wants
-                }
-            }
-        }
-    }
-
     pub(crate) fn tls_wants(&self) -> Wants {
         match self {
-            Self::Empty => unreachable!("empty stream cannot report TLS wants"),
             Self::Plain => Wants::Write,
             Self::Tls(conn) => match (conn.wants_read(), conn.wants_write()) {
                 (true, true) => Wants::ReadWrite,
@@ -113,7 +91,6 @@ impl MaybeTlsStream {
         buf: &mut [u8],
     ) -> std::io::Result<Option<NonZeroUsize>> {
         match self {
-            Self::Empty => unreachable!("empty stream cannot read"),
             Self::Plain => match rustix::io::read(fd, buf).map(NonZeroUsize::new) {
                 Ok(Some(len)) => Ok(Some(len)),
                 Ok(None) => Err(std::io::Error::new(ErrorKind::UnexpectedEof, "EOF")),
@@ -143,7 +120,6 @@ impl MaybeTlsStream {
         buf: &[u8],
     ) -> std::io::Result<Option<NonZeroUsize>> {
         match self {
-            Self::Empty => unreachable!("empty stream cannot write"),
             Self::Plain => match rustix::io::write(fd, buf).map(NonZeroUsize::new) {
                 Ok(Some(len)) => Ok(Some(len)),
                 Ok(None) => Err(std::io::Error::new(ErrorKind::UnexpectedEof, "EOF")),
