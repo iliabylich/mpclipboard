@@ -4,11 +4,7 @@ use mpclipboard_shared::{
     ID, Message, MessageReader, MessageWriter, REvents, error, trace,
 };
 use rustix::event::{PollFd, PollFlags};
-use rustix::io::Errno;
-use std::{
-    num::NonZeroUsize,
-    os::fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd},
-};
+use std::os::fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd};
 
 pub struct Client {
     fd: OwnedFd,
@@ -45,42 +41,15 @@ impl Client {
 
         if revents.writable {
             trace!("{self} is writable");
-
-            let Some(buf) = self.writer.remainder() else {
-                unreachable!("empty writer was not polled")
-            };
-            match rustix::io::write(&self.fd, buf).map(NonZeroUsize::new) {
-                Ok(Some(len)) => self.writer.written(len),
-                Err(Errno::AGAIN) => {}
-                Ok(None) => {
-                    error!("write() returned zero for {self}");
-                    return Failed;
-                }
-                Err(errno) => {
-                    error!("failed to write() for {self}: {errno:?}");
-                    return Failed;
-                }
+            match self.write() {
+                Done(()) | Pending(()) => {}
+                Failed => return Failed,
             }
         }
 
         if revents.readable {
             trace!("{self} is readable");
-
-            let mut buf = [0; Message::BYTESIZE];
-            let len = match rustix::io::read(&self.fd, &mut buf).map(NonZeroUsize::new) {
-                Ok(Some(len)) => len,
-                Err(Errno::AGAIN) => return Pending(self),
-                Ok(None) => {
-                    error!("{self} reached EOF");
-                    return Failed;
-                }
-                Err(errno) => {
-                    error!("failed to read() for {self}: {errno:?}");
-                    return Failed;
-                }
-            };
-
-            match self.reader.received(buf, len) {
+            match self.read() {
                 Done(message) => return Done((message, self)),
                 Pending(()) => {}
                 Failed => return Failed,
@@ -88,6 +57,37 @@ impl Client {
         }
 
         Pending(self)
+    }
+
+    fn write(&mut self) -> Completion<(), ()> {
+        let Some(buf) = self.writer.remainder() else {
+            unreachable!("can't write on empty writer")
+        };
+        match mpclipboard_shared::io::write(&self.fd, buf) {
+            Done(len) => {
+                self.writer.written(len);
+                Done(())
+            }
+            Pending(()) => Pending(()),
+            Failed => {
+                error!("write() failed for {self}");
+                Failed
+            }
+        }
+    }
+
+    fn read(&mut self) -> Completion<Message, ()> {
+        let mut buf = [0; Message::BYTESIZE];
+        let len = match mpclipboard_shared::io::read(&self.fd, &mut buf) {
+            Done(len) => len,
+            Pending(()) => return Pending(()),
+            Failed => {
+                error!("read() failed for {self} ");
+                return Failed;
+            }
+        };
+
+        self.reader.received(buf, len)
     }
 
     pub(crate) const fn id(&self) -> ID {

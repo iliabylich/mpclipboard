@@ -12,13 +12,13 @@ pub fn read_upgrade_response(
 ) -> Completion<MessageReader, ()> {
     let mut buf = [0; UpgradeResponseReader::BUFFER_SIZE];
     let len = match stream.read_bytes(&fd, &mut buf) {
-        Ok(Some(len)) => len,
-        Ok(None) => {
+        Done(len) => len,
+        Pending(()) => {
             trace!("handshake response still pending: {:?}", reader);
             return Pending(());
         }
-        Err(err) => {
-            error!("failed to read() handshake response: {err:?}");
+        Failed => {
+            error!("failed to read() handshake response");
             return Failed;
         }
     };

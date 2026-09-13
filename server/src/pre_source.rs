@@ -4,11 +4,7 @@ use mpclipboard_shared::{
     REvents, UpgradeRequest, UpgradeRequestReader, error, trace,
 };
 use rustix::event::{PollFd, PollFlags};
-use rustix::io::Errno;
-use std::{
-    num::NonZeroUsize,
-    os::fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd},
-};
+use std::os::fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd};
 
 pub struct PreSource {
     fd: OwnedFd,
@@ -45,36 +41,27 @@ impl PreSource {
         if revents.readable {
             trace!("{self} is readable");
 
-            let mut buf = [0; UpgradeRequestReader::BUFFER_SIZE];
-            let len = match rustix::io::read(&self.fd, &mut buf).map(NonZeroUsize::new) {
-                Ok(Some(len)) => len,
-                Err(Errno::AGAIN) => return Pending(self),
-                Ok(None) => {
-                    error!("{self} reached EOF");
-                    return Failed;
-                }
-                Err(errno) => {
-                    error!("{self} failed to read(): {errno:?}");
-                    return Failed;
-                }
+            return match self.read(now) {
+                Done(req) => Done((req, self.fd)),
+                Failed => Failed,
+                Pending(()) => Pending(self),
             };
-
-            match self.reader.received(buf, len) {
-                Done(req) => {
-                    return Done((req, self.fd));
-                }
-                Pending(()) => {
-                    self.last_activity_at = now;
-                    return Pending(self);
-                }
-                Failed => {
-                    error!("{self} got an error from UpgradeRequestReader");
-                    return Failed;
-                }
-            }
         }
 
         Pending(self)
+    }
+
+    fn read(&mut self, now: u64) -> Completion<UpgradeRequest, ()> {
+        self.last_activity_at = now;
+
+        let mut buf = [0; UpgradeRequestReader::BUFFER_SIZE];
+        mpclipboard_shared::io::read(&self.fd, &mut buf)
+            .map_err(|| error!("read() failed for {self}"))
+            .and_then(|len| {
+                self.reader
+                    .received(buf, len)
+                    .map_err(|| error!("{self} failed to call UpgradeRequestReader"))
+            })
     }
 }
 

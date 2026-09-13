@@ -1,11 +1,9 @@
 use crate::{as_poll_fd::AsPollFd, reaper::CanBeReaped};
-use core::num::NonZeroUsize;
 use mpclipboard_shared::{
     Completion::{self, *},
     ID, REvents, UpgradeResponseWriter, error, trace,
 };
 use rustix::event::{PollFd, PollFlags};
-use rustix::io::Errno;
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd};
 
 pub struct PreSink {
@@ -45,39 +43,26 @@ impl PreSink {
         if revents.writable {
             trace!("{self} is writable");
 
-            let len =
-                match rustix::io::write(&self.fd, self.writer.remainder()).map(NonZeroUsize::new) {
-                    Ok(Some(len)) => len,
-                    Err(Errno::AGAIN) => {
-                        self.last_activity_at = now;
-                        return Pending(self);
-                    }
-                    Ok(None) => {
-                        error!("write() returned zero for {self}");
-                        return Failed;
-                    }
-                    Err(errno) => {
-                        error!("{self} failed to write(): {errno:?}");
-                        return Failed;
-                    }
-                };
-
-            match self.writer.written(len) {
-                Done(()) => {
-                    return Done((self.id, self.fd));
-                }
-                Pending(()) => {
-                    self.last_activity_at = now;
-                    return Pending(self);
-                }
-                Failed => {
-                    error!("{self} failed to call UpgradeResponseWriter");
-                    return Failed;
-                }
-            }
+            return match self.write(now) {
+                Done(()) => Done((self.id, self.fd)),
+                Failed => Failed,
+                Pending(()) => Pending(self),
+            };
         }
 
         Pending(self)
+    }
+
+    fn write(&mut self, now: u64) -> Completion<(), ()> {
+        self.last_activity_at = now;
+
+        mpclipboard_shared::io::write(&self.fd, self.writer.remainder())
+            .map_err(|| error!("write() failed for {self}"))
+            .and_then(|len| {
+                self.writer
+                    .written(len)
+                    .map_err(|| error!("{self} failed to call UpgradeResponseWriter"))
+            })
     }
 }
 

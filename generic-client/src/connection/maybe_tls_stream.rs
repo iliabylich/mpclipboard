@@ -1,6 +1,9 @@
 use crate::tls::TLS;
 use anyhow::{Context, Result};
-use mpclipboard_shared::{Url, Wants, error};
+use mpclipboard_shared::{
+    Completion::{self, *},
+    Url, Wants, error,
+};
 use rustls::{ClientConnection, pki_types::ServerName};
 use std::{
     io::{ErrorKind, Read, Write},
@@ -89,26 +92,31 @@ impl MaybeTlsStream {
         &mut self,
         fd: &impl AsFd,
         buf: &mut [u8],
-    ) -> std::io::Result<Option<NonZeroUsize>> {
+    ) -> Completion<NonZeroUsize, ()> {
         match self {
-            Self::Plain => match rustix::io::read(fd, buf).map(NonZeroUsize::new) {
-                Ok(Some(len)) => Ok(Some(len)),
-                Ok(None) => Err(std::io::Error::new(ErrorKind::UnexpectedEof, "EOF")),
-                Err(rustix::io::Errno::AGAIN) => Ok(None),
-                Err(errno) => Err(errno.into()),
-            },
+            Self::Plain => mpclipboard_shared::io::read(fd, buf)
+                .map_err(|| error!("failed to read_bytes() on plain stream")),
             Self::Tls(conn) => {
                 match conn.complete_io(&mut StdReadWriteFd(fd)) {
                     Ok(_) => {}
                     Err(err) if err.kind() == ErrorKind::WouldBlock => {}
-                    Err(err) => return Err(err),
+                    Err(err) => {
+                        error!("failed to complete_io() on TLS stream: {err:?}");
+                        return Failed;
+                    }
                 }
 
                 match conn.reader().read(buf).map(NonZeroUsize::new) {
-                    Ok(Some(len)) => Ok(Some(len)),
-                    Ok(None) => Err(std::io::Error::new(ErrorKind::UnexpectedEof, "EOF")),
-                    Err(err) if err.kind() == ErrorKind::WouldBlock => Ok(None),
-                    Err(err) => Err(err),
+                    Ok(Some(len)) => Done(len),
+                    Ok(None) => {
+                        error!("failed to read_bytes() on TLS stream: EOF");
+                        Failed
+                    }
+                    Err(err) if err.kind() == ErrorKind::WouldBlock => Pending(()),
+                    Err(err) => {
+                        error!("failed to read_bytes() on TLS stream: {err:?}");
+                        Failed
+                    }
                 }
             }
         }
@@ -118,30 +126,33 @@ impl MaybeTlsStream {
         &mut self,
         fd: &impl AsFd,
         buf: &[u8],
-    ) -> std::io::Result<Option<NonZeroUsize>> {
+    ) -> Completion<NonZeroUsize, ()> {
         match self {
-            Self::Plain => match rustix::io::write(fd, buf).map(NonZeroUsize::new) {
-                Ok(Some(len)) => Ok(Some(len)),
-                Ok(None) => Err(std::io::Error::new(ErrorKind::UnexpectedEof, "EOF")),
-                Err(rustix::io::Errno::AGAIN) => Ok(None),
-                Err(errno) => Err(errno.into()),
-            },
+            Self::Plain => mpclipboard_shared::io::write(fd, buf)
+                .map_err(|| error!("failed to write_bytes() on plain stream")),
             Self::Tls(conn) => {
                 let len = match conn.writer().write(buf).map(NonZeroUsize::new) {
                     Ok(Some(len)) => len,
                     Ok(None) => {
-                        return Err(std::io::Error::new(ErrorKind::UnexpectedEof, "EOF"));
+                        error!("failed to write_bytes() on TLS stream: EOF");
+                        return Failed;
                     }
                     Err(err) if err.kind() == ErrorKind::WouldBlock => {
-                        return Ok(None);
+                        return Pending(());
                     }
-                    Err(err) => return Err(err),
+                    Err(err) => {
+                        error!("failed to write_bytes() on TLS stream: {err:?}");
+                        return Failed;
+                    }
                 };
 
                 match conn.complete_io(&mut StdReadWriteFd(fd)) {
-                    Ok(_) => Ok(Some(len)),
-                    Err(err) if err.kind() == ErrorKind::WouldBlock => Ok(Some(len)),
-                    Err(err) => Err(err),
+                    Ok(_) => Done(len),
+                    Err(err) if err.kind() == ErrorKind::WouldBlock => Done(len),
+                    Err(err) => {
+                        error!("failed to complete_io() on TLS stream: {err:?}");
+                        Failed
+                    }
                 }
             }
         }

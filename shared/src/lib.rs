@@ -109,5 +109,7 @@ pub(crate) fn strip_prefix_ignore_ascii_case<'a>(line: &'a str, prefix: &str) ->
 mod completion;
 pub use completion::Completion;
 
+pub mod io;
+
 #[cfg(test)]
 mod test_helpers;

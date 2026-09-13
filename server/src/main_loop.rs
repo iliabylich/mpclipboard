@@ -4,7 +4,7 @@ use crate::{
 };
 use anyhow::{Context, Result};
 use mpclipboard_shared::{
-    Completion, ID, Message, REvents, Store, Timerfd, enable_tcp_keep_alive, error, info, trace,
+    Completion::*, ID, Message, REvents, Store, Timerfd, enable_tcp_keep_alive, error, info, trace,
 };
 use rustix::event::PollFlags;
 use std::{
@@ -119,11 +119,11 @@ impl MainLoop {
 
     fn on_pre_source_event(&mut self, source: PreSource, revents: PollFlags) {
         match source.on_poll_event(revents, self.now) {
-            Completion::Failed => {}
-            Completion::Pending(source) => {
+            Failed => {}
+            Pending(source) => {
                 self.pre_sources.insert(source);
             }
-            Completion::Done((req, fd)) => {
+            Done((req, fd)) => {
                 let id = req.id;
                 if req.token == self.config.token {
                     let sink = PreSink::new(fd, id, self.now);
@@ -138,11 +138,11 @@ impl MainLoop {
 
     fn on_pre_sink_event(&mut self, sink: PreSink, revents: PollFlags) {
         match sink.on_poll_event(revents, self.now) {
-            Completion::Failed => {}
-            Completion::Pending(sink) => {
+            Failed => {}
+            Pending(sink) => {
                 self.pre_sinks.insert(sink);
             }
-            Completion::Done((id, fd)) => match enable_tcp_keep_alive(&fd) {
+            Done((id, fd)) => match enable_tcp_keep_alive(&fd) {
                 Ok(()) => {
                     let mut client = Client::new(fd, id);
                     info!("promoting {id} to {client}");
@@ -158,8 +158,8 @@ impl MainLoop {
 
     fn on_client_event(&mut self, client: Client, revents: PollFlags) {
         match client.on_poll_event(revents) {
-            Completion::Failed => {}
-            Completion::Done((message, client)) => {
+            Failed => {}
+            Done((message, client)) => {
                 if self.store.add(message) {
                     info!("broadcasting {message:?}");
                     self.broadcast(&message, client.id());
@@ -167,7 +167,7 @@ impl MainLoop {
 
                 self.clients.insert(client);
             }
-            Completion::Pending(client) => {
+            Pending(client) => {
                 self.clients.insert(client);
             }
         }

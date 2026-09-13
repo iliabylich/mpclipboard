@@ -29,7 +29,7 @@ pub fn reconnect(
 
     match connect(addr) {
         Done(fd) => Done((fd, stream)),
-        Failed => return Failed,
-        Pending(fd) => return Pending((fd, stream)),
+        Failed => Failed,
+        Pending(fd) => Pending((fd, stream)),
     }
 }

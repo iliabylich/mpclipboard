@@ -20,15 +20,9 @@ pub fn write_message(
     let Some(buf) = writer.remainder() else {
         return Done(());
     };
-    match stream.write_bytes(fd, buf) {
-        Ok(Some(len)) => {
-            writer.written(len);
-            Done(())
-        }
-        Ok(None) => Pending(()),
-        Err(err) => {
-            error!("failed to write(): {err:?}");
-            Failed
-        }
-    }
+
+    stream.write_bytes(fd, buf).and_then(|len| {
+        writer.written(len);
+        Done(())
+    })
 }

@@ -34,7 +34,7 @@ pub fn connect(addr: SocketAddrV4) -> Completion<OwnedFd, OwnedFd> {
         Ok(()) => Done(fd),
         Err(Errno::INPROGRESS) => Pending(fd),
         Err(err) => {
-            error!("{err:?}");
+            error!("failed to connect(): {err:?}");
             Failed
         }
     }

@@ -1,3 +1,4 @@
+#[must_use]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Completion<S, P> {
     Done(S),
@@ -38,5 +39,15 @@ impl<S, P> Completion<S, P> {
             Completion::Failed => Completion::Failed,
             Completion::Pending(pending) => Completion::Pending(pending),
         }
+    }
+
+    pub fn map_err<F>(self, f: F) -> Self
+    where
+        F: FnOnce(),
+    {
+        if matches!(self, Self::Failed) {
+            f();
+        }
+        self
     }
 }
