@@ -63,7 +63,6 @@ impl core::fmt::Debug for Message {
 impl Message {
     pub(crate) fn decode(buf: &[u8; Self::BYTESIZE]) -> Result<Self, MessageDecodeError> {
         let len = buf[0];
-        println!("{len}");
 
         let mut timestamp: [u8; 16] = [0; _];
         timestamp.copy_from_slice(&buf[1..17]);

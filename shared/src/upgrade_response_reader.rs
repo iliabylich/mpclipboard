@@ -4,6 +4,7 @@ use crate::{
     message::Message,
     strip_prefix_ignore_ascii_case,
 };
+use core::convert::Infallible;
 
 #[must_use]
 #[derive(Debug, Clone, Copy)]
@@ -15,7 +16,7 @@ struct UpgradeResponseParser {
 
 impl HttpLinesParser for UpgradeResponseParser {
     type Output = ();
-    type Error = UpgradeResponseParserError;
+    type Error = Infallible;
 
     fn new() -> Self {
         Self {
@@ -48,17 +49,6 @@ impl HttpLinesParser for UpgradeResponseParser {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum UpgradeResponseParserError {}
-
-impl core::fmt::Display for UpgradeResponseParserError {
-    fn fmt(&self, _f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match *self {}
-    }
-}
-
-impl core::error::Error for UpgradeResponseParserError {}
-
 #[must_use]
 #[derive(Debug, Clone, Copy)]
 pub struct UpgradeResponseReader {
@@ -75,7 +65,7 @@ impl UpgradeResponseReader {
     pub fn received(
         &mut self,
         data: &[u8],
-    ) -> Result<(usize, Option<()>), HttpLinesReaderError<UpgradeResponseParserError>> {
+    ) -> Result<(usize, Option<()>), HttpLinesReaderError<Infallible>> {
         self.inner.received(data)
     }
 }

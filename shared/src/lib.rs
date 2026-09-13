@@ -13,6 +13,7 @@
 #![warn(clippy::std_instead_of_alloc)]
 #![warn(clippy::std_instead_of_core)]
 #![expect(clippy::missing_errors_doc)]
+#![expect(clippy::large_enum_variant)]
 #![doc = include_str!("../README.md")]
 
 mod config;
@@ -32,7 +33,7 @@ mod upgrade_request;
 pub use upgrade_request::UpgradeRequest;
 
 mod upgrade_request_reader;
-pub use upgrade_request_reader::{UpgradeRequestParserError, UpgradeRequestReader};
+pub use upgrade_request_reader::{UpgradeRequestReader, UpgradeRequestReaderResult};
 
 mod upgrade_request_writer;
 pub use upgrade_request_writer::UpgradeRequestWriter;
@@ -40,7 +41,7 @@ pub use upgrade_request_writer::UpgradeRequestWriter;
 mod upgrade_response;
 
 mod upgrade_response_reader;
-pub use upgrade_response_reader::{UpgradeResponseParserError, UpgradeResponseReader};
+pub use upgrade_response_reader::UpgradeResponseReader;
 
 mod upgrade_response_writer;
 pub use upgrade_response_writer::UpgradeResponseWriter;
@@ -78,8 +79,6 @@ pub(crate) const TOKEN_PREFIX: &str = "Token: ";
 pub(crate) const ID_PREFIX: &str = "ID: ";
 pub(crate) const CONNECTION_UPGRADE_HEADER: &str = "Connection: Upgrade";
 pub(crate) const UPGRADE_MPCLIPBOARD_RAW_HEADER: &str = "Upgrade: mpclipboard-raw";
-pub(crate) const PADDING_PREFIX: &str = "Padding: ";
-pub(crate) const MIN_PADDING_LENGTH: usize = 1;
 
 mod non_empty_inline_string;
 pub use non_empty_inline_string::NonEmptyInlineString;
