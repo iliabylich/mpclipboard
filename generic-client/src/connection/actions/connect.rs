@@ -1,16 +1,19 @@
-use mpclipboard_shared::error;
+use mpclipboard_shared::{
+    Completion::{self, *},
+    error,
+};
 use rustix::{
     io::Errno,
     net::{AddressFamily, SocketType},
 };
 use std::{net::SocketAddrV4, os::fd::OwnedFd};
 
-pub fn connect(addr: SocketAddrV4) -> ConnectResult {
+pub fn connect(addr: SocketAddrV4) -> Completion<OwnedFd, OwnedFd> {
     let fd = match rustix::net::socket(AddressFamily::INET, SocketType::STREAM, None) {
         Ok(fd) => fd,
         Err(err) => {
             error!("failed to socket(): {err:?}");
-            return ConnectResult::Failed;
+            return Failed;
         }
     };
     #[cfg(target_os = "macos")]
@@ -18,27 +21,21 @@ pub fn connect(addr: SocketAddrV4) -> ConnectResult {
         Ok(()) => {}
         Err(err) => {
             error!("failed to setsockopt(SO_NOSIGPIPE): {err:?}");
-            return ConnectResult::Failed;
+            return Failed;
         }
     }
 
     if let Err(err) = rustix::io::ioctl_fionbio(&fd, true) {
         error!("failed to ioctl(): {err:?}");
-        return ConnectResult::Failed;
+        return Failed;
     }
 
     match rustix::net::connect(&fd, &addr) {
-        Ok(()) => ConnectResult::Connected(fd),
-        Err(Errno::INPROGRESS) => ConnectResult::StillPending(fd),
+        Ok(()) => Done(fd),
+        Err(Errno::INPROGRESS) => Pending(fd),
         Err(err) => {
             error!("{err:?}");
-            ConnectResult::Failed
+            Failed
         }
     }
-}
-
-pub enum ConnectResult {
-    Connected(OwnedFd),
-    StillPending(OwnedFd),
-    Failed,
 }

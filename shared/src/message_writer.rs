@@ -61,6 +61,7 @@ impl MessageWriter {
         self.remainder().is_none()
     }
 
+    #[must_use]
     pub fn wants(&self) -> Option<Wants> {
         if self.is_empty() {
             None

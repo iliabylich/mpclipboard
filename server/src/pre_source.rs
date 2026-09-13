@@ -1,6 +1,7 @@
 use crate::{as_poll_fd::AsPollFd, reaper::CanBeReaped};
 use mpclipboard_shared::{
-    REvents, UpgradeRequest, UpgradeRequestReader, UpgradeRequestReaderResult, error, trace,
+    Completion::{self, *},
+    REvents, UpgradeRequest, UpgradeRequestReader, error, trace,
 };
 use rustix::event::{PollFd, PollFlags};
 use rustix::io::Errno;
@@ -15,13 +16,6 @@ pub struct PreSource {
     last_activity_at: u64,
 }
 
-#[expect(clippy::large_enum_variant)]
-pub enum PreSourceResult {
-    Died,
-    Pending(PreSource),
-    Done((UpgradeRequest, OwnedFd)),
-}
-
 impl PreSource {
     pub(crate) fn new(fd: OwnedFd, now: u64) -> Self {
         Self {
@@ -31,12 +25,16 @@ impl PreSource {
         }
     }
 
-    pub(crate) fn on_poll_event(mut self, revents: PollFlags, now: u64) -> PreSourceResult {
+    pub(crate) fn on_poll_event(
+        mut self,
+        revents: PollFlags,
+        now: u64,
+    ) -> Completion<(UpgradeRequest, OwnedFd), PreSource> {
         let revents = match REvents::new(revents) {
             Ok(revents) => revents,
             Err(err) => {
                 error!("polling {self} returned an error: {err:?}");
-                return PreSourceResult::Died;
+                return Failed;
             }
         };
 
@@ -50,41 +48,33 @@ impl PreSource {
             let mut buf = [0; UpgradeRequestReader::BUFFER_SIZE];
             let len = match rustix::io::read(&self.fd, &mut buf).map(NonZeroUsize::new) {
                 Ok(Some(len)) => len,
-                Err(Errno::AGAIN) => return PreSourceResult::Pending(self),
+                Err(Errno::AGAIN) => return Pending(self),
                 Ok(None) => {
                     error!("{self} reached EOF");
-                    return PreSourceResult::Died;
+                    return Failed;
                 }
                 Err(errno) => {
                     error!("{self} failed to read(): {errno:?}");
-                    return PreSourceResult::Died;
+                    return Failed;
                 }
             };
 
             match self.reader.received(buf, len) {
-                UpgradeRequestReaderResult::Done {
-                    req,
-                    leftover: _leftover,
-                    leftover_len,
-                } => {
-                    if leftover_len != 0 {
-                        error!("{self} provided additional bytes after upgrade request");
-                        return PreSourceResult::Died;
-                    }
-                    return PreSourceResult::Done((req, self.fd));
+                Done(req) => {
+                    return Done((req, self.fd));
                 }
-                UpgradeRequestReaderResult::Pending => {
+                Pending(()) => {
                     self.last_activity_at = now;
-                    return PreSourceResult::Pending(self);
+                    return Pending(self);
                 }
-                UpgradeRequestReaderResult::Error => {
+                Failed => {
                     error!("{self} got an error from UpgradeRequestReader");
-                    return PreSourceResult::Died;
+                    return Failed;
                 }
             }
         }
 
-        PreSourceResult::Pending(self)
+        Pending(self)
     }
 }
 

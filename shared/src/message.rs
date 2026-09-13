@@ -83,7 +83,7 @@ impl Message {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum MessageDecodeError {
+pub(crate) enum MessageDecodeError {
     MalformedLength,
     NonUtf8Text,
 }

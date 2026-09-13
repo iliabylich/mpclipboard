@@ -1,15 +1,10 @@
 use crate::{
-    as_poll_fd::AsPollFd,
-    client::{Client, ClientResult},
-    config::Config,
-    fd_set::FdSet,
-    pre_sink::{PreSink, PreSinkResult},
-    pre_source::{PreSource, PreSourceResult},
-    tcp_listener::TcpListener,
+    as_poll_fd::AsPollFd, client::Client, config::Config, fd_set::FdSet, pre_sink::PreSink,
+    pre_source::PreSource, tcp_listener::TcpListener,
 };
 use anyhow::{Context, Result};
 use mpclipboard_shared::{
-    ID, Message, REvents, Store, Timerfd, enable_tcp_keep_alive, error, info, trace,
+    Completion, ID, Message, REvents, Store, Timerfd, enable_tcp_keep_alive, error, info, trace,
 };
 use rustix::event::PollFlags;
 use std::{
@@ -124,11 +119,11 @@ impl MainLoop {
 
     fn on_pre_source_event(&mut self, source: PreSource, revents: PollFlags) {
         match source.on_poll_event(revents, self.now) {
-            PreSourceResult::Died => {}
-            PreSourceResult::Pending(source) => {
+            Completion::Failed => {}
+            Completion::Pending(source) => {
                 self.pre_sources.insert(source);
             }
-            PreSourceResult::Done((req, fd)) => {
+            Completion::Done((req, fd)) => {
                 let id = req.id;
                 if req.token == self.config.token {
                     let sink = PreSink::new(fd, id, self.now);
@@ -143,11 +138,11 @@ impl MainLoop {
 
     fn on_pre_sink_event(&mut self, sink: PreSink, revents: PollFlags) {
         match sink.on_poll_event(revents, self.now) {
-            PreSinkResult::Died => {}
-            PreSinkResult::Pending(sink) => {
+            Completion::Failed => {}
+            Completion::Pending(sink) => {
                 self.pre_sinks.insert(sink);
             }
-            PreSinkResult::Done((id, fd)) => match enable_tcp_keep_alive(&fd) {
+            Completion::Done((id, fd)) => match enable_tcp_keep_alive(&fd) {
                 Ok(()) => {
                     let mut client = Client::new(fd, id);
                     info!("promoting {id} to {client}");
@@ -163,8 +158,8 @@ impl MainLoop {
 
     fn on_client_event(&mut self, client: Client, revents: PollFlags) {
         match client.on_poll_event(revents) {
-            ClientResult::Died => {}
-            ClientResult::Message((message, client)) => {
+            Completion::Failed => {}
+            Completion::Done((message, client)) => {
                 if self.store.add(message) {
                     info!("broadcasting {message:?}");
                     self.broadcast(&message, client.id());
@@ -172,7 +167,7 @@ impl MainLoop {
 
                 self.clients.insert(client);
             }
-            ClientResult::Pending(client) => {
+            Completion::Pending(client) => {
                 self.clients.insert(client);
             }
         }

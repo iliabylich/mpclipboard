@@ -14,6 +14,7 @@
 #![warn(clippy::std_instead_of_core)]
 #![expect(clippy::missing_errors_doc)]
 #![expect(clippy::large_enum_variant)]
+#![allow(clippy::option_if_let_else)]
 #![doc = include_str!("../README.md")]
 
 mod config;
@@ -25,21 +26,19 @@ mod upgrade_request;
 mod upgrade_request_reader;
 mod upgrade_request_writer;
 pub use self::{
-    upgrade_request::UpgradeRequest,
-    upgrade_request_reader::{UpgradeRequestReader, UpgradeRequestReaderResult},
-    upgrade_request_writer::{UpgradeRequestWriter, UpgradeRequestWriterResult},
+    upgrade_request::UpgradeRequest, upgrade_request_reader::UpgradeRequestReader,
+    upgrade_request_writer::UpgradeRequestWriter,
 };
 
 mod upgrade_response;
 mod upgrade_response_reader;
 mod upgrade_response_writer;
 pub use self::{
-    upgrade_response_reader::{UpgradeResponseReader, UpgradeResponseReaderResult},
-    upgrade_response_writer::{UpgradeResponseWriter, UpgradeResponseWriterResult},
+    upgrade_response_reader::UpgradeResponseReader, upgrade_response_writer::UpgradeResponseWriter,
 };
 
 mod message;
-pub use message::{Message, MessageDecodeError};
+pub use message::Message;
 
 mod message_reader;
 pub use message_reader::MessageReader;
@@ -106,6 +105,9 @@ pub(crate) fn strip_prefix_ignore_ascii_case<'a>(line: &'a str, prefix: &str) ->
         None
     }
 }
+
+mod completion;
+pub use completion::Completion;
 
 #[cfg(test)]
 mod test_helpers;

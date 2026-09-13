@@ -1,5 +1,8 @@
 use crate::as_poll_fd::AsPollFd;
-use mpclipboard_shared::{ID, Message, MessageReader, MessageWriter, REvents, error, trace};
+use mpclipboard_shared::{
+    Completion::{self, *},
+    ID, Message, MessageReader, MessageWriter, REvents, error, trace,
+};
 use rustix::event::{PollFd, PollFlags};
 use rustix::io::Errno;
 use std::{
@@ -12,13 +15,6 @@ pub struct Client {
     id: ID,
     reader: MessageReader,
     writer: MessageWriter,
-}
-
-#[expect(clippy::large_enum_variant)]
-pub enum ClientResult {
-    Died,
-    Message((Message, Client)),
-    Pending(Client),
 }
 
 impl Client {
@@ -35,12 +31,15 @@ impl Client {
         self.writer.push(message);
     }
 
-    pub(crate) fn on_poll_event(mut self, revents: PollFlags) -> ClientResult {
+    pub(crate) fn on_poll_event(
+        mut self,
+        revents: PollFlags,
+    ) -> Completion<(Message, Client), Client> {
         let revents = match REvents::new(revents) {
             Ok(revents) => revents,
             Err(err) => {
                 error!("polling {self} returned an error: {err:?}");
-                return ClientResult::Died;
+                return Failed;
             }
         };
 
@@ -55,11 +54,11 @@ impl Client {
                 Err(Errno::AGAIN) => {}
                 Ok(None) => {
                     error!("write() returned zero for {self}");
-                    return ClientResult::Died;
+                    return Failed;
                 }
                 Err(errno) => {
                     error!("failed to write() for {self}: {errno:?}");
-                    return ClientResult::Died;
+                    return Failed;
                 }
             }
         }
@@ -70,28 +69,25 @@ impl Client {
             let mut buf = [0; Message::BYTESIZE];
             let len = match rustix::io::read(&self.fd, &mut buf).map(NonZeroUsize::new) {
                 Ok(Some(len)) => len,
-                Err(Errno::AGAIN) => return ClientResult::Pending(self),
+                Err(Errno::AGAIN) => return Pending(self),
                 Ok(None) => {
                     error!("{self} reached EOF");
-                    return ClientResult::Died;
+                    return Failed;
                 }
                 Err(errno) => {
                     error!("failed to read() for {self}: {errno:?}");
-                    return ClientResult::Died;
+                    return Failed;
                 }
             };
 
             match self.reader.received(buf, len) {
-                Ok(Some(message)) => return ClientResult::Message((message, self)),
-                Ok(None) => {}
-                Err(err) => {
-                    error!("failed to decode message for {self}: {err:?}");
-                    return ClientResult::Died;
-                }
+                Done(message) => return Done((message, self)),
+                Pending(()) => {}
+                Failed => return Failed,
             }
         }
 
-        ClientResult::Pending(self)
+        Pending(self)
     }
 
     pub(crate) const fn id(&self) -> ID {

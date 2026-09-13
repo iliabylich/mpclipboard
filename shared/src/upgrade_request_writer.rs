@@ -1,5 +1,5 @@
 use crate::{
-    CONNECTION_UPGRADE_HEADER, HOST_PREFIX, ID_PREFIX, START_LINE, TOKEN_PREFIX,
+    CONNECTION_UPGRADE_HEADER, Completion, HOST_PREFIX, ID_PREFIX, START_LINE, TOKEN_PREFIX,
     UPGRADE_MPCLIPBOARD_RAW_HEADER, UpgradeRequest,
 };
 use core::num::NonZeroUsize;
@@ -65,32 +65,24 @@ impl UpgradeRequestWriter {
             .unwrap_or_else(|| unreachable!("malformed internal state"))
     }
 
-    pub fn written(&mut self, n: NonZeroUsize) -> UpgradeRequestWriterResult {
+    pub fn written(&mut self, n: NonZeroUsize) -> Completion<(), ()> {
         self.pos = self
             .pos
             .checked_add(n.get())
             .unwrap_or_else(|| unreachable!("pos overflow"));
 
         match self.pos.cmp(&self.len) {
-            core::cmp::Ordering::Less => UpgradeRequestWriterResult::Pending,
-            core::cmp::Ordering::Equal => UpgradeRequestWriterResult::Done,
-            core::cmp::Ordering::Greater => UpgradeRequestWriterResult::Error,
+            core::cmp::Ordering::Less => Completion::Pending(()),
+            core::cmp::Ordering::Equal => Completion::Done(()),
+            core::cmp::Ordering::Greater => Completion::Failed,
         }
     }
 }
 
-#[must_use]
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum UpgradeRequestWriterResult {
-    Done,
-    Pending,
-    Error,
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{UpgradeRequestWriter, UpgradeRequestWriterResult};
-    use crate::{HostPort, ID, Token, UpgradeRequest};
+    use super::UpgradeRequestWriter;
+    use crate::{Completion, HostPort, ID, Token, UpgradeRequest};
     use core::num::NonZeroUsize;
 
     fn req() -> UpgradeRequest {
@@ -120,7 +112,7 @@ mod tests {
 
         assert_eq!(
             writer.written(NonZeroUsize::new(100).unwrap()),
-            UpgradeRequestWriterResult::Pending
+            Completion::Pending(())
         );
         assert_eq!(
             core::str::from_utf8(writer.remainder()).unwrap(),
@@ -129,13 +121,13 @@ mod tests {
 
         assert_eq!(
             writer.written(NonZeroUsize::new(writer.remainder().len()).unwrap()),
-            UpgradeRequestWriterResult::Done
+            Completion::Done(())
         );
         assert_eq!(writer.remainder(), b"");
 
         assert_eq!(
             writer.written(NonZeroUsize::new(1).unwrap()),
-            UpgradeRequestWriterResult::Error
+            Completion::Failed
         );
     }
 }

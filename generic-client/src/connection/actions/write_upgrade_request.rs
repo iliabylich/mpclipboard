@@ -1,33 +1,27 @@
 use crate::connection::maybe_tls_stream::MaybeTlsStream;
-use mpclipboard_shared::{UpgradeRequestWriter, UpgradeRequestWriterResult, error};
+use mpclipboard_shared::{
+    Completion::{self, *},
+    UpgradeRequestWriter, error,
+};
 use std::os::fd::AsFd;
 
 pub fn write_upgrade_request(
     fd: impl AsFd,
     stream: &mut MaybeTlsStream,
     writer: &mut UpgradeRequestWriter,
-) -> WriteUpgradeRequestResult {
+) -> Completion<(), ()> {
     let len = match stream.write_bytes(&fd, writer.remainder()) {
         Ok(Some(len)) => len,
-        Ok(None) => return WriteUpgradeRequestResult::Pending,
+        Ok(None) => return Pending(()),
         Err(err) => {
             error!("write() failed: {err:?}");
-            return WriteUpgradeRequestResult::Error;
+            return Failed;
         }
     };
 
     match writer.written(len) {
-        UpgradeRequestWriterResult::Done => WriteUpgradeRequestResult::Done,
-        UpgradeRequestWriterResult::Pending => WriteUpgradeRequestResult::Pending,
-        UpgradeRequestWriterResult::Error => {
-            error!("write() failed");
-            WriteUpgradeRequestResult::Error
-        }
+        Done(()) => Done(()),
+        Pending(()) => Pending(()),
+        Failed => Failed,
     }
-}
-
-pub enum WriteUpgradeRequestResult {
-    Done,
-    Pending,
-    Error,
 }

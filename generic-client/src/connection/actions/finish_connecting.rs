@@ -1,17 +1,16 @@
-use mpclipboard_shared::error;
+use core::convert::Infallible;
+use mpclipboard_shared::{
+    Completion::{self, *},
+    error,
+};
 use std::os::fd::AsFd;
 
-pub fn finish_connecting(fd: impl AsFd) -> FinishConnectingResult {
+pub fn finish_connecting(fd: impl AsFd) -> Completion<(), Infallible> {
     match rustix::net::sockopt::socket_error(fd) {
-        Ok(Ok(())) => FinishConnectingResult::Connected,
+        Ok(Ok(())) => Done(()),
         Ok(Err(err)) | Err(err) => {
             error!("socket_error returned error: {err:?}");
-            FinishConnectingResult::FailedToConnect
+            Failed
         }
     }
-}
-
-pub enum FinishConnectingResult {
-    Connected,
-    FailedToConnect,
 }

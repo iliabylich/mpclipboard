@@ -1,5 +1,5 @@
 use crate::{
-    CONNECTION_UPGRADE_HEADER, UPGRADE_MPCLIPBOARD_RAW_HEADER, message::Message,
+    CONNECTION_UPGRADE_HEADER, Completion, UPGRADE_MPCLIPBOARD_RAW_HEADER, message::Message,
     strip_prefix_ignore_ascii_case,
 };
 use core::num::NonZeroUsize;
@@ -36,16 +36,16 @@ impl UpgradeResponseReader {
         &mut self,
         buf: [u8; Self::BUFFER_SIZE],
         len: NonZeroUsize,
-    ) -> UpgradeResponseReaderResult {
+    ) -> Completion<([u8; UpgradeResponseReader::BUFFER_SIZE], usize), ()> {
         let Some(buf) = buf.get(..len.get()) else {
-            return UpgradeResponseReaderResult::Error;
+            return Completion::Failed;
         };
 
         for (pos, &byte) in buf.iter().enumerate() {
             if let Some(slot) = self.buf.get_mut(self.pos) {
                 *slot = byte;
             } else {
-                return UpgradeResponseReaderResult::Error;
+                return Completion::Failed;
             }
             self.pos = self
                 .pos
@@ -53,7 +53,7 @@ impl UpgradeResponseReader {
                 .unwrap_or_else(|| unreachable!("length overflow"));
 
             let Some(filled) = self.buf.get(..self.pos) else {
-                return UpgradeResponseReaderResult::Error;
+                return Completion::Failed;
             };
 
             let Some(line) = HttpLine::parse(filled) else {
@@ -89,14 +89,11 @@ impl UpgradeResponseReader {
         }
 
         if self.try_finish() {
-            UpgradeResponseReaderResult::Done {
-                leftover: self.buf,
-                leftover_len: self.pos,
-            }
+            Completion::Done((self.buf, self.pos))
         } else if self.seen_eos {
-            UpgradeResponseReaderResult::Error
+            Completion::Failed
         } else {
-            UpgradeResponseReaderResult::Pending
+            Completion::Pending(())
         }
     }
 
@@ -112,17 +109,6 @@ impl Default for UpgradeResponseReader {
     fn default() -> Self {
         Self::new()
     }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum UpgradeResponseReaderResult {
-    Done {
-        leftover: [u8; UpgradeResponseReader::BUFFER_SIZE],
-        leftover_len: usize,
-    },
-
-    Pending,
-    Error,
 }
 
 #[derive(Debug)]
@@ -166,9 +152,10 @@ impl HttpLine {
 
 #[cfg(test)]
 mod tests {
-    use super::{UpgradeResponseReader, UpgradeResponseReaderResult};
+    use super::UpgradeResponseReader;
     use crate::{
-        test_helpers::as_chunks_with_guaranteed_trailer, upgrade_response::UpgradeResponse,
+        Completion, test_helpers::as_chunks_with_guaranteed_trailer,
+        upgrade_response::UpgradeResponse,
     };
     use core::num::NonZeroUsize;
 
@@ -182,7 +169,7 @@ mod tests {
 
         for (buf, len) in chunks {
             let res = reader.received(buf, len);
-            assert_eq!(res, UpgradeResponseReaderResult::Pending);
+            assert_eq!(res, Completion::Pending(()));
         }
 
         let (mut buf, mut len) = trailer;
@@ -193,16 +180,16 @@ mod tests {
 
         assert_eq!(
             res,
-            UpgradeResponseReaderResult::Done {
-                leftover: {
+            Completion::Done((
+                {
                     let mut buf = [0; _];
                     buf[0] = b'a';
                     buf[1] = b'b';
                     buf[2] = b'c';
                     buf
                 },
-                leftover_len: 3,
-            }
+                3,
+            ))
         );
     }
 
@@ -216,19 +203,13 @@ mod tests {
 
         for (buf, len) in chunks {
             let res = reader.received(buf, len);
-            assert_eq!(res, UpgradeResponseReaderResult::Pending);
+            assert_eq!(res, Completion::Pending(()));
         }
 
         let (buf, len) = trailer;
         let res = reader.received(buf, len);
 
-        assert_eq!(
-            res,
-            UpgradeResponseReaderResult::Done {
-                leftover: [0; _],
-                leftover_len: 0,
-            }
-        );
+        assert_eq!(res, Completion::Done(([0; _], 0)));
     }
 
     #[test]
@@ -240,9 +221,6 @@ mod tests {
         buf[..malformed.len()].copy_from_slice(malformed);
         let len = NonZeroUsize::new(malformed.len()).unwrap();
 
-        assert_eq!(
-            reader.received(buf, len),
-            UpgradeResponseReaderResult::Error
-        );
+        assert_eq!(reader.received(buf, len), Completion::Failed);
     }
 }

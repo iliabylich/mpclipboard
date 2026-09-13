@@ -1,4 +1,4 @@
-use crate::upgrade_response::UpgradeResponse;
+use crate::{Completion, upgrade_response::UpgradeResponse};
 use core::num::NonZeroUsize;
 
 #[must_use]
@@ -19,16 +19,16 @@ impl UpgradeResponseWriter {
             .unwrap_or_else(|| unreachable!("malformed state"))
     }
 
-    pub fn written(&mut self, len: NonZeroUsize) -> UpgradeResponseWriterResult {
+    pub fn written(&mut self, len: NonZeroUsize) -> Completion<(), ()> {
         self.pos = self
             .pos
             .checked_add(len.get())
             .unwrap_or_else(|| unreachable!("length overflow"));
 
         match self.pos.cmp(&UpgradeResponse::BYTES.len()) {
-            core::cmp::Ordering::Less => UpgradeResponseWriterResult::Pending,
-            core::cmp::Ordering::Equal => UpgradeResponseWriterResult::Done,
-            core::cmp::Ordering::Greater => UpgradeResponseWriterResult::Error,
+            core::cmp::Ordering::Less => Completion::Pending(()),
+            core::cmp::Ordering::Equal => Completion::Done(()),
+            core::cmp::Ordering::Greater => Completion::Failed,
         }
     }
 }
@@ -39,22 +39,11 @@ impl Default for UpgradeResponseWriter {
     }
 }
 
-#[must_use]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum UpgradeResponseWriterResult {
-    Done,
-    Pending,
-    Error,
-}
-
 #[cfg(test)]
 mod tests {
-    use std::num::NonZeroUsize;
-
     use super::UpgradeResponseWriter;
-    use crate::{
-        upgrade_response::UpgradeResponse, upgrade_response_writer::UpgradeResponseWriterResult,
-    };
+    use crate::{Completion, upgrade_response::UpgradeResponse};
+    use core::num::NonZeroUsize;
 
     #[test]
     fn test_write() {
@@ -63,19 +52,16 @@ mod tests {
 
         assert_eq!(
             w.written(NonZeroUsize::new(50).unwrap()),
-            UpgradeResponseWriterResult::Pending
+            Completion::Pending(())
         );
         assert_eq!(w.remainder(), &UpgradeResponse::BYTES[50..]);
 
         assert_eq!(
             w.written(NonZeroUsize::new(UpgradeResponse::BYTES.len() - 50).unwrap()),
-            UpgradeResponseWriterResult::Done
+            Completion::Done(())
         );
         assert_eq!(w.remainder(), b"");
 
-        assert_eq!(
-            w.written(NonZeroUsize::new(1).unwrap()),
-            UpgradeResponseWriterResult::Error
-        );
+        assert_eq!(w.written(NonZeroUsize::new(1).unwrap()), Completion::Failed);
     }
 }

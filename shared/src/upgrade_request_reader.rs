@@ -1,6 +1,6 @@
 use crate::{
-    CONNECTION_UPGRADE_HEADER, HOST_PREFIX, HostPort, ID, ID_PREFIX, Message, START_LINE,
-    TOKEN_PREFIX, Token, UPGRADE_MPCLIPBOARD_RAW_HEADER, UpgradeRequest,
+    CONNECTION_UPGRADE_HEADER, Completion, HOST_PREFIX, HostPort, ID, ID_PREFIX, Message,
+    START_LINE, TOKEN_PREFIX, Token, UPGRADE_MPCLIPBOARD_RAW_HEADER, UpgradeRequest, error,
     strip_prefix_ignore_ascii_case,
 };
 use core::num::NonZeroUsize;
@@ -43,16 +43,16 @@ impl UpgradeRequestReader {
         &mut self,
         buf: [u8; Self::BUFFER_SIZE],
         len: NonZeroUsize,
-    ) -> UpgradeRequestReaderResult {
+    ) -> Completion<UpgradeRequest, ()> {
         let Some(buf) = buf.get(..len.get()) else {
-            return UpgradeRequestReaderResult::Error;
+            return Completion::Failed;
         };
 
         for (pos, &byte) in buf.iter().enumerate() {
             if let Some(slot) = self.buf.get_mut(self.pos) {
                 *slot = byte;
             } else {
-                return UpgradeRequestReaderResult::Error;
+                return Completion::Failed;
             }
             self.pos = self
                 .pos
@@ -60,7 +60,7 @@ impl UpgradeRequestReader {
                 .unwrap_or_else(|| unreachable!("length overflow"));
 
             let Some(filled) = self.buf.get(..self.pos) else {
-                return UpgradeRequestReaderResult::Error;
+                return Completion::Failed;
             };
 
             let Some(line) = HttpLine::parse(filled) else {
@@ -99,15 +99,15 @@ impl UpgradeRequestReader {
         }
 
         if let Some(req) = self.try_finish() {
-            UpgradeRequestReaderResult::Done {
-                req,
-                leftover: self.buf,
-                leftover_len: self.pos,
+            if self.pos != 0 {
+                error!("got leftover in UpgradeRequestReader");
+                return Completion::Failed;
             }
+            Completion::Done(req)
         } else if self.seen_eos {
-            UpgradeRequestReaderResult::Error
+            Completion::Failed
         } else {
-            UpgradeRequestReaderResult::Pending
+            Completion::Pending(())
         }
     }
 
@@ -131,18 +131,6 @@ impl Default for UpgradeRequestReader {
     fn default() -> Self {
         Self::new()
     }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum UpgradeRequestReaderResult {
-    Done {
-        req: UpgradeRequest,
-        leftover: [u8; UpgradeRequestReader::BUFFER_SIZE],
-        leftover_len: usize,
-    },
-
-    Pending,
-    Error,
 }
 
 #[derive(Debug)]
@@ -198,9 +186,9 @@ impl HttpLine {
 
 #[cfg(test)]
 mod tests {
-    use super::{UpgradeRequestReader, UpgradeRequestReaderResult};
+    use super::UpgradeRequestReader;
     use crate::{
-        HostPort, ID, Token, UpgradeRequest, UpgradeRequestWriter,
+        Completion, HostPort, ID, Token, UpgradeRequest, UpgradeRequestWriter,
         test_helpers::as_chunks_with_guaranteed_trailer,
     };
     use core::num::NonZeroUsize;
@@ -224,7 +212,7 @@ mod tests {
 
         for (buf, len) in chunks {
             let res = reader.received(buf, len);
-            assert_eq!(res, UpgradeRequestReaderResult::Pending);
+            assert_eq!(res, Completion::Pending(()));
         }
 
         let (mut buf, mut len) = trailer;
@@ -232,21 +220,7 @@ mod tests {
         len = NonZeroUsize::new(len.get() + 3).unwrap();
 
         let res = reader.received(buf, len);
-
-        assert_eq!(
-            res,
-            UpgradeRequestReaderResult::Done {
-                req: new_reqwest(),
-                leftover: {
-                    let mut buf = [0; _];
-                    buf[0] = b'a';
-                    buf[1] = b'b';
-                    buf[2] = b'c';
-                    buf
-                },
-                leftover_len: 3,
-            }
-        );
+        assert_eq!(res, Completion::Failed);
     }
 
     #[test]
@@ -260,20 +234,13 @@ mod tests {
 
         for (buf, len) in chunks {
             let res = reader.received(buf, len);
-            assert_eq!(res, UpgradeRequestReaderResult::Pending);
+            assert_eq!(res, Completion::Pending(()));
         }
 
         let (buf, len) = trailer;
         let res = reader.received(buf, len);
 
-        assert_eq!(
-            res,
-            UpgradeRequestReaderResult::Done {
-                req: new_reqwest(),
-                leftover: [0; _],
-                leftover_len: 0,
-            }
-        );
+        assert_eq!(res, Completion::Done(new_reqwest()));
     }
 
     #[test]
@@ -285,6 +252,6 @@ mod tests {
         buf[..malformed.len()].copy_from_slice(malformed);
         let len = NonZeroUsize::new(malformed.len()).unwrap();
 
-        assert_eq!(reader.received(buf, len), UpgradeRequestReaderResult::Error);
+        assert_eq!(reader.received(buf, len), Completion::Failed);
     }
 }

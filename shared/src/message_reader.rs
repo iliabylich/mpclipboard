@@ -1,4 +1,4 @@
-use crate::{Message, MessageDecodeError};
+use crate::{Completion, Message, error};
 use core::num::NonZeroUsize;
 
 #[must_use]
@@ -24,7 +24,7 @@ impl MessageReader {
         &mut self,
         bytes: [u8; Message::BYTESIZE],
         len: NonZeroUsize,
-    ) -> Result<Option<Message>, MessageDecodeError> {
+    ) -> Completion<Message, ()> {
         if self.pos >= Message::BYTESIZE {
             unreachable!("malformed state")
         }
@@ -46,13 +46,23 @@ impl MessageReader {
                 .unwrap_or_else(|| unreachable!("buffer pos overflow"));
 
             if self.pos == Message::BYTESIZE {
-                message = Some(Message::decode(&self.buf)?);
+                match Message::decode(&self.buf) {
+                    Ok(m) => message = Some(m),
+                    Err(err) => {
+                        error!("failed to decode message: {err:?}");
+                        return Completion::Failed;
+                    }
+                }
                 self.buf = [0; _];
                 self.pos = 0;
             }
         }
 
-        Ok(message)
+        if let Some(message) = message {
+            Completion::Done(message)
+        } else {
+            Completion::Pending(())
+        }
     }
 }
 
@@ -65,7 +75,7 @@ impl Default for MessageReader {
 #[cfg(test)]
 mod tests {
     use super::MessageReader;
-    use crate::{Message, NonEmptyInlineString};
+    use crate::{Completion, Message, NonEmptyInlineString};
     use core::num::NonZeroUsize;
 
     #[test]
@@ -76,7 +86,6 @@ mod tests {
             Message::new(NonEmptyInlineString::new("BOO").unwrap()).encode();
         let output = reader
             .received(bytes, NonZeroUsize::new(Message::BYTESIZE).unwrap())
-            .unwrap()
             .unwrap();
         assert_eq!(output.text_as_str(), "BOO");
     }
@@ -97,7 +106,7 @@ mod tests {
         buf1[..100].copy_from_slice(&one[..100]);
         assert_eq!(
             reader.received(buf1, NonZeroUsize::new(100).unwrap()),
-            Ok(None)
+            Completion::Pending(())
         );
 
         // write "bc"
@@ -106,7 +115,6 @@ mod tests {
         buf2[Message::BYTESIZE - 100..].copy_from_slice(&two[..100]);
         let message1 = reader
             .received(buf2, NonZeroUsize::new(Message::BYTESIZE).unwrap())
-            .unwrap()
             .unwrap();
         assert_eq!(message1.text_as_str(), "one");
 
@@ -115,7 +123,6 @@ mod tests {
         buf3[..Message::BYTESIZE - 100].copy_from_slice(&two[100..]);
         let message2 = reader
             .received(buf3, NonZeroUsize::new(Message::BYTESIZE - 100).unwrap())
-            .unwrap()
             .unwrap();
         assert_eq!(message2.text_as_str(), "twotwo");
     }

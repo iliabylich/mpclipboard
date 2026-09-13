@@ -1,7 +1,8 @@
 use crate::{as_poll_fd::AsPollFd, reaper::CanBeReaped};
 use core::num::NonZeroUsize;
 use mpclipboard_shared::{
-    ID, REvents, UpgradeResponseWriter, UpgradeResponseWriterResult, error, trace,
+    Completion::{self, *},
+    ID, REvents, UpgradeResponseWriter, error, trace,
 };
 use rustix::event::{PollFd, PollFlags};
 use rustix::io::Errno;
@@ -14,12 +15,6 @@ pub struct PreSink {
     last_activity_at: u64,
 }
 
-pub enum PreSinkResult {
-    Died,
-    Pending(PreSink),
-    Done((ID, OwnedFd)),
-}
-
 impl PreSink {
     pub(crate) const fn new(fd: OwnedFd, id: ID, now: u64) -> Self {
         Self {
@@ -30,12 +25,16 @@ impl PreSink {
         }
     }
 
-    pub(crate) fn on_poll_event(mut self, revents: PollFlags, now: u64) -> PreSinkResult {
+    pub(crate) fn on_poll_event(
+        mut self,
+        revents: PollFlags,
+        now: u64,
+    ) -> Completion<(ID, OwnedFd), PreSink> {
         let revents = match REvents::new(revents) {
             Ok(revents) => revents,
             Err(err) => {
                 error!("polling {self} returned an error: {err:?}");
-                return PreSinkResult::Died;
+                return Failed;
             }
         };
 
@@ -51,34 +50,34 @@ impl PreSink {
                     Ok(Some(len)) => len,
                     Err(Errno::AGAIN) => {
                         self.last_activity_at = now;
-                        return PreSinkResult::Pending(self);
+                        return Pending(self);
                     }
                     Ok(None) => {
                         error!("write() returned zero for {self}");
-                        return PreSinkResult::Died;
+                        return Failed;
                     }
                     Err(errno) => {
                         error!("{self} failed to write(): {errno:?}");
-                        return PreSinkResult::Died;
+                        return Failed;
                     }
                 };
 
             match self.writer.written(len) {
-                UpgradeResponseWriterResult::Done => {
-                    return PreSinkResult::Done((self.id, self.fd));
+                Done(()) => {
+                    return Done((self.id, self.fd));
                 }
-                UpgradeResponseWriterResult::Pending => {
+                Pending(()) => {
                     self.last_activity_at = now;
-                    return PreSinkResult::Pending(self);
+                    return Pending(self);
                 }
-                UpgradeResponseWriterResult::Error => {
+                Failed => {
                     error!("{self} failed to call UpgradeResponseWriter");
-                    return PreSinkResult::Died;
+                    return Failed;
                 }
             }
         }
 
-        PreSinkResult::Pending(self)
+        Pending(self)
     }
 }
 
