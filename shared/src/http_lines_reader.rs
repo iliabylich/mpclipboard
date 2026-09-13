@@ -66,7 +66,7 @@ where
                 let output = self
                     .parser
                     .try_finish()
-                    .ok_or(HttpLinesReaderError::IncompleteHandshake)?;
+                    .ok_or(HttpLinesReaderError::IncompleteUpgradeRequest)?;
                 let consumed = received
                     .checked_sub(self.buf.len())
                     .unwrap_or_else(|| unreachable!("HTTP leftover exceeds received input"));
@@ -75,7 +75,7 @@ where
         }
 
         if received != data.len() || self.buf.remainder().is_empty() {
-            return Err(HttpLinesReaderError::HandshakeExceedsBuffer);
+            return Err(HttpLinesReaderError::UpgradeRequestExceedsBufferSize);
         }
 
         Ok((received, None))
@@ -88,8 +88,8 @@ pub enum HttpLinesReaderError<E> {
     BufferUnderflow(HttpLinesBufferUnderflowError),
     InvalidUtf8(Utf8Error),
     Parser(E),
-    IncompleteHandshake,
-    HandshakeExceedsBuffer,
+    IncompleteUpgradeRequest,
+    UpgradeRequestExceedsBufferSize,
 }
 
 impl<E: core::fmt::Display> core::fmt::Display for HttpLinesReaderError<E> {
@@ -97,10 +97,14 @@ impl<E: core::fmt::Display> core::fmt::Display for HttpLinesReaderError<E> {
         match self {
             Self::BufferOverflow(error) => error.fmt(f),
             Self::BufferUnderflow(error) => error.fmt(f),
-            Self::InvalidUtf8(error) => write!(f, "non-utf8 handshake line: {error}"),
+            Self::InvalidUtf8(error) => write!(f, "non-utf8 upgrade request line: {error}"),
             Self::Parser(error) => error.fmt(f),
-            Self::IncompleteHandshake => f.write_str("incomplete HTTP upgrade handshake"),
-            Self::HandshakeExceedsBuffer => f.write_str("HTTP handshake exceeds buffer"),
+            Self::IncompleteUpgradeRequest => {
+                f.write_str("incomplete HTTP upgrade upgrade request")
+            }
+            Self::UpgradeRequestExceedsBufferSize => {
+                f.write_str("HTTP upgrade request exceeds buffer size")
+            }
         }
     }
 }

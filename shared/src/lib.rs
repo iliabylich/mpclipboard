@@ -28,22 +28,22 @@ mod writer;
 
 mod array_writer;
 
-mod handshake_request;
-pub use handshake_request::HandshakeRequest;
+mod upgrade_request;
+pub use upgrade_request::UpgradeRequest;
 
-mod handshake_request_reader;
-pub use handshake_request_reader::{HandshakeRequestParserError, HandshakeRequestReader};
+mod upgrade_request_reader;
+pub use upgrade_request_reader::{UpgradeRequestParserError, UpgradeRequestReader};
 
-mod handshake_request_writer;
-pub use handshake_request_writer::HandshakeRequestWriter;
+mod upgrade_request_writer;
+pub use upgrade_request_writer::UpgradeRequestWriter;
 
-mod handshake_response;
+mod upgrade_response;
 
-mod handshake_response_reader;
-pub use handshake_response_reader::{HandshakeResponseParserError, HandshakeResponseReader};
+mod upgrade_response_reader;
+pub use upgrade_response_reader::{UpgradeResponseParserError, UpgradeResponseReader};
 
-mod handshake_response_writer;
-pub use handshake_response_writer::HandshakeResponseWriter;
+mod upgrade_response_writer;
+pub use upgrade_response_writer::UpgradeResponseWriter;
 
 mod message;
 pub use message::{Message, MessageDecodeError};

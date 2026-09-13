@@ -1,14 +1,14 @@
-use crate::{HandshakeRequest, writer::Writer};
+use crate::{UpgradeRequest, writer::Writer};
 use core::num::NonZeroUsize;
 
 #[must_use]
 #[derive(Debug, Clone, Copy)]
-pub struct HandshakeRequestWriter {
-    inner: Writer<{ HandshakeRequest::BYTESIZE }>,
+pub struct UpgradeRequestWriter {
+    inner: Writer<{ UpgradeRequest::BYTESIZE }>,
 }
 
-impl HandshakeRequestWriter {
-    pub fn new(request: &HandshakeRequest) -> Self {
+impl UpgradeRequestWriter {
+    pub fn new(request: &UpgradeRequest) -> Self {
         Self {
             inner: Writer::new(request.encode()),
         }

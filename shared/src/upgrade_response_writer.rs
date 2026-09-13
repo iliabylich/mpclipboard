@@ -1,16 +1,16 @@
-use crate::{handshake_response::HandshakeResponse, writer::Writer};
+use crate::{upgrade_response::UpgradeResponse, writer::Writer};
 use core::num::NonZeroUsize;
 
 #[must_use]
 #[derive(Debug, Clone, Copy)]
-pub struct HandshakeResponseWriter {
-    inner: Writer<{ HandshakeResponse::BYTESIZE }>,
+pub struct UpgradeResponseWriter {
+    inner: Writer<{ UpgradeResponse::BYTESIZE }>,
 }
 
-impl HandshakeResponseWriter {
+impl UpgradeResponseWriter {
     pub const fn new() -> Self {
-        let mut buf = [0; HandshakeResponse::BYTESIZE];
-        buf.copy_from_slice(HandshakeResponse::BYTES);
+        let mut buf = [0; UpgradeResponse::BYTESIZE];
+        buf.copy_from_slice(UpgradeResponse::BYTES);
 
         Self {
             inner: Writer::new(buf),
@@ -27,7 +27,7 @@ impl HandshakeResponseWriter {
     }
 }
 
-impl Default for HandshakeResponseWriter {
+impl Default for UpgradeResponseWriter {
     fn default() -> Self {
         Self::new()
     }

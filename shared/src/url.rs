@@ -16,8 +16,6 @@ pub struct Url {
     header: HostPort,
 }
 
-impl core::error::Error for UrlError {}
-
 impl Url {
     pub fn parse(url: &str) -> Result<Self, UrlError> {
         let (scheme, url) = url
@@ -102,6 +100,8 @@ impl core::fmt::Display for UrlError {
         }
     }
 }
+
+impl core::error::Error for UrlError {}
 
 #[cfg(test)]
 mod tests {

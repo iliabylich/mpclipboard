@@ -5,15 +5,15 @@ use crate::{
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct HandshakeRequest {
+pub struct UpgradeRequest {
     pub host: HostPort,
     pub token: Token,
     pub id: ID,
 }
 
-const _: () = assert!(HandshakeRequest::BYTESIZE == 555);
+const _: () = assert!(UpgradeRequest::BYTESIZE == 555);
 
-const BASE_HANDSHAKE_LENGTH: usize = START_LINE.len() + 2 // start line
+const BASE_UPGRADE_REQUEST_LENGTH: usize = START_LINE.len() + 2 // start line
     + HOST_PREFIX.len() + 2 // Host: ...
     + TOKEN_PREFIX.len() + 2 // Token: ...
     + ID_PREFIX.len() + 2 // ID: ...
@@ -22,15 +22,15 @@ const BASE_HANDSHAKE_LENGTH: usize = START_LINE.len() + 2 // start line
     + PADDING_PREFIX.len() + 2 //
     + 2; // headers end marker
 
-impl HandshakeRequest {
-    pub const BYTESIZE: usize = BASE_HANDSHAKE_LENGTH
+impl UpgradeRequest {
+    pub const BYTESIZE: usize = BASE_UPGRADE_REQUEST_LENGTH
         + MAX_HOST_PORT_LENGTH
         + MAX_TOKEN_LENGTH
         + MAX_ID_LENGTH
         + MIN_PADDING_LENGTH;
 }
 
-impl HandshakeRequest {
+impl UpgradeRequest {
     pub(crate) fn encode(&self) -> [u8; Self::BYTESIZE] {
         let mut buf = [0; Self::BYTESIZE];
         let mut pos: usize = 0;
@@ -39,9 +39,9 @@ impl HandshakeRequest {
             let start = *pos;
             let end = start
                 .checked_add(s.len())
-                .unwrap_or_else(|| unreachable!("bug: failed to encode HandshakeRequest"));
+                .unwrap_or_else(|| unreachable!("bug: failed to encode UpgradeRequest"));
             buf.get_mut(start..end)
-                .unwrap_or_else(|| unreachable!("bug: failed to encode HandshakeRequest"))
+                .unwrap_or_else(|| unreachable!("bug: failed to encode UpgradeRequest"))
                 .copy_from_slice(s.as_bytes());
             *pos = end;
         };
@@ -86,12 +86,12 @@ impl HandshakeRequest {
 mod tests {
     use crate::{
         MAX_HOST_PORT_LENGTH, MAX_ID_LENGTH, MAX_TOKEN_LENGTH, NonEmptyInlineString,
-        handshake_request::HandshakeRequest,
+        upgrade_request::UpgradeRequest,
     };
 
     #[test]
     fn test_encode_min() {
-        let min = HandshakeRequest {
+        let min = UpgradeRequest {
             host: NonEmptyInlineString::new("h").unwrap(),
             token: NonEmptyInlineString::new("t").unwrap(),
             id: NonEmptyInlineString::new("i").unwrap(),
@@ -116,7 +116,7 @@ mod tests {
 
     #[test]
     fn test_encode_max() {
-        let max = HandshakeRequest {
+        let max = UpgradeRequest {
             host: NonEmptyInlineString::new(&"h".repeat(MAX_HOST_PORT_LENGTH)).unwrap(),
             token: NonEmptyInlineString::new(&"t".repeat(MAX_TOKEN_LENGTH)).unwrap(),
             id: NonEmptyInlineString::new(&"i".repeat(MAX_ID_LENGTH)).unwrap(),
