@@ -31,24 +31,24 @@ impl EventLoop {
         Ok(this)
     }
 
-    pub fn sync(&mut self, wants: Option<(BorrowedFd<'static>, Wants)>) -> Result<(), EpollError> {
+    pub fn sync(&mut self, wants: Option<(BorrowedFd<'_>, Wants)>) -> Result<(), EpollError> {
         match self.fd.transition(wants) {
             Diff::Add { fd, wants } => {
-                self.add(fd, Self::FD_ID, wants)?;
+                self.add(unsafe { BorrowedFd::borrow_raw(fd) }, Self::FD_ID, wants)?;
             }
             Diff::Delete { fd } => {
-                self.delete(fd);
+                self.delete(unsafe { BorrowedFd::borrow_raw(fd) });
             }
             Diff::Modify { fd, wants } => {
-                self.modify(fd, Self::FD_ID, wants)?;
+                self.modify(unsafe { BorrowedFd::borrow_raw(fd) }, Self::FD_ID, wants)?;
             }
             Diff::Replace {
                 prevfd,
                 newfd,
                 wants,
             } => {
-                self.delete(prevfd);
-                self.add(newfd, Self::FD_ID, wants)?;
+                self.delete(unsafe { BorrowedFd::borrow_raw(prevfd) });
+                self.add(unsafe { BorrowedFd::borrow_raw(newfd) }, Self::FD_ID, wants)?;
             }
             Diff::Empty => {}
         }
@@ -99,7 +99,7 @@ impl EventLoop {
         Ok(out)
     }
 
-    fn add(&self, fd: BorrowedFd<'static>, id: u64, wants: Wants) -> Result<(), EpollError> {
+    fn add(&self, fd: BorrowedFd<'_>, id: u64, wants: Wants) -> Result<(), EpollError> {
         epoll::add(
             &self.epoll_fd,
             fd,
@@ -109,11 +109,11 @@ impl EventLoop {
         Ok(())
     }
 
-    fn delete(&self, fd: BorrowedFd<'static>) {
+    fn delete(&self, fd: BorrowedFd<'_>) {
         let _ = epoll::delete(&self.epoll_fd, fd);
     }
 
-    fn modify(&self, fd: BorrowedFd<'static>, id: u64, wants: Wants) -> Result<(), EpollError> {
+    fn modify(&self, fd: BorrowedFd<'_>, id: u64, wants: Wants) -> Result<(), EpollError> {
         epoll::modify(
             &self.epoll_fd,
             fd,

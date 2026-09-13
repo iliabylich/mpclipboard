@@ -19,6 +19,14 @@ impl Wants {
         }
     }
 
+    pub fn merge_opt(self, other: Option<Self>) -> Self {
+        let mut out = self;
+        if let Some(other) = other {
+            out = out.merge(other);
+        }
+        out
+    }
+
     pub(crate) const fn wants_read(self) -> bool {
         matches!(self, Self::Read | Self::ReadWrite)
     }

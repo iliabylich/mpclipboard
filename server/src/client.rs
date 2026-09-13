@@ -26,7 +26,7 @@ impl Client {
         Self {
             fd,
             id,
-            reader: MessageReader::new(),
+            reader: MessageReader::empty(),
             writer: MessageWriter::new(),
         }
     }
@@ -68,11 +68,7 @@ impl Client {
             trace!("{self} is readable");
 
             let mut buf = [0; Message::BYTESIZE];
-            let needed = self.reader.bytes_needed();
-            let readbuf = buf
-                .get_mut(..needed)
-                .unwrap_or_else(|| unreachable!("message reader requested an oversized buffer"));
-            let len = match rustix::io::read(&self.fd, readbuf).map(NonZeroUsize::new) {
+            let len = match rustix::io::read(&self.fd, &mut buf).map(NonZeroUsize::new) {
                 Ok(Some(len)) => len,
                 Err(Errno::AGAIN) => return ClientResult::Pending(self),
                 Ok(None) => {
@@ -85,15 +81,10 @@ impl Client {
                 }
             };
 
-            let data = buf
-                .get(..len.get())
-                .unwrap_or_else(|| unreachable!("read returned an oversized length"));
-            let (_, message) = self.reader.received(data);
-
-            match message {
-                Some(Ok(message)) => return ClientResult::Message((message, self)),
-                None => {}
-                Some(Err(err)) => {
+            match self.reader.received(buf, len) {
+                Ok(Some(message)) => return ClientResult::Message((message, self)),
+                Ok(None) => {}
+                Err(err) => {
                     error!("failed to decode message for {self}: {err:?}");
                     return ClientResult::Died;
                 }

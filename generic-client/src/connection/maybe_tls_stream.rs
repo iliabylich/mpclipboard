@@ -74,13 +74,13 @@ impl MaybeTlsStream {
         }
     }
 
-    pub(crate) fn tls_wants(&self) -> Wants {
+    pub(crate) fn tls_wants(&self) -> Option<Wants> {
         match self {
-            Self::Plain => Wants::Write,
+            Self::Plain => None,
             Self::Tls(conn) => match (conn.wants_read(), conn.wants_write()) {
-                (true, true) => Wants::ReadWrite,
-                (true, false) => Wants::Read,
-                (false, true | false) => Wants::Write,
+                (true, true) => Some(Wants::ReadWrite),
+                (true, false) => Some(Wants::Read),
+                (false, true | false) => Some(Wants::Write),
             },
         }
     }

@@ -1,4 +1,4 @@
-use crate::message::Message;
+use crate::{Wants, message::Message};
 use core::{cmp::Ordering, num::NonZeroUsize};
 
 #[must_use]
@@ -59,6 +59,14 @@ impl MessageWriter {
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.remainder().is_none()
+    }
+
+    pub fn wants(&self) -> Option<Wants> {
+        if self.is_empty() {
+            None
+        } else {
+            Some(Wants::Write)
+        }
     }
 }
 

@@ -1,6 +1,8 @@
 use crate::{as_poll_fd::AsPollFd, reaper::CanBeReaped};
 use core::num::NonZeroUsize;
-use mpclipboard_shared::{HandshakeResponseWriter, ID, REvents, error, trace};
+use mpclipboard_shared::{
+    ID, REvents, UpgradeResponseWriter, UpgradeResponseWriterResult, error, trace,
+};
 use rustix::event::{PollFd, PollFlags};
 use rustix::io::Errno;
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd};
@@ -8,7 +10,7 @@ use std::os::fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd};
 pub struct PreSink {
     fd: OwnedFd,
     id: ID,
-    writer: HandshakeResponseWriter,
+    writer: UpgradeResponseWriter,
     last_activity_at: u64,
 }
 
@@ -23,7 +25,7 @@ impl PreSink {
         Self {
             fd,
             id,
-            writer: HandshakeResponseWriter::new(),
+            writer: UpgradeResponseWriter::new(),
             last_activity_at: now,
         }
     }
@@ -44,24 +46,33 @@ impl PreSink {
         if revents.writable {
             trace!("{self} is writable");
 
-            match rustix::io::write(&self.fd, self.writer.remainder()).map(NonZeroUsize::new) {
-                Ok(Some(len)) => {
-                    if self.writer.written(len) {
-                        return PreSinkResult::Done((self.id, self.fd));
+            let len =
+                match rustix::io::write(&self.fd, self.writer.remainder()).map(NonZeroUsize::new) {
+                    Ok(Some(len)) => len,
+                    Err(Errno::AGAIN) => {
+                        self.last_activity_at = now;
+                        return PreSinkResult::Pending(self);
                     }
+                    Ok(None) => {
+                        error!("write() returned zero for {self}");
+                        return PreSinkResult::Died;
+                    }
+                    Err(errno) => {
+                        error!("{self} failed to write(): {errno:?}");
+                        return PreSinkResult::Died;
+                    }
+                };
+
+            match self.writer.written(len) {
+                UpgradeResponseWriterResult::Done => {
+                    return PreSinkResult::Done((self.id, self.fd));
+                }
+                UpgradeResponseWriterResult::Pending => {
                     self.last_activity_at = now;
                     return PreSinkResult::Pending(self);
                 }
-                Err(Errno::AGAIN) => {
-                    self.last_activity_at = now;
-                    return PreSinkResult::Pending(self);
-                }
-                Ok(None) => {
-                    error!("write() returned zero for {self}");
-                    return PreSinkResult::Died;
-                }
-                Err(errno) => {
-                    error!("{self} failed to write(): {errno:?}");
+                UpgradeResponseWriterResult::Error => {
+                    error!("{self} failed to call UpgradeResponseWriter");
                     return PreSinkResult::Died;
                 }
             }

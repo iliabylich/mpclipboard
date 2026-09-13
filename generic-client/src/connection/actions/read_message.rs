@@ -17,7 +17,7 @@ pub fn read_message(
         }
     };
 
-    match reader.received(&buf, len) {
+    match reader.received(buf, len) {
         Ok(Some(message)) => ReadMessageResult::Done { message },
         Ok(None) => ReadMessageResult::Pending,
         Err(err) => {

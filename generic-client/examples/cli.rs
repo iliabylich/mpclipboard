@@ -40,11 +40,11 @@ fn main() -> Result<()> {
             if let Some(output) = mpclipboard.read()? {
                 match output {
                     Output::ConnectivityChanged { connectivity } => {
-                        println!("{connectivity:?}")
+                        println!("[c] {connectivity:?}")
                     }
                     Output::NewText { text } => println!("[{text}]"),
                     Output::Both { connectivity, text } => {
-                        println!("{connectivity:?}");
+                        println!("[c] {connectivity:?}");
                         println!("[{text}]");
                     }
                 }

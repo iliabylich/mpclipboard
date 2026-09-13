@@ -323,20 +323,18 @@ impl Connection {
                 let fd = fd.as_fd();
                 let wants = match state {
                     ActiveConnectionState::Connecting { .. } => Wants::Write,
-                    ActiveConnectionState::TlsHandshake { .. } => stream.tls_wants(),
+                    ActiveConnectionState::TlsHandshake { .. } => stream
+                        .tls_wants()
+                        .unwrap_or_else(|| unreachable!("TlsStream always wants soemthing")),
                     ActiveConnectionState::WritingUpgradeRequest { .. } => {
-                        Wants::Write.merge(stream.tls_wants())
+                        Wants::Write.merge_opt(stream.tls_wants())
                     }
                     ActiveConnectionState::ReadingUpgradeResponse { .. } => {
-                        Wants::Read.merge(stream.tls_wants())
+                        Wants::Read.merge_opt(stream.tls_wants())
                     }
-                    ActiveConnectionState::Connected { writer, .. } => {
-                        let mut wants = Wants::Read;
-                        if !writer.is_empty() {
-                            wants = wants.merge(Wants::Write);
-                        }
-                        wants.merge(stream.tls_wants())
-                    }
+                    ActiveConnectionState::Connected { writer, .. } => Wants::Read
+                        .merge_opt(writer.wants())
+                        .merge_opt(stream.tls_wants()),
                 };
                 Some((fd, wants))
             }

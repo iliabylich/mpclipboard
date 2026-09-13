@@ -1,5 +1,7 @@
 use crate::{as_poll_fd::AsPollFd, reaper::CanBeReaped};
-use mpclipboard_shared::{HandshakeRequest, HandshakeRequestReader, REvents, error, trace};
+use mpclipboard_shared::{
+    REvents, UpgradeRequest, UpgradeRequestReader, UpgradeRequestReaderResult, error, trace,
+};
 use rustix::event::{PollFd, PollFlags};
 use rustix::io::Errno;
 use std::{
@@ -9,7 +11,7 @@ use std::{
 
 pub struct PreSource {
     fd: OwnedFd,
-    reader: HandshakeRequestReader,
+    reader: UpgradeRequestReader,
     last_activity_at: u64,
 }
 
@@ -17,14 +19,14 @@ pub struct PreSource {
 pub enum PreSourceResult {
     Died,
     Pending(PreSource),
-    Done((HandshakeRequest, OwnedFd)),
+    Done((UpgradeRequest, OwnedFd)),
 }
 
 impl PreSource {
     pub(crate) fn new(fd: OwnedFd, now: u64) -> Self {
         Self {
             fd,
-            reader: HandshakeRequestReader::new(),
+            reader: UpgradeRequestReader::new(),
             last_activity_at: now,
         }
     }
@@ -45,7 +47,7 @@ impl PreSource {
         if revents.readable {
             trace!("{self} is readable");
 
-            let mut buf = [0; HandshakeRequest::BYTESIZE];
+            let mut buf = [0; UpgradeRequestReader::BUFFER_SIZE];
             let len = match rustix::io::read(&self.fd, &mut buf).map(NonZeroUsize::new) {
                 Ok(Some(len)) => len,
                 Err(Errno::AGAIN) => return PreSourceResult::Pending(self),
@@ -59,21 +61,24 @@ impl PreSource {
                 }
             };
 
-            let data = buf
-                .get(..len.get())
-                .unwrap_or_else(|| unreachable!("read returned an oversized length"));
-
-            match self.reader.received(data) {
-                Ok((consumed, Some(req))) => {
-                    assert_eq!(consumed, len.get());
+            match self.reader.received(buf, len) {
+                UpgradeRequestReaderResult::Done {
+                    req,
+                    leftover: _leftover,
+                    leftover_len,
+                } => {
+                    if leftover_len != 0 {
+                        error!("{self} provided additional bytes after upgrade request");
+                        return PreSourceResult::Died;
+                    }
                     return PreSourceResult::Done((req, self.fd));
                 }
-                Ok((_, None)) => {
+                UpgradeRequestReaderResult::Pending => {
                     self.last_activity_at = now;
                     return PreSourceResult::Pending(self);
                 }
-                Err(err) => {
-                    error!("{self} failed to decode handshake: {err:?}");
+                UpgradeRequestReaderResult::Error => {
+                    error!("{self} got an error from UpgradeRequestReader");
                     return PreSourceResult::Died;
                 }
             }

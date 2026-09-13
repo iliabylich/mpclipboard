@@ -15,7 +15,7 @@ const PATH: &[u8] = if cfg!(debug_assertions) {
 
 impl Config {
     pub(crate) fn read() -> Result<Self> {
-        ConfigParser::parse(PATH, &mut [0; _], ["url", "token"], |[url, token]| {
+        ConfigParser::parse(PATH, &mut [0; 1_024], ["url", "token"], |[url, token]| {
             let url = Url::parse(url).context("malformed url")?;
             ensure!(!url.is_tls(), "url must have http scheme");
 
