@@ -4,7 +4,7 @@ use crate::{
 };
 use anyhow::{Context, Result};
 use mpclipboard_shared::{
-    Completion::*, ID, Message, REvents, Store, Timerfd, enable_tcp_keep_alive, error, info, trace,
+    ID, Message, REvents, Store, Timerfd, enable_tcp_keep_alive, error, info, prelude::*, trace,
 };
 use rustix::event::PollFlags;
 use std::{

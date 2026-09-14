@@ -1,9 +1,6 @@
 use crate::tls::TLS;
 use anyhow::{Context, Result};
-use mpclipboard_shared::{
-    Completion::{self, *},
-    Url, Wants, error,
-};
+use mpclipboard_shared::{Url, Wants, error, prelude::*};
 use rustls::{ClientConnection, pki_types::ServerName};
 use std::{
     io::{ErrorKind, Read, Write},

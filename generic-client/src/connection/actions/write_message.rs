@@ -1,8 +1,5 @@
 use crate::connection::maybe_tls_stream::MaybeTlsStream;
-use mpclipboard_shared::{
-    Completion::{self, *},
-    MessageWriter, error,
-};
+use mpclipboard_shared::{MessageWriter, error, prelude::*};
 use std::os::fd::AsFd;
 
 pub fn write_message(

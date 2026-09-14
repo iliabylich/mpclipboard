@@ -36,7 +36,7 @@ impl UpgradeResponseReader {
         &mut self,
         buf: [u8; Self::BUFFER_SIZE],
         len: NonZeroUsize,
-    ) -> Completion<([u8; UpgradeResponseReader::BUFFER_SIZE], usize), ()> {
+    ) -> Completion<([u8; Self::BUFFER_SIZE], usize), ()> {
         let Some(buf) = buf.get(..len.get()) else {
             return Completion::Failed;
         };

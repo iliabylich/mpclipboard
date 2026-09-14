@@ -13,7 +13,7 @@
 #![warn(clippy::std_instead_of_alloc)]
 #![warn(clippy::std_instead_of_core)]
 #![expect(clippy::missing_errors_doc)]
-#![expect(clippy::large_enum_variant)]
+#![expect(clippy::redundant_pub_crate)]
 #![allow(clippy::option_if_let_else)]
 #![doc = include_str!("../README.md")]
 
@@ -38,13 +38,9 @@ pub use self::{
 };
 
 mod message;
-pub use message::Message;
-
 mod message_reader;
-pub use message_reader::MessageReader;
-
 mod message_writer;
-pub use message_writer::MessageWriter;
+pub use self::{message::Message, message_reader::MessageReader, message_writer::MessageWriter};
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 mod timerfd;
@@ -52,13 +48,13 @@ mod timerfd;
 pub use timerfd::Timerfd;
 
 pub(crate) const MAX_HOST_LENGTH: usize = 249;
-pub(crate) const MAX_PORT_LENGTH: usize = 5;
+const MAX_PORT_LENGTH: usize = 5;
 pub(crate) const MAX_HOST_PORT_LENGTH: usize = MAX_HOST_LENGTH + 1 + MAX_PORT_LENGTH;
 const _: () = assert!(MAX_HOST_PORT_LENGTH == 255);
 
 pub type HostPort = NonEmptyInlineString<MAX_HOST_PORT_LENGTH>;
 
-pub(crate) const MAX_TOKEN_LENGTH: usize = 100;
+const MAX_TOKEN_LENGTH: usize = 100;
 pub type Token = NonEmptyInlineString<MAX_TOKEN_LENGTH>;
 
 pub(crate) const MAX_ID_LENGTH: usize = 100;
@@ -113,3 +109,7 @@ pub mod io;
 
 #[cfg(test)]
 mod test_helpers;
+
+pub mod prelude {
+    pub use super::Completion::{self, *};
+}

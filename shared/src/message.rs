@@ -12,7 +12,11 @@ pub struct Message {
 }
 
 impl Message {
-    pub const BYTESIZE: usize = size_of::<u8>() + size_of::<u128>() + MAX_TEXT_LEN;
+    pub const BYTESIZE: usize = {
+        let size = size_of::<u8>() + size_of::<u128>() + MAX_TEXT_LEN;
+        assert!(size == 272);
+        size
+    };
 
     pub fn new(string: NonEmptyInlineString<MAX_TEXT_LEN>) -> Self {
         let timestamp = SystemTime::now()
@@ -50,17 +54,7 @@ impl Message {
 
         buf
     }
-}
 
-const _: () = assert!(Message::BYTESIZE == 272);
-
-impl core::fmt::Debug for Message {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "Text({:?} at {})", self.text_as_str(), self.timestamp)
-    }
-}
-
-impl Message {
     pub(crate) fn decode(buf: &[u8; Self::BYTESIZE]) -> Result<Self, MessageDecodeError> {
         let len = buf[0];
 
@@ -79,6 +73,12 @@ impl Message {
         let string = NonEmptyInlineString::new(text).unwrap_or_else(|_| unreachable!());
 
         Ok(Self { string, timestamp })
+    }
+}
+
+impl core::fmt::Debug for Message {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "Text({:?} at {})", self.text_as_str(), self.timestamp)
     }
 }
 

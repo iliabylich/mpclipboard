@@ -35,9 +35,9 @@ impl<S, P> Completion<S, P> {
         F: FnOnce(S) -> T,
     {
         match self {
-            Completion::Done(v) => Completion::Done(f(v)),
-            Completion::Failed => Completion::Failed,
-            Completion::Pending(pending) => Completion::Pending(pending),
+            Self::Done(v) => Completion::Done(f(v)),
+            Self::Failed => Completion::Failed,
+            Self::Pending(pending) => Completion::Pending(pending),
         }
     }
 

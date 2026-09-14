@@ -56,7 +56,7 @@ impl Config {
         Self::read(path)
     }
 
-    pub(crate) fn update_request(&self) -> UpgradeRequest {
+    pub(crate) const fn update_request(&self) -> UpgradeRequest {
         UpgradeRequest {
             host: self.url.header(),
             token: self.token,

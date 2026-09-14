@@ -1,8 +1,5 @@
 use crate::{as_poll_fd::AsPollFd, reaper::CanBeReaped};
-use mpclipboard_shared::{
-    Completion::{self, *},
-    ID, REvents, UpgradeResponseWriter, error, trace,
-};
+use mpclipboard_shared::{ID, REvents, UpgradeResponseWriter, error, prelude::*, trace};
 use rustix::event::{PollFd, PollFlags};
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd};
 
@@ -27,7 +24,7 @@ impl PreSink {
         mut self,
         revents: PollFlags,
         now: u64,
-    ) -> Completion<(ID, OwnedFd), PreSink> {
+    ) -> Completion<(ID, OwnedFd), Self> {
         let revents = match REvents::new(revents) {
             Ok(revents) => revents,
             Err(err) => {

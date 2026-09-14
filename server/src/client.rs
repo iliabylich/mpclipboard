@@ -1,7 +1,6 @@
 use crate::as_poll_fd::AsPollFd;
 use mpclipboard_shared::{
-    Completion::{self, *},
-    ID, Message, MessageReader, MessageWriter, REvents, error, trace,
+    ID, Message, MessageReader, MessageWriter, REvents, error, prelude::*, trace,
 };
 use rustix::event::{PollFd, PollFlags};
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd};
@@ -27,10 +26,7 @@ impl Client {
         self.writer.push(message);
     }
 
-    pub(crate) fn on_poll_event(
-        mut self,
-        revents: PollFlags,
-    ) -> Completion<(Message, Client), Client> {
+    pub(crate) fn on_poll_event(mut self, revents: PollFlags) -> Completion<(Message, Self), Self> {
         let revents = match REvents::new(revents) {
             Ok(revents) => revents,
             Err(err) => {

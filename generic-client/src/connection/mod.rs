@@ -10,8 +10,8 @@ use crate::{
     },
 };
 use mpclipboard_shared::{
-    Completion::*, Message, MessageReader, MessageWriter, UpgradeRequestWriter,
-    UpgradeResponseReader, Wants, error,
+    Message, MessageReader, MessageWriter, UpgradeRequestWriter, UpgradeResponseReader, Wants,
+    error, prelude::*,
 };
 use std::os::fd::{AsFd, BorrowedFd, OwnedFd};
 
@@ -36,7 +36,7 @@ enum State {
 #[derive(Debug)]
 enum ActiveState {
     Connecting {
-        started_at: u64,
+        last_activity_at: u64,
     },
     TlsHandshake {
         last_activity_at: u64,
@@ -76,7 +76,7 @@ impl State {
                 state: ActiveState::Connected { .. },
                 ..
             } => Connectivity::Connected,
-            _ => Connectivity::Connecting,
+            Self::Active { .. } => Connectivity::Connecting,
         }
     }
 }
@@ -124,15 +124,13 @@ impl Connection {
                 self.state = State::Active {
                     fd,
                     stream,
-                    state: ActiveState::Connecting { started_at: now },
+                    state: ActiveState::Connecting {
+                        last_activity_at: now,
+                    },
                 };
             }
 
-            Failed => {
-                self.state = State::Disconnected {
-                    disconnected_at: now,
-                };
-            }
+            Failed => self.force_disconnect(now),
         }
     }
 
@@ -150,14 +148,15 @@ impl Connection {
 
             State::Active { state, .. } => {
                 let last_activity_at = match state {
-                    ActiveState::Connecting { started_at } => *started_at,
-                    ActiveState::TlsHandshake { last_activity_at } => *last_activity_at,
-                    ActiveState::WritingUpgradeRequest {
+                    ActiveState::Connecting { last_activity_at }
+                    | ActiveState::TlsHandshake { last_activity_at }
+                    | ActiveState::WritingUpgradeRequest {
+                        last_activity_at, ..
+                    }
+                    | ActiveState::ReadingUpgradeResponse {
                         last_activity_at, ..
                     } => *last_activity_at,
-                    ActiveState::ReadingUpgradeResponse {
-                        last_activity_at, ..
-                    } => *last_activity_at,
+
                     ActiveState::Connected { .. } => return,
                 };
 

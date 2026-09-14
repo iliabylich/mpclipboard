@@ -1,7 +1,4 @@
-use mpclipboard_shared::{
-    Completion::{self, *},
-    error,
-};
+use mpclipboard_shared::{error, prelude::*};
 use rustix::{
     io::Errno,
     net::{AddressFamily, SocketType},

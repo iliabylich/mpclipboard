@@ -1,4 +1,4 @@
-pub struct ArrayWriter<'a> {
+pub(crate) struct ArrayWriter<'a> {
     buf: &'a mut [u8],
     offset: usize,
 }

@@ -2,10 +2,7 @@ use crate::{
     config::Config,
     connection::{actions::connect, maybe_tls_stream::MaybeTlsStream},
 };
-use mpclipboard_shared::{
-    Completion::{self, *},
-    error,
-};
+use mpclipboard_shared::{error, prelude::*};
 use std::os::fd::OwnedFd;
 
 pub fn reconnect(

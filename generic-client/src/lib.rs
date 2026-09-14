@@ -12,6 +12,7 @@
 #![warn(clippy::nursery)]
 #![expect(clippy::large_types_passed_by_value)]
 #![expect(clippy::missing_errors_doc)]
+#![expect(clippy::large_enum_variant)]
 #![doc = include_str!("../README.md")]
 
 pub use connectivity::Connectivity;

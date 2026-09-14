@@ -1,7 +1,6 @@
 use crate::connection::maybe_tls_stream::MaybeTlsStream;
 use mpclipboard_shared::{
-    Completion::{self, *},
-    Message, MessageReader, UpgradeResponseReader, enable_tcp_keep_alive, error, trace,
+    Message, MessageReader, UpgradeResponseReader, enable_tcp_keep_alive, error, prelude::*, trace,
 };
 use std::os::fd::AsFd;
 
@@ -43,7 +42,9 @@ pub fn read_upgrade_response(
     }
 
     let mut buf = [0; Message::BYTESIZE];
-    const _: () = assert!(UpgradeResponseReader::BUFFER_SIZE < Message::BYTESIZE);
+    const {
+        assert!(UpgradeResponseReader::BUFFER_SIZE < Message::BYTESIZE);
+    }
     buf[..UpgradeResponseReader::BUFFER_SIZE].copy_from_slice(&leftover);
     let reader = MessageReader::new(buf, leftover_len);
     Done(reader)

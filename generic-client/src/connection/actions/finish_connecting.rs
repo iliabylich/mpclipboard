@@ -1,8 +1,5 @@
 use core::convert::Infallible;
-use mpclipboard_shared::{
-    Completion::{self, *},
-    error,
-};
+use mpclipboard_shared::{error, prelude::*};
 use std::os::fd::AsFd;
 
 pub fn finish_connecting(fd: impl AsFd) -> Completion<(), Infallible> {

@@ -1,8 +1,5 @@
 use crate::{as_poll_fd::AsPollFd, reaper::CanBeReaped};
-use mpclipboard_shared::{
-    Completion::{self, *},
-    REvents, UpgradeRequest, UpgradeRequestReader, error, trace,
-};
+use mpclipboard_shared::{REvents, UpgradeRequest, UpgradeRequestReader, error, prelude::*, trace};
 use rustix::event::{PollFd, PollFlags};
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd};
 
@@ -13,7 +10,7 @@ pub struct PreSource {
 }
 
 impl PreSource {
-    pub(crate) fn new(fd: OwnedFd, now: u64) -> Self {
+    pub(crate) const fn new(fd: OwnedFd, now: u64) -> Self {
         Self {
             fd,
             reader: UpgradeRequestReader::new(),
@@ -25,7 +22,7 @@ impl PreSource {
         mut self,
         revents: PollFlags,
         now: u64,
-    ) -> Completion<(UpgradeRequest, OwnedFd), PreSource> {
+    ) -> Completion<(UpgradeRequest, OwnedFd), Self> {
         let revents = match REvents::new(revents) {
             Ok(revents) => revents,
             Err(err) => {

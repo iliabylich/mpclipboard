@@ -1,10 +1,9 @@
-use rustix::io::Errno;
-
 use crate::{
-    Completion::{self, *},
+    Completion::{self, Done, Failed, Pending},
     error,
 };
 use core::num::NonZeroUsize;
+use rustix::io::Errno;
 use std::os::fd::AsFd;
 
 pub fn read(fd: impl AsFd, buf: &mut [u8]) -> Completion<NonZeroUsize, ()> {
