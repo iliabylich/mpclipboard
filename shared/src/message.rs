@@ -19,13 +19,13 @@ impl Message {
         size
     };
 
-    pub fn new(string: NonEmptyInlineString<MAX_TEXT_LEN>) -> Self {
+    pub fn new(string: NonEmptyInlineString<MAX_TEXT_LEN>) -> Result<Self> {
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap_or_else(|_| unreachable!("bug: time goes backwards"))
+            .context("bug: time goes backwards")?
             .as_nanos();
 
-        Self { string, timestamp }
+        Ok(Self { string, timestamp })
     }
 
     #[must_use]
@@ -69,7 +69,7 @@ impl Message {
         let len = NonZeroUsize::new(usize::from(len)).context("malformed message length")?;
         let bytes = bytes.get(..len.get()).context("malformed message length")?;
         let text = core::str::from_utf8(bytes).context("non-utf8 message text")?;
-        let string = NonEmptyInlineString::new(text).unwrap_or_else(|_| unreachable!());
+        let string = NonEmptyInlineString::new(text).context("bug")?;
 
         Ok(Self { string, timestamp })
     }
@@ -88,26 +88,23 @@ mod tests {
     type S = NonEmptyInlineString<MAX_TEXT_LEN>;
 
     #[test]
-    fn test_encode_decode() {
-        let text = Message::new(S::new(&"a".repeat(10)).unwrap());
+    fn test_encode_decode() -> Result<()> {
+        let text = Message::new(S::new(&"a".repeat(10))?)?;
 
-        assert_eq!(Message::decode(&text.encode()).unwrap(), text);
+        assert_eq!(Message::decode(&text.encode())?, text);
+        Ok(())
     }
 
     #[test]
     fn test_decode_invalid() {
         assert_eq!(
-            Message::decode(&[0; Message::BYTESIZE])
-                .unwrap_err()
-                .to_string(),
-            "malformed message length"
+            Message::decode(&[0; Message::BYTESIZE]).map_err(|err| err.to_string()),
+            Err("malformed message length".to_string())
         );
 
         assert_eq!(
-            Message::decode(&[b'\xC8'; Message::BYTESIZE])
-                .unwrap_err()
-                .to_string(),
-            "non-utf8 message text"
+            Message::decode(&[b'\xC8'; Message::BYTESIZE]).map_err(|err| err.to_string()),
+            Err("non-utf8 message text".to_string())
         );
     }
 }

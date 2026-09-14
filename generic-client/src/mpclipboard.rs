@@ -1,4 +1,6 @@
-use crate::{Output, config::Config, connection::Connection, logger::Logger, tls::TLS};
+use crate::{
+    Connectivity, Output, config::Config, connection::Connection, logger::Logger, tls::TLS,
+};
 use anyhow::{Context, Result, bail};
 use mpclipboard_shared::{EventLoop, EventLoopResult, Message, NonEmptyInlineString, Store};
 use std::{
@@ -11,6 +13,7 @@ pub struct MPClipboard {
     now: u64,
     conn: Connection,
     store: Store,
+    config: Config,
 }
 
 impl MPClipboard {
@@ -35,7 +38,7 @@ impl MPClipboard {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_else(|_| unreachable!("time goes backwards"))
             .as_secs();
-        let conn = Connection::new(config);
+        let conn = Connection::new();
 
         event_loop
             .sync(conn.wants())
@@ -46,6 +49,7 @@ impl MPClipboard {
             now,
             conn,
             store: Store::empty(),
+            config,
         })
     }
 
@@ -80,7 +84,7 @@ impl MPClipboard {
             .drain_events_without_waiting()
             .context("failed to drain event loop")?;
 
-        let prev_connectivity = self.conn.connectivity();
+        let prev_connectivity = Connectivity::new(&self.conn);
         let message = if let Some(message) = self.drain(&polled)
             && self.store.add(message)
         {
@@ -88,7 +92,7 @@ impl MPClipboard {
         } else {
             None
         };
-        let next_connectivity = self.conn.connectivity();
+        let next_connectivity = Connectivity::new(&self.conn);
 
         self.event_loop
             .sync(self.conn.wants())
@@ -114,7 +118,7 @@ impl MPClipboard {
         if let Some(time) = polled.time {
             self.now = time;
             log::trace!("tick {}", self.now);
-            self.conn.tick(self.now);
+            self.conn.tick(self.now, &self.config);
         }
 
         if let Some((readable, writable, has_error)) = polled.fd {
@@ -124,11 +128,11 @@ impl MPClipboard {
             }
 
             if readable && !self.conn.is_disconnected() {
-                out = self.conn.on_readable(self.now);
+                out = self.conn.on_readable(self.now, &self.config);
             }
 
             if writable && !self.conn.is_disconnected() {
-                self.conn.on_writable(self.now);
+                self.conn.on_writable(self.now, &self.config);
             }
         }
 
@@ -142,7 +146,7 @@ impl MPClipboard {
         }
 
         let text = NonEmptyInlineString::truncate(text)?;
-        let message = Message::new(text);
+        let message = Message::new(text)?;
 
         if !self.store.add(message) {
             return Ok(false);

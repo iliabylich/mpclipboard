@@ -17,8 +17,14 @@ pub fn write_message(
         return Done(());
     };
 
-    stream.write_bytes(fd, buf).and_then(|len| {
-        writer.written(len);
-        Done(())
-    })
+    let len = match stream.write_bytes(fd, buf) {
+        Done(len) => len,
+        Failed(err) => return Failed(err),
+        Pending(()) => return Pending(()),
+    };
+
+    match writer.written(len) {
+        Ok(()) => Done(()),
+        Err(err) => Failed(err),
+    }
 }

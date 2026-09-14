@@ -1,5 +1,6 @@
 use super::{Diff, EventLoopResult, FdState};
 use crate::Wants;
+use anyhow::{Context, Result, bail};
 use core::{ptr, time::Duration};
 use rustix::event::kqueue as kq;
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd, RawFd};
@@ -15,12 +16,12 @@ impl EventLoop {
     const FD_ID: usize = 2;
     const INITIAL_TIMER_ID: isize = 3;
 
-    pub fn new() -> std::io::Result<Self> {
+    pub fn new() -> Result<Self> {
         let kqueue_fd = kq::kqueue()?;
 
         let this = Self {
             kqueue_fd,
-            time: Self::now(),
+            time: Self::now()?,
             fd: FdState::new(),
         };
         this.add_timer()?;
@@ -28,7 +29,7 @@ impl EventLoop {
         Ok(this)
     }
 
-    pub fn sync(&mut self, wants: Option<(BorrowedFd<'_>, Wants)>) -> std::io::Result<()> {
+    pub fn sync(&mut self, wants: Option<(BorrowedFd<'_>, Wants)>) -> Result<()> {
         match self.fd.transition(wants) {
             Diff::Add { fd, wants } => {
                 self.add(fd, wants)?;
@@ -53,7 +54,7 @@ impl EventLoop {
         Ok(())
     }
 
-    pub fn drain_events_without_waiting(&mut self) -> std::io::Result<EventLoopResult> {
+    pub fn drain_events_without_waiting(&mut self) -> Result<EventLoopResult> {
         let mut events = [Self::empty_event(); 4];
         let len = unsafe { kq::kevent(&self.kqueue_fd, &[], &mut events, Some(Duration::ZERO))? };
 
@@ -85,7 +86,7 @@ impl EventLoop {
                     out.fd = Some((readable, writable, has_error));
                 }
                 _ => {
-                    return Err(std::io::Error::other("unknown event"));
+                    bail!("unknown event")
                 }
             }
         }
@@ -104,7 +105,7 @@ impl EventLoop {
         )
     }
 
-    fn add(&self, fd: RawFd, wants: Wants) -> std::io::Result<()> {
+    fn add(&self, fd: RawFd, wants: Wants) -> Result<()> {
         self.update_fd(fd, wants, kq::EventFlags::ADD | kq::EventFlags::ENABLE)
     }
 
@@ -113,20 +114,19 @@ impl EventLoop {
         self.delete_filter(kq::EventFilter::Write(fd));
     }
 
-    fn modify(&self, fd: RawFd, wants: Wants) -> std::io::Result<()> {
+    fn modify(&self, fd: RawFd, wants: Wants) -> Result<()> {
         self.delete(fd);
         self.add(fd, wants)
     }
 
-    fn update_fd(&self, fd: RawFd, wants: Wants, flags: kq::EventFlags) -> std::io::Result<()> {
+    fn update_fd(&self, fd: RawFd, wants: Wants, flags: kq::EventFlags) -> Result<()> {
         let read = Self::event(kq::EventFilter::Read(fd), flags);
         let write = Self::event(kq::EventFilter::Write(fd), flags);
 
-        match (wants.wants_read(), wants.wants_write()) {
-            (true, true) => self.kevent(&[read, write]),
-            (true, false) => self.kevent(&[read]),
-            (false, true) => self.kevent(&[write]),
-            (false, false) => unreachable!("Wants always wants at least one event"),
+        match wants {
+            Wants::ReadWrite => self.kevent(&[read, write]),
+            Wants::Read => self.kevent(&[read]),
+            Wants::Write => self.kevent(&[write]),
         }
     }
 
@@ -139,13 +139,13 @@ impl EventLoop {
         kq::Event::new(filter, flags, Self::FD_ID as *mut _)
     }
 
-    fn kevent(&self, events: &[kq::Event]) -> std::io::Result<()> {
+    fn kevent(&self, events: &[kq::Event]) -> Result<()> {
         let mut out: [kq::Event; 0] = [];
         unsafe { kq::kevent(&self.kqueue_fd, events, &mut out, Some(Duration::ZERO))? };
         Ok(())
     }
 
-    fn add_timer(&self) -> std::io::Result<()> {
+    fn add_timer(&self) -> Result<()> {
         let periodic = kq::Event::new(
             kq::EventFilter::Timer {
                 ident: Self::TIMER_ID,
@@ -165,21 +165,18 @@ impl EventLoop {
         self.kevent(&[periodic, initial])
     }
 
-    fn drain_timer(&mut self, event: &kq::Event) -> std::io::Result<u64> {
+    fn drain_timer(&mut self, event: &kq::Event) -> Result<u64> {
         let count = u64::try_from(event.data()).unwrap_or(1).max(1);
-        self.time = self
-            .time
-            .checked_add(count)
-            .ok_or_else(|| std::io::Error::other("timer overflow"))?;
+        self.time = self.time.checked_add(count).context("timer overflow")?;
 
         Ok(self.time)
     }
 
-    fn now() -> u64 {
-        std::time::SystemTime::now()
+    fn now() -> Result<u64> {
+        Ok(std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_else(|_| unreachable!("time goes backwards"))
-            .as_secs()
+            .context("time goes backwards")?
+            .as_secs())
     }
 }
 

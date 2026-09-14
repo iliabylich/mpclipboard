@@ -37,7 +37,7 @@ impl PreSource {
 
             return match self.read(now) {
                 Done(req) => Done((req, self.fd)),
-                Failed(err) => Failed(err),
+                Failed(err) => Failed(err.context(format!("read() failed for {self}"))),
                 Pending(()) => Pending(self),
             };
         }
@@ -51,13 +51,11 @@ impl PreSource {
         let mut buf = [0; UpgradeRequestReader::BUFFER_SIZE];
         let len = match mpclipboard_shared::io::read(&self.fd, &mut buf) {
             Done(len) => len,
-            Failed(err) => return Failed(err.context(format!("read() failed for {self}"))),
+            Failed(err) => return Failed(err),
             Pending(()) => return Pending(()),
         };
 
-        self.reader
-            .received(buf, len)
-            .map_err(|err| err.context(format!("{self} failed to call UpgradeRequestReader")))
+        self.reader.received(buf, len)
     }
 }
 

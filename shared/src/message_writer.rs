@@ -1,4 +1,5 @@
 use crate::{Wants, message::Message};
+use anyhow::{Context, Result, bail};
 use core::{cmp::Ordering, num::NonZeroUsize};
 
 #[must_use]
@@ -26,12 +27,12 @@ impl MessageWriter {
         }
     }
 
-    pub fn written(&mut self, n: NonZeroUsize) {
+    pub fn written(&mut self, n: NonZeroUsize) -> Result<()> {
         match self {
-            Self::Empty => unreachable!("empty buffer never wants to write"),
+            Self::Empty => bail!("empty buffer never wants to write"),
 
             Self::Some { current, next } => {
-                if current.written(n) {
+                if current.written(n)? {
                     if let Some(next) = core::mem::take(next) {
                         *current = next;
                     } else {
@@ -40,6 +41,8 @@ impl MessageWriter {
                 }
             }
         }
+
+        Ok(())
     }
 
     pub fn push(&mut self, data: &Message) {
@@ -92,20 +95,20 @@ impl<const N: usize> Writebuf<N> {
         &self.buf[self.pos..]
     }
 
-    pub(crate) fn written(&mut self, n: NonZeroUsize) -> bool {
+    pub(crate) fn written(&mut self, n: NonZeroUsize) -> Result<bool> {
         self.pos = self
             .pos
             .checked_add(n.get())
-            .unwrap_or_else(|| unreachable!("overflow: n is too large"));
+            .context("overflow: n is too large")?;
 
         match (self.pos).cmp(&N) {
-            Ordering::Less => false,
+            Ordering::Less => Ok(false),
             Ordering::Equal => {
                 self.pos = 0;
                 self.buf = [0; _];
-                true
+                Ok(true)
             }
-            Ordering::Greater => unreachable!("buffer overflow"),
+            Ordering::Greater => bail!("buffer overflow"),
         }
     }
 }
@@ -122,36 +125,44 @@ impl<const N: usize> core::fmt::Debug for Writebuf<N> {
 #[cfg(test)]
 mod tests {
     use super::MessageWriter;
-    use crate::{Message, NonEmptyInlineString};
-    use core::num::NonZeroUsize;
+    use crate::{Message, NonEmptyInlineString, test_helpers::non_zero_usize};
+    use anyhow::{Context, Result};
 
-    #[test]
-    fn test_single() {
-        let mut writer = MessageWriter::new();
-        assert_eq!(writer.remainder(), None);
-
-        let msg = Message::new(NonEmptyInlineString::new("FOO").unwrap());
-        writer.push(&msg);
-        assert_eq!(writer.remainder().unwrap(), &msg.encode());
-        writer.written(NonZeroUsize::new(100).unwrap());
-        assert_eq!(writer.remainder().unwrap(), &msg.encode()[100..]);
-        writer.written(NonZeroUsize::new(Message::BYTESIZE - 100).unwrap());
-        assert_eq!(writer.remainder(), None);
+    fn rem(writer: &MessageWriter) -> Result<&[u8]> {
+        writer.remainder().context("empty remainder")
     }
 
     #[test]
-    fn test_fixed_size_queue_like_with_tail_replacement() {
+    fn test_single() -> Result<()> {
+        let mut writer = MessageWriter::new();
+        assert_eq!(writer.remainder(), None);
+
+        let msg = Message::new(NonEmptyInlineString::new("FOO")?)?;
+        writer.push(&msg);
+        assert_eq!(rem(&mut writer)?, &msg.encode());
+        writer.written(non_zero_usize(100)?)?;
+        assert_eq!(rem(&mut writer)?, &msg.encode()[100..]);
+        writer.written(non_zero_usize(Message::BYTESIZE - 100)?)?;
+        assert_eq!(writer.remainder(), None);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_fixed_size_queue_like_with_tail_replacement() -> Result<()> {
         let mut writer = MessageWriter::new();
 
-        let msg1 = Message::new(NonEmptyInlineString::new("msg1").unwrap());
+        let msg1 = Message::new(NonEmptyInlineString::new("msg1")?)?;
         writer.push(&msg1);
-        let msg2 = Message::new(NonEmptyInlineString::new("msg2").unwrap());
+        let msg2 = Message::new(NonEmptyInlineString::new("msg2")?)?;
         writer.push(&msg2);
-        let msg3 = Message::new(NonEmptyInlineString::new("msg3").unwrap());
+        let msg3 = Message::new(NonEmptyInlineString::new("msg3")?)?;
         writer.push(&msg3);
 
-        assert_eq!(writer.remainder().unwrap(), &msg1.encode());
-        writer.written(NonZeroUsize::new(Message::BYTESIZE).unwrap());
-        assert_eq!(writer.remainder().unwrap(), &msg3.encode());
+        assert_eq!(rem(&mut writer)?, &msg1.encode());
+        writer.written(non_zero_usize(Message::BYTESIZE)?)?;
+        assert_eq!(rem(&mut writer)?, &msg3.encode());
+
+        Ok(())
     }
 }

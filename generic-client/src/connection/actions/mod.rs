@@ -18,3 +18,6 @@ pub use read_message::read_message;
 
 pub mod write_message;
 pub use write_message::write_message;
+
+pub mod finish_tls_handshake;
+pub use finish_tls_handshake::finish_tls_handshake;

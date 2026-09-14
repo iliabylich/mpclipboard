@@ -1,5 +1,5 @@
 use crate::{prelude::*, upgrade_response::UpgradeResponse};
-use anyhow::anyhow;
+use anyhow::{Context, Result, anyhow};
 use core::num::NonZeroUsize;
 
 #[must_use]
@@ -13,18 +13,17 @@ impl UpgradeResponseWriter {
         Self { pos: 0 }
     }
 
-    #[must_use]
-    pub fn remainder(&self) -> &[u8] {
+    pub fn remainder(&self) -> Result<&[u8]> {
         UpgradeResponse::BYTES
             .get(self.pos..)
-            .unwrap_or_else(|| unreachable!("malformed state"))
+            .context("malformed state")
     }
 
     pub fn written(&mut self, len: NonZeroUsize) -> Completion<(), anyhow::Error, ()> {
-        self.pos = self
-            .pos
-            .checked_add(len.get())
-            .unwrap_or_else(|| unreachable!("length overflow"));
+        let Some(nextpos) = self.pos.checked_add(len.get()) else {
+            return Failed(anyhow!("length overflow"));
+        };
+        self.pos = nextpos;
 
         match self.pos.cmp(&UpgradeResponse::BYTES.len()) {
             core::cmp::Ordering::Less => Pending(()),
@@ -43,22 +42,27 @@ impl Default for UpgradeResponseWriter {
 #[cfg(test)]
 mod tests {
     use super::UpgradeResponseWriter;
-    use crate::upgrade_response::UpgradeResponse;
-    use core::num::NonZeroUsize;
+    use crate::{test_helpers::non_zero_usize, upgrade_response::UpgradeResponse};
+    use anyhow::Result;
 
     #[test]
-    fn test_write() {
+    fn test_write() -> Result<()> {
         let mut w = UpgradeResponseWriter::new();
-        assert_eq!(w.remainder(), UpgradeResponse::BYTES);
+        assert_eq!(w.remainder()?, UpgradeResponse::BYTES);
 
-        w.written(NonZeroUsize::new(50).unwrap()).unwrap_pending();
-        assert_eq!(w.remainder(), &UpgradeResponse::BYTES[50..]);
+        w.written(non_zero_usize(50)?)
+            .expect_pending("only 50 bytes have been written");
+        assert_eq!(w.remainder()?, &UpgradeResponse::BYTES[50..]);
 
-        w.written(NonZeroUsize::new(UpgradeResponse::BYTES.len() - 50).unwrap())
-            .unwrap();
-        assert_eq!(w.remainder(), b"");
+        w.written(non_zero_usize(UpgradeResponse::BYTES.len() - 50)?)
+            .expect_done("full response have been written");
+        assert_eq!(w.remainder()?, b"");
 
-        let err = w.written(NonZeroUsize::new(1).unwrap()).unwrap_err();
+        let err = w
+            .written(non_zero_usize(1)?)
+            .expect_failed("trying to go pas the buffer end");
         assert_eq!(err.to_string(), "buffer overflow");
+
+        Ok(())
     }
 }

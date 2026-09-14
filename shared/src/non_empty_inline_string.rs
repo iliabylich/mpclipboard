@@ -16,20 +16,20 @@ impl<const MAXLEN: usize> NonEmptyInlineString<MAXLEN> {
         let src = s
             .as_bytes()
             .get(..minlen)
-            .unwrap_or_else(|| unreachable!("minlen is capped by strings's length"));
+            .context("minlen is capped by strings's length")?;
         let src = match core::str::from_utf8(src) {
             Ok(s) => s.as_bytes(),
             Err(err) => s
                 .as_bytes()
                 .get(..err.valid_up_to())
-                .unwrap_or_else(|| unreachable!("str must be valid up to len")),
+                .context("str must be valid up to len")?,
         };
 
         let len = u8::try_from(src.len()).context("MAXLEN param is too long")?;
         let len = NonZeroU8::new(len).context("string is empty")?;
         let dst = bytes
             .get_mut(..usize::from(len.get()))
-            .unwrap_or_else(|| unreachable!("len <= MAXLEN"));
+            .context("len <= MAXLEN")?;
         dst.copy_from_slice(src);
         Ok(Self { len, bytes })
     }
@@ -48,9 +48,10 @@ impl<const MAXLEN: usize> NonEmptyInlineString<MAXLEN> {
 
     #[must_use]
     pub fn as_bytes(&self) -> &[u8] {
-        self.bytes
-            .get(..usize::from(self.len.get()))
-            .unwrap_or_else(|| unreachable!("NonEmptyInlineString always has valid len"))
+        let Some(bytes) = self.bytes.get(..usize::from(self.len.get())) else {
+            unreachable!("NonEmptyInlineString always has valid len");
+        };
+        bytes
     }
 
     #[must_use]
@@ -60,8 +61,10 @@ impl<const MAXLEN: usize> NonEmptyInlineString<MAXLEN> {
 
     #[must_use]
     pub fn as_str(&self) -> &str {
-        core::str::from_utf8(self.as_bytes())
-            .unwrap_or_else(|_| unreachable!("NonEmptyInlineString is always a UTF-8 valid string"))
+        let Ok(s) = core::str::from_utf8(self.as_bytes()) else {
+            unreachable!("NonEmptyInlineString is always a UTF-8 valid string");
+        };
+        s
     }
 
     #[must_use]
@@ -90,7 +93,7 @@ mod tess {
     fn test_short() {
         assert_eq!(
             NonEmptyInlineString::<5>::truncate("abcde")
-                .unwrap()
+                .expect("must be valid")
                 .as_str(),
             "abcde"
         );
@@ -100,7 +103,7 @@ mod tess {
     fn test_long() {
         assert_eq!(
             NonEmptyInlineString::<5>::truncate("abcdef")
-                .unwrap()
+                .expect("must be valid")
                 .as_str(),
             "abcde"
         );
@@ -108,7 +111,7 @@ mod tess {
         assert_eq!('Ⴀ'.len_utf8(), 3);
         assert_eq!(
             NonEmptyInlineString::<10>::truncate("ႠႠႠႠ")
-                .unwrap()
+                .expect("must be valid")
                 .as_str(),
             "ႠႠႠ"
         );
@@ -116,7 +119,7 @@ mod tess {
         assert_eq!('🦴'.len_utf8(), 4);
         assert_eq!(
             NonEmptyInlineString::<10>::truncate("🦴🦴🦴")
-                .unwrap()
+                .expect("must be valid")
                 .as_str(),
             "🦴🦴"
         );
@@ -126,7 +129,7 @@ mod tess {
     fn test_err() {
         assert_eq!(
             NonEmptyInlineString::<100>::truncate("")
-                .unwrap_err()
+                .expect_err("empty")
                 .to_string(),
             "string is empty"
         );

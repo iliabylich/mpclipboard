@@ -33,8 +33,8 @@ fn read_toml<'a>(path: &[u8], buffer: &'a mut [u8]) -> Result<Toml<'a>> {
     let len = rustix::io::read(&fd, &mut *buffer).context("failed to read() config")?;
     let bytes = buffer
         .get(..len)
-        .unwrap_or_else(|| unreachable!("read() returned malformed data"));
-    let text = str::from_utf8(bytes).context("config must be valid utf-8")?;
+        .context("read() returned malformed data")?;
+    let text = core::str::from_utf8(bytes).context("config must be valid utf-8")?;
 
     boml::parse(text).map_err(|err| anyhow!("failed to parse TOML config: {err:}"))
 }

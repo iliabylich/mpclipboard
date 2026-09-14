@@ -37,7 +37,7 @@ impl Client {
             log::trace!("{self} is writable");
             match self.write() {
                 Done(()) | Pending(()) => {}
-                Failed(err) => return Failed(err),
+                Failed(err) => return Failed(err.context(format!("write() failed for {self}"))),
             }
         }
 
@@ -46,7 +46,7 @@ impl Client {
             match self.read() {
                 Done(message) => return Done((message, self)),
                 Pending(()) => {}
-                Failed(err) => return Failed(err),
+                Failed(err) => return Failed(err.context(format!("read() failed for {self}"))),
             }
         }
 
@@ -57,13 +57,14 @@ impl Client {
         let Some(buf) = self.writer.remainder() else {
             unreachable!("can't write on empty writer")
         };
-        match mpclipboard_shared::io::write(&self.fd, buf) {
-            Done(len) => {
-                self.writer.written(len);
-                Done(())
-            }
-            Pending(()) => Pending(()),
-            Failed(err) => Failed(err.context(format!("write() failed for {self}"))),
+        let len = match mpclipboard_shared::io::write(&self.fd, buf) {
+            Done(len) => len,
+            Pending(()) => return Pending(()),
+            Failed(err) => return Failed(err),
+        };
+        match self.writer.written(len) {
+            Ok(()) => Done(()),
+            Err(err) => Failed(err),
         }
     }
 
@@ -72,7 +73,7 @@ impl Client {
         let len = match mpclipboard_shared::io::read(&self.fd, &mut buf) {
             Done(len) => len,
             Pending(()) => return Pending(()),
-            Failed(err) => return Failed(err.context(format!("read() failed for {self}"))),
+            Failed(err) => return Failed(err),
         };
 
         self.reader.received(buf, len)

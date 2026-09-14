@@ -31,16 +31,15 @@ impl Url {
             "https" => true,
             _ => bail!("unknown URL scheme"),
         };
-        let host = NonEmptyInlineString::<MAX_HOST_LENGTH>::new(host).context("invalid host")?;
+        let host = NonEmptyInlineString::new(host).context("invalid host")?;
         let port = port.parse::<u16>().context("invalid port")?;
 
         let mut buf = [0; MAX_HOST_PORT_LENGTH];
         let mut writer = ArrayWriter::new(&mut buf);
-        write!(writer, "{}:{port}", host.as_str()).unwrap_or_else(|_| unreachable!());
-        let header = core::str::from_utf8(writer.as_bytes()).unwrap_or_else(|_| {
-            unreachable!("concatenation of valid utf8 strings must be a valid utf8 string")
-        });
-        let header = NonEmptyInlineString::new(header).unwrap_or_else(|_| unreachable!());
+        write!(writer, "{}:{port}", host.as_str()).context("malformed state")?;
+        let header = core::str::from_utf8(writer.as_bytes())
+            .context("concatenation of valid utf8 strings must be a valid utf8 string")?;
+        let header = NonEmptyInlineString::new(header).context("malformed state")?;
 
         Ok(Self {
             tls,
@@ -80,20 +79,23 @@ impl Url {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::Url;
+    use anyhow::Result;
 
     #[test]
-    fn test_parse() {
-        let url = Url::parse("http://localhost:3000").unwrap();
+    fn test_parse() -> Result<()> {
+        let url = Url::parse("http://localhost:3000")?;
         assert!(!url.tls);
         assert_eq!(url.host.as_str(), "localhost");
         assert_eq!(url.port, 3000);
         assert_eq!(url.header.as_str(), "localhost:3000");
 
-        let url = Url::parse("https://google.com:443").unwrap();
+        let url = Url::parse("https://google.com:443")?;
         assert!(url.tls);
         assert_eq!(url.host.as_str(), "google.com");
         assert_eq!(url.port, 443);
         assert_eq!(url.header.as_str(), "google.com:443");
+
+        Ok(())
     }
 }

@@ -2,7 +2,7 @@ use crate::{
     CONNECTION_UPGRADE_HEADER, HOST_PREFIX, ID_PREFIX, START_LINE, TOKEN_PREFIX,
     UPGRADE_MPCLIPBOARD_RAW_HEADER, UpgradeRequest, prelude::*,
 };
-use anyhow::anyhow;
+use anyhow::{Context, Result, anyhow};
 use core::num::NonZeroUsize;
 
 #[must_use]
@@ -14,63 +14,61 @@ pub struct UpgradeRequestWriter {
 }
 
 impl UpgradeRequestWriter {
-    pub fn new(req: UpgradeRequest) -> Self {
+    pub fn new(req: UpgradeRequest) -> Result<Self> {
         let mut buf = [0; 1_024];
         let mut pos = 0;
 
         let mut append = |pos: &mut usize, s: &str| {
             let start = *pos;
-            let end = start
-                .checked_add(s.len())
-                .unwrap_or_else(|| unreachable!("length overflow"));
+            let end = start.checked_add(s.len()).context("length overflow")?;
             buf.get_mut(start..end)
-                .unwrap_or_else(|| unreachable!("must fit into 1kb"))
+                .context("must fit into 1kb")?
                 .copy_from_slice(s.as_bytes());
             *pos = end;
+            Ok::<(), anyhow::Error>(())
         };
 
-        append(&mut pos, START_LINE);
-        append(&mut pos, "\r\n");
+        append(&mut pos, START_LINE)?;
+        append(&mut pos, "\r\n")?;
 
-        append(&mut pos, HOST_PREFIX);
-        append(&mut pos, req.host.as_str());
-        append(&mut pos, "\r\n");
+        append(&mut pos, HOST_PREFIX)?;
+        append(&mut pos, req.host.as_str())?;
+        append(&mut pos, "\r\n")?;
 
-        append(&mut pos, TOKEN_PREFIX);
-        append(&mut pos, req.token.as_str());
-        append(&mut pos, "\r\n");
+        append(&mut pos, TOKEN_PREFIX)?;
+        append(&mut pos, req.token.as_str())?;
+        append(&mut pos, "\r\n")?;
 
-        append(&mut pos, ID_PREFIX);
-        append(&mut pos, req.id.as_str());
-        append(&mut pos, "\r\n");
+        append(&mut pos, ID_PREFIX)?;
+        append(&mut pos, req.id.as_str())?;
+        append(&mut pos, "\r\n")?;
 
-        append(&mut pos, CONNECTION_UPGRADE_HEADER);
-        append(&mut pos, "\r\n");
+        append(&mut pos, CONNECTION_UPGRADE_HEADER)?;
+        append(&mut pos, "\r\n")?;
 
-        append(&mut pos, UPGRADE_MPCLIPBOARD_RAW_HEADER);
-        append(&mut pos, "\r\n");
+        append(&mut pos, UPGRADE_MPCLIPBOARD_RAW_HEADER)?;
+        append(&mut pos, "\r\n")?;
 
-        append(&mut pos, "\r\n");
+        append(&mut pos, "\r\n")?;
 
-        Self {
+        Ok(Self {
             buf,
             len: pos,
             pos: 0,
-        }
+        })
     }
 
-    #[must_use]
-    pub fn remainder(&self) -> &[u8] {
+    pub fn remainder(&self) -> Result<&[u8]> {
         self.buf
             .get(self.pos..self.len)
-            .unwrap_or_else(|| unreachable!("malformed internal state"))
+            .context("malformed internal state")
     }
 
     pub fn written(&mut self, n: NonZeroUsize) -> Completion<(), anyhow::Error, ()> {
-        self.pos = self
-            .pos
-            .checked_add(n.get())
-            .unwrap_or_else(|| unreachable!("pos overflow"));
+        let Some(nextpos) = self.pos.checked_add(n.get()) else {
+            return Failed(anyhow!("pos overflow"));
+        };
+        self.pos = nextpos;
 
         match self.pos.cmp(&self.len) {
             core::cmp::Ordering::Less => Pending(()),
@@ -83,48 +81,54 @@ impl UpgradeRequestWriter {
 #[cfg(test)]
 mod tests {
     use super::UpgradeRequestWriter;
-    use crate::{HostPort, ID, Token, UpgradeRequest};
-    use core::num::NonZeroUsize;
+    use crate::{HostPort, ID, Token, UpgradeRequest, test_helpers::non_zero_usize};
+    use anyhow::Result;
 
-    fn req() -> UpgradeRequest {
-        UpgradeRequest {
-            host: HostPort::new("localhost:3000").unwrap(),
-            token: Token::new("sekret").unwrap(),
-            id: ID::new("test-client").unwrap(),
-        }
+    fn req() -> Result<UpgradeRequest> {
+        Ok(UpgradeRequest {
+            host: HostPort::new("localhost:3000")?,
+            token: Token::new("sekret")?,
+            id: ID::new("test-client")?,
+        })
     }
 
     #[test]
-    fn test_encode() {
-        let writer = UpgradeRequestWriter::new(req());
+    fn test_encode() -> Result<()> {
+        let writer = UpgradeRequestWriter::new(req()?)?;
         assert_eq!(
             &writer.buf[..writer.len],
             b"GET / HTTP/1.1\r\nHost: localhost:3000\r\nToken: sekret\r\nID: test-client\r\nConnection: Upgrade\r\nUpgrade: mpclipboard-raw\r\n\r\n"
         );
+
+        Ok(())
     }
 
     #[test]
-    fn test_write() {
-        let mut writer = UpgradeRequestWriter::new(req());
+    fn test_write() -> Result<()> {
+        let mut writer = UpgradeRequestWriter::new(req()?)?;
         assert_eq!(
-            core::str::from_utf8(writer.remainder()).unwrap(),
+            core::str::from_utf8(writer.remainder()?)?,
             "GET / HTTP/1.1\r\nHost: localhost:3000\r\nToken: sekret\r\nID: test-client\r\nConnection: Upgrade\r\nUpgrade: mpclipboard-raw\r\n\r\n"
         );
 
         writer
-            .written(NonZeroUsize::new(100).unwrap())
-            .unwrap_pending();
+            .written(non_zero_usize(100)?)
+            .expect_pending("we've written only 100 bytes");
         assert_eq!(
-            core::str::from_utf8(writer.remainder()).unwrap(),
+            core::str::from_utf8(writer.remainder()?)?,
             "mpclipboard-raw\r\n\r\n"
         );
 
         writer
-            .written(NonZeroUsize::new(writer.remainder().len()).unwrap())
-            .unwrap();
-        assert_eq!(writer.remainder(), b"");
+            .written(non_zero_usize(writer.remainder()?.len())?)
+            .expect_done("we've written a full request");
+        assert_eq!(writer.remainder()?, b"");
 
-        let err = writer.written(NonZeroUsize::new(1).unwrap()).unwrap_err();
+        let err = writer
+            .written(non_zero_usize(1)?)
+            .expect_failed("trying to go past buffer end");
         assert_eq!(err.to_string(), "buffer overflow");
+
+        Ok(())
     }
 }

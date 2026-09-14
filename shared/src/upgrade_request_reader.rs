@@ -3,7 +3,7 @@ use crate::{
     TOKEN_PREFIX, Token, UPGRADE_MPCLIPBOARD_RAW_HEADER, UpgradeRequest, prelude::*,
     strip_prefix_ignore_ascii_case,
 };
-use anyhow::anyhow;
+use anyhow::{Context, Result, anyhow};
 use core::num::NonZeroUsize;
 
 #[expect(clippy::struct_excessive_bools)]
@@ -55,18 +55,21 @@ impl UpgradeRequestReader {
             } else {
                 return Failed(anyhow!("buffer overflow"));
             }
-            self.pos = self
-                .pos
-                .checked_add(1)
-                .unwrap_or_else(|| unreachable!("length overflow"));
+            let Some(nextpos) = self.pos.checked_add(1) else {
+                return Failed(anyhow!("length overflow"));
+            };
+            self.pos = nextpos;
 
             let Some(filled) = self.buf.get(..self.pos) else {
                 return Failed(anyhow!("buffer overflow"));
             };
 
-            let Some(line) = HttpLine::parse(filled) else {
-                continue;
+            let line = match HttpLine::parse(filled) {
+                Ok(Some(line)) => line,
+                Ok(None) => continue,
+                Err(err) => return Failed(err),
             };
+
             match line {
                 HttpLine::StartLine => self.seen_start_line = true,
                 HttpLine::HostPort(host) => self.host = Some(host),
@@ -77,19 +80,19 @@ impl UpgradeRequestReader {
                 HttpLine::EndOfRequest => {
                     self.seen_eos = true;
 
-                    let start = pos.checked_add(1).unwrap_or_else(|| {
-                        unreachable!("buffer size is constant so it can't overflow")
-                    });
-                    let leftover = buf
-                        .get(start..)
-                        .unwrap_or_else(|| unreachable!("worst case is leftover is empty"));
+                    let Some(start) = pos.checked_add(1) else {
+                        return Failed(anyhow!("buffer size is constant so it can't overflow"));
+                    };
+                    let Some(leftover) = buf.get(start..) else {
+                        return Failed(anyhow!("worst case is leftover is empty"));
+                    };
+
                     self.buf = [0; _];
-                    self.buf
-                        .get_mut(..leftover.len())
-                        .unwrap_or_else(|| {
-                            unreachable!("leftover can't be longer than internal buffer")
-                        })
-                        .copy_from_slice(leftover);
+                    let Some(leftover_spot) = self.buf.get_mut(..leftover.len()) else {
+                        return Failed(anyhow!("leftover can't be longer than internal buffer"));
+                    };
+                    leftover_spot.copy_from_slice(leftover);
+
                     self.pos = leftover.len();
                     break;
                 }
@@ -147,39 +150,34 @@ enum HttpLine {
 }
 
 impl HttpLine {
-    fn parse(buf: &[u8]) -> Option<Self> {
+    fn parse(buf: &[u8]) -> Result<Option<Self>> {
         if !buf.ends_with(b"\r\n") {
-            return None;
+            return Ok(None);
         }
 
-        let end = buf
-            .len()
-            .checked_sub(2)
-            .unwrap_or_else(|| unreachable!("len is >= 2"));
-        let buf = buf
-            .get(..end)
-            .unwrap_or_else(|| unreachable!("buf contains at least two bytes"));
-        let line = core::str::from_utf8(buf).ok()?;
+        let end = buf.len().checked_sub(2).context("len is >= 2")?;
+        let buf = buf.get(..end).context("buf contains at least two bytes")?;
+        let line = core::str::from_utf8(buf).context("non-utf8 header")?;
 
         if line == START_LINE {
-            Some(Self::StartLine)
+            Ok(Some(Self::StartLine))
         } else if let Some(host) = strip_prefix_ignore_ascii_case(line, HOST_PREFIX) {
-            let host = HostPort::new(host).ok()?;
-            Some(Self::HostPort(host))
+            let host = HostPort::new(host).context("malformed host")?;
+            Ok(Some(Self::HostPort(host)))
         } else if let Some(value) = strip_prefix_ignore_ascii_case(line, TOKEN_PREFIX) {
-            let token = Token::new(value).ok()?;
-            Some(Self::Token(token))
+            let token = Token::new(value).context("malformed token")?;
+            Ok(Some(Self::Token(token)))
         } else if let Some(value) = strip_prefix_ignore_ascii_case(line, ID_PREFIX) {
-            let id = ID::new(value).ok()?;
-            Some(Self::ID(id))
+            let id = ID::new(value).ok().context("malformed id")?;
+            Ok(Some(Self::ID(id)))
         } else if strip_prefix_ignore_ascii_case(line, CONNECTION_UPGRADE_HEADER) == Some("") {
-            Some(Self::ConnectionUpgrade)
+            Ok(Some(Self::ConnectionUpgrade))
         } else if strip_prefix_ignore_ascii_case(line, UPGRADE_MPCLIPBOARD_RAW_HEADER) == Some("") {
-            Some(Self::UpgradeMPClipboardRaw)
+            Ok(Some(Self::UpgradeMPClipboardRaw))
         } else if line.is_empty() {
-            Some(Self::EndOfRequest)
+            Ok(Some(Self::EndOfRequest))
         } else {
-            Some(Self::Other)
+            Ok(Some(Self::Other))
         }
     }
 }
@@ -189,69 +187,83 @@ mod tests {
     use super::UpgradeRequestReader;
     use crate::{
         HostPort, ID, Token, UpgradeRequest, UpgradeRequestWriter,
-        test_helpers::as_chunks_with_guaranteed_trailer,
+        test_helpers::{as_chunks_with_guaranteed_trailer, non_zero_usize},
     };
-    use core::num::NonZeroUsize;
+    use anyhow::Result;
 
-    fn new_reqwest() -> UpgradeRequest {
-        UpgradeRequest {
-            host: HostPort::new("localhost:3000").unwrap(),
-            token: Token::new("sekret").unwrap(),
-            id: ID::new("test-client").unwrap(),
-        }
+    fn new_reqwest() -> Result<UpgradeRequest> {
+        Ok(UpgradeRequest {
+            host: HostPort::new("localhost:3000")?,
+            token: Token::new("sekret")?,
+            id: ID::new("test-client")?,
+        })
     }
 
     #[test]
-    fn test_leftover() {
-        let w = UpgradeRequestWriter::new(new_reqwest());
-        let (chunks, trailer) = as_chunks_with_guaranteed_trailer::<
-            { UpgradeRequestReader::BUFFER_SIZE },
-        >(w.remainder());
+    fn test_leftover() -> Result<()> {
+        let w = UpgradeRequestWriter::new(new_reqwest()?)?;
+        let (chunks, trailer) = as_chunks_with_guaranteed_trailer(w.remainder()?);
 
         let mut reader = UpgradeRequestReader::new();
 
         for (buf, len) in chunks {
-            reader.received(buf, len).unwrap_pending();
+            reader
+                .received(buf, len)
+                .expect_pending("trailer hasn't been written yet");
         }
 
         let (mut buf, mut len) = trailer;
         buf[len.get()..len.get() + 3].copy_from_slice(b"abc");
-        len = NonZeroUsize::new(len.get() + 3).unwrap();
+        len = non_zero_usize(len.get() + 3)?;
 
-        let err = reader.received(buf, len).unwrap_err();
+        let err = reader
+            .received(buf, len)
+            .expect_failed("there's 'abc' leftover");
         assert_eq!(err.to_string(), "got leftover in UpgradeRequestReader");
+
+        Ok(())
     }
 
     #[test]
-    fn test_no_leftover() {
-        let w = UpgradeRequestWriter::new(new_reqwest());
+    fn test_no_leftover() -> Result<()> {
+        let w = UpgradeRequestWriter::new(new_reqwest()?)?;
         let (chunks, trailer) = as_chunks_with_guaranteed_trailer::<
             { UpgradeRequestReader::BUFFER_SIZE },
-        >(w.remainder());
+        >(w.remainder()?);
 
         let mut reader = UpgradeRequestReader::new();
 
         for (buf, len) in chunks {
-            reader.received(buf, len).unwrap_pending();
+            reader
+                .received(buf, len)
+                .expect_pending("trailer hasn't been written yet");
         }
 
         let (buf, len) = trailer;
-        let req = reader.received(buf, len).unwrap();
+        let req = reader
+            .received(buf, len)
+            .expect_done("we've written the trailer");
 
-        assert_eq!(req, new_reqwest());
+        assert_eq!(req, new_reqwest()?);
+
+        Ok(())
     }
 
     #[test]
-    fn test_err() {
+    fn test_err() -> Result<()> {
         let mut reader = UpgradeRequestReader::new();
 
         let mut buf = [0; _];
         let malformed = b"boo\r\n\r\n";
         buf[..malformed.len()].copy_from_slice(malformed);
-        let len = NonZeroUsize::new(malformed.len()).unwrap();
+        let len = non_zero_usize(malformed.len())?;
 
-        let err = reader.received(buf, len).unwrap_err();
+        let err = reader
+            .received(buf, len)
+            .expect_failed("incomplete request");
 
         assert_eq!(err.to_string(), "got EOS but no complete UpgradeRequest");
+
+        Ok(())
     }
 }

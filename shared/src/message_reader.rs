@@ -1,4 +1,5 @@
 use crate::{Message, prelude::*};
+use anyhow::anyhow;
 use core::num::NonZeroUsize;
 
 #[must_use]
@@ -26,24 +27,24 @@ impl MessageReader {
         len: NonZeroUsize,
     ) -> Completion<Message, anyhow::Error, ()> {
         if self.pos >= Message::BYTESIZE {
-            unreachable!("malformed state")
+            return Failed(anyhow!("malformed state"));
         }
 
         let mut message = None;
-        let bytes = bytes
-            .get(..len.get())
-            .unwrap_or_else(|| unreachable!("malformed buffer"));
+        let Some(bytes) = bytes.get(..len.get()) else {
+            return Failed(anyhow!("malformed buffer"));
+        };
 
         for &byte in bytes {
-            let slot = self
-                .buf
-                .get_mut(self.pos)
-                .unwrap_or_else(|| unreachable!("malformed internal state"));
+            let Some(slot) = self.buf.get_mut(self.pos) else {
+                return Failed(anyhow!("malformed internal state"));
+            };
             *slot = byte;
-            self.pos = self
-                .pos
-                .checked_add(1)
-                .unwrap_or_else(|| unreachable!("buffer pos overflow"));
+
+            let Some(nextpos) = self.pos.checked_add(1) else {
+                return Failed(anyhow!("buffer pos overflow"));
+            };
+            self.pos = nextpos;
 
             if self.pos == Message::BYTESIZE {
                 match Message::decode(&self.buf) {
@@ -74,57 +75,64 @@ impl Default for MessageReader {
 #[cfg(test)]
 mod tests {
     use super::MessageReader;
-    use crate::{Message, NonEmptyInlineString};
+    use crate::{Message, NonEmptyInlineString, test_helpers::non_zero_usize};
+    use anyhow::Result;
     use core::num::NonZeroUsize;
 
     #[test]
-    fn test_receive_full() {
+    fn test_receive_full() -> Result<()> {
         let mut reader = MessageReader::empty();
 
-        let bytes: [u8; Message::BYTESIZE] =
-            Message::new(NonEmptyInlineString::new("BOO").unwrap()).encode();
+        let bytes = Message::new(NonEmptyInlineString::new("BOO")?)?.encode();
         let output = reader
-            .received(bytes, NonZeroUsize::new(Message::BYTESIZE).unwrap())
-            .unwrap();
+            .received(bytes, non_zero_usize(Message::BYTESIZE)?)
+            .expect_done("we've written a full message");
         assert_eq!(output.text_as_str(), "BOO");
+
+        Ok(())
     }
 
     #[test]
-    fn test_receive_step_by_step() {
+    fn test_receive_step_by_step() -> Result<()> {
         let mut reader = MessageReader::empty();
 
         // ab
         let one: [u8; Message::BYTESIZE] =
-            Message::new(NonEmptyInlineString::new("one").unwrap()).encode();
+            Message::new(NonEmptyInlineString::new("one")?)?.encode();
         // cd
         let two: [u8; Message::BYTESIZE] =
-            Message::new(NonEmptyInlineString::new("twotwo").unwrap()).encode();
+            Message::new(NonEmptyInlineString::new("twotwo")?)?.encode();
 
         // write "a"
         let mut buf1 = [0; Message::BYTESIZE];
         buf1[..100].copy_from_slice(&one[..100]);
-        assert_eq!(
-            reader
-                .received(buf1, NonZeroUsize::new(100).unwrap())
-                .unwrap_pending(),
-            ()
-        );
+        reader
+            .received(buf1, NonZeroUsize::new(100).expect("literal argument"))
+            .expect_pending("only 'a' has been written so far");
 
         // write "bc"
         let mut buf2 = [0; Message::BYTESIZE];
         buf2[..Message::BYTESIZE - 100].copy_from_slice(&one[100..]);
         buf2[Message::BYTESIZE - 100..].copy_from_slice(&two[..100]);
         let message1 = reader
-            .received(buf2, NonZeroUsize::new(Message::BYTESIZE).unwrap())
-            .unwrap();
+            .received(
+                buf2,
+                NonZeroUsize::new(Message::BYTESIZE).expect("literal argument"),
+            )
+            .expect_done("we've written 'a' -> 'bc', so the first message is there");
         assert_eq!(message1.text_as_str(), "one");
 
         // write "d"
         let mut buf3 = [0; Message::BYTESIZE];
         buf3[..Message::BYTESIZE - 100].copy_from_slice(&two[100..]);
         let message2 = reader
-            .received(buf3, NonZeroUsize::new(Message::BYTESIZE - 100).unwrap())
-            .unwrap();
+            .received(
+                buf3,
+                NonZeroUsize::new(Message::BYTESIZE - 100).expect("literal argument"),
+            )
+            .expect_done("we've finished writing 'cd', so the 2nd message is also there now");
         assert_eq!(message2.text_as_str(), "twotwo");
+
+        Ok(())
     }
 }

@@ -39,7 +39,7 @@ impl PreSink {
 
             return match self.write(now) {
                 Done(()) => Done((self.id, self.fd)),
-                Failed(err) => Failed(err),
+                Failed(err) => Failed(err.context(format!("write() failed for {self}"))),
                 Pending(()) => Pending(self),
             };
         }
@@ -50,9 +50,14 @@ impl PreSink {
     fn write(&mut self, now: u64) -> Completion<(), anyhow::Error, ()> {
         self.last_activity_at = now;
 
-        let len = match mpclipboard_shared::io::write(&self.fd, self.writer.remainder()) {
+        let buf = match self.writer.remainder() {
+            Ok(buf) => buf,
+            Err(err) => return Failed(err),
+        };
+
+        let len = match mpclipboard_shared::io::write(&self.fd, buf) {
             Done(len) => len,
-            Failed(err) => return Failed(err.context(format!("write() failed for {self}"))),
+            Failed(err) => return Failed(err),
             Pending(()) => return Pending(()),
         };
 

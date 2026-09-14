@@ -10,41 +10,41 @@ pub enum Completion<S, E, P> {
 
 impl<S, E, P> Completion<S, E, P> {
     #[cfg(test)]
-    pub fn unwrap(self) -> S
+    pub fn expect_done(self, s: &str) -> S
     where
         P: Debug,
         E: Debug,
     {
         match self {
             Self::Done(v) => v,
-            Self::Failed(err) => panic!("expected Ok, got Err({err:?})"),
-            Self::Pending(p) => panic!("expected Ok, got Pending({p:?})"),
+            Self::Failed(err) => panic!("expected Ok, got Err({err:?}): {s}"),
+            Self::Pending(p) => panic!("expected Ok, got Pending({p:?}): {s}"),
         }
     }
 
     #[cfg(test)]
-    pub fn unwrap_pending(self) -> P
+    pub fn expect_pending(self, s: &str) -> P
     where
         S: Debug,
         E: Debug,
     {
         match self {
-            Self::Done(v) => panic!("expected Pending, got Done({v:?}"),
-            Self::Failed(err) => panic!("expected Pending, got Err({err:?})"),
+            Self::Done(v) => panic!("expected Pending, got Done({v:?}: {s}"),
+            Self::Failed(err) => panic!("expected Pending, got Err({err:?}): {s}"),
             Self::Pending(p) => p,
         }
     }
 
     #[cfg(test)]
-    pub fn unwrap_err(self) -> E
+    pub fn expect_failed(self, s: &str) -> E
     where
         S: Debug,
         P: Debug,
     {
         match self {
-            Self::Done(v) => panic!("expected Err, got Done({v:?}"),
+            Self::Done(v) => panic!("expected Err, got Done({v:?}: {s}"),
             Self::Failed(err) => err,
-            Self::Pending(p) => panic!("expected Err, got Pending({p:?})"),
+            Self::Pending(p) => panic!("expected Err, got Pending({p:?}): {s}"),
         }
     }
 
