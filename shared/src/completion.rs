@@ -1,53 +1,83 @@
+use core::fmt::Debug;
+
 #[must_use]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Completion<S, P> {
+pub enum Completion<S, E, P> {
     Done(S),
-    Failed,
+    Failed(E),
     Pending(P),
 }
 
-impl<S, P> Completion<S, P> {
+impl<S, E, P> Completion<S, E, P> {
     #[cfg(test)]
     pub fn unwrap(self) -> S
     where
-        P: core::fmt::Debug,
+        P: Debug,
+        E: Debug,
     {
         match self {
-            Self::Done(value) => value,
-            Self::Failed => panic!("expected Ok, got Err"),
-            Self::Pending(pending) => panic!("expected Ok, got Pending({pending:?})"),
+            Self::Done(v) => v,
+            Self::Failed(err) => panic!("expected Ok, got Err({err:?})"),
+            Self::Pending(p) => panic!("expected Ok, got Pending({p:?})"),
         }
     }
 
-    pub fn and_then<T, F>(self, f: F) -> Completion<T, P>
+    #[cfg(test)]
+    pub fn unwrap_pending(self) -> P
     where
-        F: FnOnce(S) -> Completion<T, P>,
+        S: Debug,
+        E: Debug,
+    {
+        match self {
+            Self::Done(v) => panic!("expected Pending, got Done({v:?}"),
+            Self::Failed(err) => panic!("expected Pending, got Err({err:?})"),
+            Self::Pending(p) => p,
+        }
+    }
+
+    #[cfg(test)]
+    pub fn unwrap_err(self) -> E
+    where
+        S: Debug,
+        P: Debug,
+    {
+        match self {
+            Self::Done(v) => panic!("expected Err, got Done({v:?}"),
+            Self::Failed(err) => err,
+            Self::Pending(p) => panic!("expected Err, got Pending({p:?})"),
+        }
+    }
+
+    pub fn and_then<T, F>(self, f: F) -> Completion<T, E, P>
+    where
+        F: FnOnce(S) -> Completion<T, E, P>,
     {
         match self {
             Self::Done(v) => f(v),
-            Self::Failed => Completion::Failed,
-            Self::Pending(pending) => Completion::Pending(pending),
+            Self::Failed(err) => Completion::Failed(err),
+            Self::Pending(p) => Completion::Pending(p),
         }
     }
 
-    pub fn map<T, F>(self, f: F) -> Completion<T, P>
+    pub fn map<T, F>(self, f: F) -> Completion<T, E, P>
     where
         F: FnOnce(S) -> T,
     {
         match self {
             Self::Done(v) => Completion::Done(f(v)),
-            Self::Failed => Completion::Failed,
-            Self::Pending(pending) => Completion::Pending(pending),
+            Self::Failed(err) => Completion::Failed(err),
+            Self::Pending(p) => Completion::Pending(p),
         }
     }
 
-    pub fn map_err<F>(self, f: F) -> Self
+    pub fn map_err<F, E2>(self, f: F) -> Completion<S, E2, P>
     where
-        F: FnOnce(),
+        F: FnOnce(E) -> E2,
     {
-        if matches!(self, Self::Failed) {
-            f();
+        match self {
+            Self::Done(v) => Completion::Done(v),
+            Self::Failed(err) => Completion::Failed(f(err)),
+            Self::Pending(p) => Completion::Pending(p),
         }
-        self
     }
 }

@@ -1,7 +1,6 @@
-use rustix::{
-    fs::{Mode, OFlags},
-    io::Errno,
-};
+use anyhow::{Context, Result, anyhow};
+use boml::Toml;
+use rustix::fs::{Mode, OFlags};
 
 pub struct ConfigParser;
 
@@ -11,23 +10,15 @@ impl ConfigParser {
         buffer: &mut [u8],
         keys: [&'static str; N],
         f: impl FnOnce([&str; N]) -> T,
-    ) -> Result<T, ConfigParserError> {
-        let fd = rustix::fs::open(path, OFlags::RDONLY, Mode::empty())
-            .map_err(ConfigParserError::Open)?;
-        let len = rustix::io::read(&fd, &mut *buffer).map_err(ConfigParserError::Read)?;
-        let bytes = buffer
-            .get(..len)
-            .unwrap_or_else(|| unreachable!("read() returned malformed data"));
-        let text = str::from_utf8(bytes).map_err(ConfigParserError::InvalidUtf8)?;
-
-        let toml = boml::parse(text).map_err(|_| ConfigParserError::InvalidToml)?;
+    ) -> Result<T> {
+        let toml = read_toml(path, buffer)?;
 
         let mut values = [""; N];
 
         for (key, slot) in keys.iter().zip(values.iter_mut()) {
             let value = toml
                 .get_string(key)
-                .map_err(|_| ConfigParserError::InvalidTomlValueForKey(key))?;
+                .map_err(|err| anyhow!("key {key} must be a string in toml: {err:?}"))?;
 
             *slot = value;
         }
@@ -36,25 +27,14 @@ impl ConfigParser {
     }
 }
 
-#[derive(Debug)]
-pub enum ConfigParserError {
-    Open(Errno),
-    Read(Errno),
-    InvalidUtf8(core::str::Utf8Error),
-    InvalidToml,
-    InvalidTomlValueForKey(&'static str),
-}
+fn read_toml<'a>(path: &[u8], buffer: &'a mut [u8]) -> Result<Toml<'a>> {
+    let fd =
+        rustix::fs::open(path, OFlags::RDONLY, Mode::empty()).context("failed to open() config")?;
+    let len = rustix::io::read(&fd, &mut *buffer).context("failed to read() config")?;
+    let bytes = buffer
+        .get(..len)
+        .unwrap_or_else(|| unreachable!("read() returned malformed data"));
+    let text = str::from_utf8(bytes).context("config must be valid utf-8")?;
 
-impl core::fmt::Display for ConfigParserError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self {
-            Self::Open(error) => write!(f, "failed to open config: {error}"),
-            Self::Read(error) => write!(f, "failed to read config: {error}"),
-            Self::InvalidUtf8(error) => write!(f, "config is not valid UTF-8: {error}"),
-            Self::InvalidToml => f.write_str("config is not valid TOML"),
-            Self::InvalidTomlValueForKey(key) => write!(f, "failed to get config value `{key}`"),
-        }
-    }
+    boml::parse(text).map_err(|err| anyhow!("failed to parse TOML config: {err:}"))
 }
-
-impl core::error::Error for ConfigParserError {}

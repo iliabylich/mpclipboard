@@ -1,8 +1,9 @@
 use crate::{
-    CONNECTION_UPGRADE_HEADER, Completion, HOST_PREFIX, HostPort, ID, ID_PREFIX, Message,
-    START_LINE, TOKEN_PREFIX, Token, UPGRADE_MPCLIPBOARD_RAW_HEADER, UpgradeRequest, error,
+    CONNECTION_UPGRADE_HEADER, HOST_PREFIX, HostPort, ID, ID_PREFIX, Message, START_LINE,
+    TOKEN_PREFIX, Token, UPGRADE_MPCLIPBOARD_RAW_HEADER, UpgradeRequest, prelude::*,
     strip_prefix_ignore_ascii_case,
 };
+use anyhow::anyhow;
 use core::num::NonZeroUsize;
 
 #[expect(clippy::struct_excessive_bools)]
@@ -43,16 +44,16 @@ impl UpgradeRequestReader {
         &mut self,
         buf: [u8; Self::BUFFER_SIZE],
         len: NonZeroUsize,
-    ) -> Completion<UpgradeRequest, ()> {
+    ) -> Completion<UpgradeRequest, anyhow::Error, ()> {
         let Some(buf) = buf.get(..len.get()) else {
-            return Completion::Failed;
+            return Failed(anyhow!("malformed buffer"));
         };
 
         for (pos, &byte) in buf.iter().enumerate() {
             if let Some(slot) = self.buf.get_mut(self.pos) {
                 *slot = byte;
             } else {
-                return Completion::Failed;
+                return Failed(anyhow!("buffer overflow"));
             }
             self.pos = self
                 .pos
@@ -60,7 +61,7 @@ impl UpgradeRequestReader {
                 .unwrap_or_else(|| unreachable!("length overflow"));
 
             let Some(filled) = self.buf.get(..self.pos) else {
-                return Completion::Failed;
+                return Failed(anyhow!("buffer overflow"));
             };
 
             let Some(line) = HttpLine::parse(filled) else {
@@ -100,14 +101,13 @@ impl UpgradeRequestReader {
 
         if let Some(req) = self.try_finish() {
             if self.pos != 0 {
-                error!("got leftover in UpgradeRequestReader");
-                return Completion::Failed;
+                return Failed(anyhow!("got leftover in UpgradeRequestReader"));
             }
-            Completion::Done(req)
+            Done(req)
         } else if self.seen_eos {
-            Completion::Failed
+            Failed(anyhow!("got EOS but no complete UpgradeRequest"))
         } else {
-            Completion::Pending(())
+            Pending(())
         }
     }
 
@@ -188,7 +188,7 @@ impl HttpLine {
 mod tests {
     use super::UpgradeRequestReader;
     use crate::{
-        Completion, HostPort, ID, Token, UpgradeRequest, UpgradeRequestWriter,
+        HostPort, ID, Token, UpgradeRequest, UpgradeRequestWriter,
         test_helpers::as_chunks_with_guaranteed_trailer,
     };
     use core::num::NonZeroUsize;
@@ -211,16 +211,15 @@ mod tests {
         let mut reader = UpgradeRequestReader::new();
 
         for (buf, len) in chunks {
-            let res = reader.received(buf, len);
-            assert_eq!(res, Completion::Pending(()));
+            reader.received(buf, len).unwrap_pending();
         }
 
         let (mut buf, mut len) = trailer;
         buf[len.get()..len.get() + 3].copy_from_slice(b"abc");
         len = NonZeroUsize::new(len.get() + 3).unwrap();
 
-        let res = reader.received(buf, len);
-        assert_eq!(res, Completion::Failed);
+        let err = reader.received(buf, len).unwrap_err();
+        assert_eq!(err.to_string(), "got leftover in UpgradeRequestReader");
     }
 
     #[test]
@@ -233,14 +232,13 @@ mod tests {
         let mut reader = UpgradeRequestReader::new();
 
         for (buf, len) in chunks {
-            let res = reader.received(buf, len);
-            assert_eq!(res, Completion::Pending(()));
+            reader.received(buf, len).unwrap_pending();
         }
 
         let (buf, len) = trailer;
-        let res = reader.received(buf, len);
+        let req = reader.received(buf, len).unwrap();
 
-        assert_eq!(res, Completion::Done(new_reqwest()));
+        assert_eq!(req, new_reqwest());
     }
 
     #[test]
@@ -252,6 +250,8 @@ mod tests {
         buf[..malformed.len()].copy_from_slice(malformed);
         let len = NonZeroUsize::new(malformed.len()).unwrap();
 
-        assert_eq!(reader.received(buf, len), Completion::Failed);
+        let err = reader.received(buf, len).unwrap_err();
+
+        assert_eq!(err.to_string(), "got EOS but no complete UpgradeRequest");
     }
 }

@@ -6,7 +6,7 @@ pub fn write_upgrade_request(
     fd: impl AsFd,
     stream: &mut MaybeTlsStream,
     writer: &mut UpgradeRequestWriter,
-) -> Completion<(), ()> {
+) -> Completion<(), anyhow::Error, ()> {
     stream
         .write_bytes(&fd, writer.remainder())
         .and_then(|len| writer.written(len))

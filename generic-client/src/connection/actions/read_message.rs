@@ -6,7 +6,7 @@ pub fn read_message(
     reader: &mut MessageReader,
     stream: &mut MaybeTlsStream,
     fd: &impl AsFd,
-) -> Completion<Message, ()> {
+) -> Completion<Message, anyhow::Error, ()> {
     let mut buf = [0; Message::BYTESIZE];
     stream
         .read_bytes(fd, &mut buf)

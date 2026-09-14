@@ -1,5 +1,3 @@
-use mpclipboard_shared::{error, info};
-
 pub struct Logger;
 
 impl Logger {
@@ -20,7 +18,7 @@ impl Logger {
         #[cfg(any(target_os = "linux", target_os = "macos"))]
         env_logger::init();
 
-        info!("info example");
-        error!("error example");
+        log::info!("info example");
+        log::error!("error example");
     }
 }

@@ -1,7 +1,8 @@
 use crate::{
-    CONNECTION_UPGRADE_HEADER, Completion, UPGRADE_MPCLIPBOARD_RAW_HEADER, message::Message,
+    CONNECTION_UPGRADE_HEADER, UPGRADE_MPCLIPBOARD_RAW_HEADER, message::Message, prelude::*,
     strip_prefix_ignore_ascii_case,
 };
+use anyhow::anyhow;
 use core::num::NonZeroUsize;
 
 #[expect(clippy::struct_excessive_bools)]
@@ -36,16 +37,16 @@ impl UpgradeResponseReader {
         &mut self,
         buf: [u8; Self::BUFFER_SIZE],
         len: NonZeroUsize,
-    ) -> Completion<([u8; Self::BUFFER_SIZE], usize), ()> {
+    ) -> Completion<([u8; Self::BUFFER_SIZE], usize), anyhow::Error, ()> {
         let Some(buf) = buf.get(..len.get()) else {
-            return Completion::Failed;
+            return Failed(anyhow!("given buffer is malformed"));
         };
 
         for (pos, &byte) in buf.iter().enumerate() {
             if let Some(slot) = self.buf.get_mut(self.pos) {
                 *slot = byte;
             } else {
-                return Completion::Failed;
+                return Failed(anyhow!("internal buffer overflow"));
             }
             self.pos = self
                 .pos
@@ -53,7 +54,7 @@ impl UpgradeResponseReader {
                 .unwrap_or_else(|| unreachable!("length overflow"));
 
             let Some(filled) = self.buf.get(..self.pos) else {
-                return Completion::Failed;
+                return Failed(anyhow!("internal buffer overflow"));
             };
 
             let Some(line) = HttpLine::parse(filled) else {
@@ -89,11 +90,11 @@ impl UpgradeResponseReader {
         }
 
         if self.try_finish() {
-            Completion::Done((self.buf, self.pos))
+            Done((self.buf, self.pos))
         } else if self.seen_eos {
-            Completion::Failed
+            Failed(anyhow!("got EOS but UpgradeResponse is incomplete"))
         } else {
-            Completion::Pending(())
+            Pending(())
         }
     }
 
@@ -154,8 +155,7 @@ impl HttpLine {
 mod tests {
     use super::UpgradeResponseReader;
     use crate::{
-        Completion, test_helpers::as_chunks_with_guaranteed_trailer,
-        upgrade_response::UpgradeResponse,
+        test_helpers::as_chunks_with_guaranteed_trailer, upgrade_response::UpgradeResponse,
     };
     use core::num::NonZeroUsize;
 
@@ -168,19 +168,18 @@ mod tests {
         let mut reader = UpgradeResponseReader::new();
 
         for (buf, len) in chunks {
-            let res = reader.received(buf, len);
-            assert_eq!(res, Completion::Pending(()));
+            reader.received(buf, len).unwrap_pending();
         }
 
         let (mut buf, mut len) = trailer;
         buf[len.get()..len.get() + 3].copy_from_slice(b"abc");
         len = NonZeroUsize::new(len.get() + 3).unwrap();
 
-        let res = reader.received(buf, len);
+        let levftover = reader.received(buf, len).unwrap();
 
         assert_eq!(
-            res,
-            Completion::Done((
+            levftover,
+            (
                 {
                     let mut buf = [0; _];
                     buf[0] = b'a';
@@ -189,7 +188,7 @@ mod tests {
                     buf
                 },
                 3,
-            ))
+            )
         );
     }
 
@@ -202,14 +201,13 @@ mod tests {
         let mut reader = UpgradeResponseReader::new();
 
         for (buf, len) in chunks {
-            let res = reader.received(buf, len);
-            assert_eq!(res, Completion::Pending(()));
+            reader.received(buf, len).unwrap_pending();
         }
 
         let (buf, len) = trailer;
-        let res = reader.received(buf, len);
+        let leftover = reader.received(buf, len).unwrap();
 
-        assert_eq!(res, Completion::Done(([0; _], 0)));
+        assert_eq!(leftover, ([0; _], 0));
     }
 
     #[test]
@@ -221,6 +219,7 @@ mod tests {
         buf[..malformed.len()].copy_from_slice(malformed);
         let len = NonZeroUsize::new(malformed.len()).unwrap();
 
-        assert_eq!(reader.received(buf, len), Completion::Failed);
+        let err = reader.received(buf, len).unwrap_err();
+        assert_eq!(err.to_string(), "got EOS but UpgradeResponse is incomplete");
     }
 }

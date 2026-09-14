@@ -1,8 +1,6 @@
 use crate::{Output, config::Config, connection::Connection, logger::Logger, tls::TLS};
 use anyhow::{Context, Result, bail};
-use mpclipboard_shared::{
-    EventLoop, EventLoopResult, Message, NonEmptyInlineString, Store, error, info, trace,
-};
+use mpclipboard_shared::{EventLoop, EventLoopResult, Message, NonEmptyInlineString, Store};
 use std::{
     os::fd::{AsFd, AsRawFd, BorrowedFd},
     sync::OnceLock,
@@ -26,12 +24,12 @@ impl MPClipboard {
 
         match result {
             Ok(()) => Ok(()),
-            Err(err) => bail!("{err:?}"),
+            Err(err) => bail!("failed to init_once() MPClipboard: {err:?}"),
         }
     }
 
     fn new(config: Config) -> Result<Self> {
-        info!("Running with config {config:?}");
+        log::info!("Running with config {config:?}");
         let mut event_loop = EventLoop::new().context("event loop has crashed")?;
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -115,13 +113,13 @@ impl MPClipboard {
 
         if let Some(time) = polled.time {
             self.now = time;
-            trace!("tick {}", self.now);
+            log::trace!("tick {}", self.now);
             self.conn.tick(self.now);
         }
 
         if let Some((readable, writable, has_error)) = polled.fd {
             if has_error && !self.conn.is_disconnected() {
-                error!("poll() returned connection error, disconnecting");
+                log::error!("poll() returned connection error, disconnecting");
                 self.conn.force_disconnect(self.now);
             }
 
@@ -138,23 +136,25 @@ impl MPClipboard {
     }
 
     pub fn push_text(&mut self, text: &str) -> Result<bool> {
-        let Ok(text) = NonEmptyInlineString::truncate(text) else {
-            info!("Skipping empty text");
+        if text.is_empty() {
+            log::info!("Skipping empty text");
             return Ok(false);
-        };
+        }
+
+        let text = NonEmptyInlineString::truncate(text)?;
         let message = Message::new(text);
 
-        if self.store.add(message) {
-            let pushed = self.conn.push(message);
-
-            self.event_loop
-                .sync(self.conn.wants())
-                .context("failed to update connection fd in event loop")?;
-
-            Ok(pushed)
-        } else {
-            Ok(false)
+        if !self.store.add(message) {
+            return Ok(false);
         }
+
+        let pushed = self.conn.push(message);
+
+        self.event_loop
+            .sync(self.conn.wants())
+            .context("failed to update connection fd in event loop")?;
+
+        Ok(pushed)
     }
 }
 

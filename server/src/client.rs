@@ -1,7 +1,5 @@
 use crate::as_poll_fd::AsPollFd;
-use mpclipboard_shared::{
-    ID, Message, MessageReader, MessageWriter, REvents, error, prelude::*, trace,
-};
+use mpclipboard_shared::{ID, Message, MessageReader, MessageWriter, REvents, prelude::*};
 use rustix::event::{PollFd, PollFlags};
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd};
 
@@ -26,36 +24,36 @@ impl Client {
         self.writer.push(message);
     }
 
-    pub(crate) fn on_poll_event(mut self, revents: PollFlags) -> Completion<(Message, Self), Self> {
+    pub(crate) fn on_poll_event(
+        mut self,
+        revents: PollFlags,
+    ) -> Completion<(Message, Self), anyhow::Error, Self> {
         let revents = match REvents::new(revents) {
             Ok(revents) => revents,
-            Err(err) => {
-                error!("polling {self} returned an error: {err:?}");
-                return Failed;
-            }
+            Err(err) => return Failed(err.context(format!("polling {self} returned an error"))),
         };
 
         if revents.writable {
-            trace!("{self} is writable");
+            log::trace!("{self} is writable");
             match self.write() {
                 Done(()) | Pending(()) => {}
-                Failed => return Failed,
+                Failed(err) => return Failed(err),
             }
         }
 
         if revents.readable {
-            trace!("{self} is readable");
+            log::trace!("{self} is readable");
             match self.read() {
                 Done(message) => return Done((message, self)),
                 Pending(()) => {}
-                Failed => return Failed,
+                Failed(err) => return Failed(err),
             }
         }
 
         Pending(self)
     }
 
-    fn write(&mut self) -> Completion<(), ()> {
+    fn write(&mut self) -> Completion<(), anyhow::Error, ()> {
         let Some(buf) = self.writer.remainder() else {
             unreachable!("can't write on empty writer")
         };
@@ -65,22 +63,16 @@ impl Client {
                 Done(())
             }
             Pending(()) => Pending(()),
-            Failed => {
-                error!("write() failed for {self}");
-                Failed
-            }
+            Failed(err) => Failed(err.context(format!("write() failed for {self}"))),
         }
     }
 
-    fn read(&mut self) -> Completion<Message, ()> {
+    fn read(&mut self) -> Completion<Message, anyhow::Error, ()> {
         let mut buf = [0; Message::BYTESIZE];
         let len = match mpclipboard_shared::io::read(&self.fd, &mut buf) {
             Done(len) => len,
             Pending(()) => return Pending(()),
-            Failed => {
-                error!("read() failed for {self} ");
-                return Failed;
-            }
+            Failed(err) => return Failed(err.context(format!("read() failed for {self}"))),
         };
 
         self.reader.received(buf, len)

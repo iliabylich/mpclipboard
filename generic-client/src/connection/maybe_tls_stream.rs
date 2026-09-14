@@ -1,6 +1,6 @@
 use crate::tls::TLS;
-use anyhow::{Context, Result};
-use mpclipboard_shared::{Url, Wants, error, prelude::*};
+use anyhow::{Context, Result, anyhow};
+use mpclipboard_shared::{Url, Wants, prelude::*};
 use rustls::{ClientConnection, pki_types::ServerName};
 use std::{
     io::{ErrorKind, Read, Write},
@@ -12,13 +12,6 @@ use std::{
 pub enum MaybeTlsStream {
     Plain,
     Tls(Box<ClientConnection>),
-}
-
-#[derive(Debug)]
-pub enum TlsHandshakeResult {
-    Done,
-    Pending,
-    Died,
 }
 
 impl MaybeTlsStream {
@@ -39,25 +32,25 @@ impl MaybeTlsStream {
         matches!(self, Self::Tls(_))
     }
 
-    pub(crate) fn finish_tls_handshake(&mut self, fd: &impl AsFd) -> TlsHandshakeResult {
+    pub(crate) fn finish_tls_handshake(
+        &mut self,
+        fd: &impl AsFd,
+    ) -> Completion<(), anyhow::Error, ()> {
         let conn = match self {
             Self::Tls(conn) => conn,
-            Self::Plain => return TlsHandshakeResult::Done,
+            Self::Plain => return Done(()),
         };
 
         match conn.complete_io(&mut StdReadWriteFd(fd)) {
             Ok(_) => {
                 if conn.is_handshaking() {
-                    TlsHandshakeResult::Pending
+                    Pending(())
                 } else {
-                    TlsHandshakeResult::Done
+                    Done(())
                 }
             }
-            Err(err) if err.kind() == ErrorKind::WouldBlock => TlsHandshakeResult::Pending,
-            Err(err) => {
-                error!("TLS handshake failed: {err:?}");
-                TlsHandshakeResult::Died
-            }
+            Err(err) if err.kind() == ErrorKind::WouldBlock => Pending(()),
+            Err(err) => Failed(anyhow!("TLS handshake failed: {err:?}")),
         }
     }
 
@@ -89,31 +82,24 @@ impl MaybeTlsStream {
         &mut self,
         fd: &impl AsFd,
         buf: &mut [u8],
-    ) -> Completion<NonZeroUsize, ()> {
+    ) -> Completion<NonZeroUsize, anyhow::Error, ()> {
         match self {
             Self::Plain => mpclipboard_shared::io::read(fd, buf)
-                .map_err(|| error!("failed to read_bytes() on plain stream")),
+                .map_err(|err| err.context("failed to read_bytes() on plain stream")),
             Self::Tls(conn) => {
                 match conn.complete_io(&mut StdReadWriteFd(fd)) {
                     Ok(_) => {}
                     Err(err) if err.kind() == ErrorKind::WouldBlock => {}
                     Err(err) => {
-                        error!("failed to complete_io() on TLS stream: {err:?}");
-                        return Failed;
+                        return Failed(anyhow!("failed to complete_io() on TLS stream: {err:?}"));
                     }
                 }
 
                 match conn.reader().read(buf).map(NonZeroUsize::new) {
                     Ok(Some(len)) => Done(len),
-                    Ok(None) => {
-                        error!("failed to read_bytes() on TLS stream: EOF");
-                        Failed
-                    }
+                    Ok(None) => Failed(anyhow!("failed to read_bytes() on TLS stream: EOF")),
                     Err(err) if err.kind() == ErrorKind::WouldBlock => Pending(()),
-                    Err(err) => {
-                        error!("failed to read_bytes() on TLS stream: {err:?}");
-                        Failed
-                    }
+                    Err(err) => Failed(anyhow!("failed to read_bytes() on TLS stream: {err:?}")),
                 }
             }
         }
@@ -123,33 +109,28 @@ impl MaybeTlsStream {
         &mut self,
         fd: &impl AsFd,
         buf: &[u8],
-    ) -> Completion<NonZeroUsize, ()> {
+    ) -> Completion<NonZeroUsize, anyhow::Error, ()> {
         match self {
             Self::Plain => mpclipboard_shared::io::write(fd, buf)
-                .map_err(|| error!("failed to write_bytes() on plain stream")),
+                .map_err(|err| err.context("failed to write_bytes() on plain stream")),
             Self::Tls(conn) => {
                 let len = match conn.writer().write(buf).map(NonZeroUsize::new) {
                     Ok(Some(len)) => len,
                     Ok(None) => {
-                        error!("failed to write_bytes() on TLS stream: EOF");
-                        return Failed;
+                        return Failed(anyhow!("failed to write_bytes() on TLS stream: EOF"));
                     }
                     Err(err) if err.kind() == ErrorKind::WouldBlock => {
                         return Pending(());
                     }
                     Err(err) => {
-                        error!("failed to write_bytes() on TLS stream: {err:?}");
-                        return Failed;
+                        return Failed(anyhow!("failed to write_bytes() on TLS stream: {err:?}"));
                     }
                 };
 
                 match conn.complete_io(&mut StdReadWriteFd(fd)) {
                     Ok(_) => Done(len),
                     Err(err) if err.kind() == ErrorKind::WouldBlock => Done(len),
-                    Err(err) => {
-                        error!("failed to complete_io() on TLS stream: {err:?}");
-                        Failed
-                    }
+                    Err(err) => Failed(anyhow!("failed to complete_io() on TLS stream: {err:?}")),
                 }
             }
         }

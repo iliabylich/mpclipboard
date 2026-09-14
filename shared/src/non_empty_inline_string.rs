@@ -1,3 +1,4 @@
+use anyhow::{Context, Result};
 use core::num::NonZeroU8;
 
 #[must_use]
@@ -8,7 +9,7 @@ pub struct NonEmptyInlineString<const MAXLEN: usize> {
 }
 
 impl<const MAXLEN: usize> NonEmptyInlineString<MAXLEN> {
-    pub fn truncate(s: &str) -> Result<Self, NonEmptyInlineStringTruncateError> {
+    pub fn truncate(s: &str) -> Result<Self> {
         let mut bytes = [0; MAXLEN];
         let minlen = core::cmp::min(s.len(), MAXLEN);
 
@@ -24,9 +25,8 @@ impl<const MAXLEN: usize> NonEmptyInlineString<MAXLEN> {
                 .unwrap_or_else(|| unreachable!("str must be valid up to len")),
         };
 
-        let len = u8::try_from(src.len())
-            .map_err(|_| NonEmptyInlineStringTruncateError::LenParamIsTooLong)?;
-        let len = NonZeroU8::new(len).ok_or(NonEmptyInlineStringTruncateError::StringIsEmpty)?;
+        let len = u8::try_from(src.len()).context("MAXLEN param is too long")?;
+        let len = NonZeroU8::new(len).context("string is empty")?;
         let dst = bytes
             .get_mut(..usize::from(len.get()))
             .unwrap_or_else(|| unreachable!("len <= MAXLEN"));
@@ -34,15 +34,14 @@ impl<const MAXLEN: usize> NonEmptyInlineString<MAXLEN> {
         Ok(Self { len, bytes })
     }
 
-    pub fn new(s: &str) -> Result<Self, NonEmptyInlineStringNewError> {
-        let len =
-            u8::try_from(s.len()).map_err(|_| NonEmptyInlineStringNewError::StringIsTooLong)?;
-        let len = NonZeroU8::new(len).ok_or(NonEmptyInlineStringNewError::StringIsEmpty)?;
+    pub fn new(s: &str) -> Result<Self> {
+        let len = u8::try_from(s.len()).context("string is too long")?;
+        let len = NonZeroU8::new(len).context("string is empty")?;
 
         let mut bytes = [0; MAXLEN];
         let src = bytes
             .get_mut(..usize::from(len.get()))
-            .ok_or(NonEmptyInlineStringNewError::StringIsTooLong)?;
+            .context("string is too long")?;
         src.copy_from_slice(s.as_bytes());
         Ok(Self { len, bytes })
     }
@@ -73,51 +72,15 @@ impl<const MAXLEN: usize> NonEmptyInlineString<MAXLEN> {
 
 impl<const MAXLEN: usize> core::fmt::Debug for NonEmptyInlineString<MAXLEN> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.write_str(self.as_str())
+        write!(f, "{:?}", self.as_str())
     }
 }
 
 impl<const MAXLEN: usize> core::fmt::Display for NonEmptyInlineString<MAXLEN> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.write_str(self.as_str())
+        write!(f, "{}", self.as_str())
     }
 }
-
-#[derive(Debug, PartialEq, Eq)]
-pub enum NonEmptyInlineStringTruncateError {
-    LenParamIsTooLong,
-    StringIsEmpty,
-}
-
-impl core::fmt::Display for NonEmptyInlineStringTruncateError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self {
-            Self::LenParamIsTooLong => f.write_str("LenParamIsTooLong"),
-            Self::StringIsEmpty => f.write_str("StringIsEmpty"),
-        }
-    }
-}
-
-impl core::error::Error for NonEmptyInlineStringTruncateError {}
-
-#[derive(Debug, PartialEq, Eq)]
-pub enum NonEmptyInlineStringNewError {
-    LenParamIsTooLong,
-    StringIsEmpty,
-    StringIsTooLong,
-}
-
-impl core::fmt::Display for NonEmptyInlineStringNewError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self {
-            Self::LenParamIsTooLong => f.write_str("LenParamIsTooLong"),
-            Self::StringIsEmpty => f.write_str("StringIsEmpty"),
-            Self::StringIsTooLong => f.write_str("StringIsTooLong"),
-        }
-    }
-}
-
-impl core::error::Error for NonEmptyInlineStringNewError {}
 
 #[cfg(test)]
 mod tess {
@@ -162,8 +125,10 @@ mod tess {
     #[test]
     fn test_err() {
         assert_eq!(
-            NonEmptyInlineString::<100>::truncate("").unwrap_err(),
-            NonEmptyInlineStringTruncateError::StringIsEmpty
+            NonEmptyInlineString::<100>::truncate("")
+                .unwrap_err()
+                .to_string(),
+            "string is empty"
         );
     }
 }

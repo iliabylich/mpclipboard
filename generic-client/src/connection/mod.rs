@@ -1,17 +1,14 @@
 use crate::{
     Connectivity,
     config::Config,
-    connection::{
-        actions::{
-            finish_connecting, read_message, read_upgrade_response, write_message,
-            write_upgrade_request,
-        },
-        maybe_tls_stream::TlsHandshakeResult,
+    connection::actions::{
+        finish_connecting, read_message, read_upgrade_response, write_message,
+        write_upgrade_request,
     },
 };
 use mpclipboard_shared::{
     Message, MessageReader, MessageWriter, UpgradeRequestWriter, UpgradeResponseReader, Wants,
-    error, prelude::*,
+    prelude::*,
 };
 use std::os::fd::{AsFd, BorrowedFd, OwnedFd};
 
@@ -130,7 +127,10 @@ impl Connection {
                 };
             }
 
-            Failed => self.force_disconnect(now),
+            Failed(err) => {
+                log::error!("failed to connect: {err:?}");
+                self.force_disconnect(now);
+            }
         }
     }
 
@@ -165,7 +165,7 @@ impl Connection {
                     .unwrap_or_else(|| unreachable!("time goes backwards"));
 
                 if seconds_passed > Self::FREEZE_TIME_IN_SECS {
-                    error!("Stuck in {}, disconnecting...", self.state.name());
+                    log::error!("Stuck in {}, disconnecting...", self.state.name());
                     self.force_disconnect(now);
                 }
             }
@@ -203,14 +203,17 @@ impl Connection {
             State::Active { fd, stream, state } => match state {
                 ActiveState::TlsHandshake { last_activity_at } => {
                     match stream.finish_tls_handshake(fd) {
-                        TlsHandshakeResult::Done => {
+                        Done(()) => {
                             *state = ActiveState::WritingUpgradeRequest {
                                 writer: UpgradeRequestWriter::new(self.config.update_request()),
                                 last_activity_at: now,
                             }
                         }
-                        TlsHandshakeResult::Pending => *last_activity_at = now,
-                        TlsHandshakeResult::Died => self.force_disconnect(now),
+                        Pending(()) => *last_activity_at = now,
+                        Failed(err) => {
+                            log::error!("failed to finish TLS handshake: {err:?}");
+                            self.force_disconnect(now);
+                        }
                     }
                 }
 
@@ -225,12 +228,18 @@ impl Connection {
                         };
                     }
                     Pending(()) => *last_activity_at = now,
-                    Failed => self.force_disconnect(now),
+                    Failed(err) => {
+                        log::error!("failed to read upgrade response: {err:?}");
+                        self.force_disconnect(now);
+                    }
                 },
 
                 ActiveState::Connected { reader, .. } => match read_message(reader, stream, fd) {
                     Done(message) => return Some(message),
-                    Failed => self.force_disconnect(now),
+                    Failed(err) => {
+                        log::error!("failed to read message: {err:?}");
+                        self.force_disconnect(now);
+                    }
                     Pending(()) => {}
                 },
 
@@ -262,19 +271,25 @@ impl Connection {
                             last_activity_at: now,
                         }
                     }
-                    (Failed, _) => self.force_disconnect(now),
+                    (Failed(err), _) => {
+                        log::error!("failed to finish connecting: {err:?}");
+                        self.force_disconnect(now);
+                    }
                 },
 
                 ActiveState::TlsHandshake { last_activity_at } => {
                     match stream.finish_tls_handshake(fd) {
-                        TlsHandshakeResult::Done => {
+                        Done(()) => {
                             *state = ActiveState::WritingUpgradeRequest {
                                 writer: UpgradeRequestWriter::new(self.config.update_request()),
                                 last_activity_at: now,
                             }
                         }
-                        TlsHandshakeResult::Pending => *last_activity_at = now,
-                        TlsHandshakeResult::Died => self.force_disconnect(now),
+                        Pending(()) => *last_activity_at = now,
+                        Failed(err) => {
+                            log::error!("failed to finish TLS handshake {err:?}");
+                            self.force_disconnect(now);
+                        }
                     }
                 }
 
@@ -289,7 +304,10 @@ impl Connection {
                         };
                     }
                     Pending(()) => *last_activity_at = now,
-                    Failed => self.force_disconnect(now),
+                    Failed(err) => {
+                        log::error!("failed to write upgrade request: {err:?}");
+                        self.force_disconnect(now);
+                    }
                 },
 
                 ActiveState::ReadingUpgradeResponse {
@@ -297,14 +315,17 @@ impl Connection {
                 } => match stream.flush(fd) {
                     Ok(()) => *last_activity_at = now,
                     Err(err) => {
-                        error!("failed to flush TLS data: {err:?}");
+                        log::error!("failed to flush TLS data: {err:?}");
                         self.force_disconnect(now);
                     }
                 },
 
                 ActiveState::Connected { writer, .. } => match write_message(writer, stream, fd) {
                     Done(()) | Pending(()) => {}
-                    Failed => self.force_disconnect(now),
+                    Failed(err) => {
+                        log::error!("failed to write message: {err:?}");
+                        self.force_disconnect(now);
+                    }
                 },
             },
         }

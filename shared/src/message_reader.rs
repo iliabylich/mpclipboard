@@ -1,4 +1,4 @@
-use crate::{Completion, Message, error};
+use crate::{Message, prelude::*};
 use core::num::NonZeroUsize;
 
 #[must_use]
@@ -24,7 +24,7 @@ impl MessageReader {
         &mut self,
         bytes: [u8; Message::BYTESIZE],
         len: NonZeroUsize,
-    ) -> Completion<Message, ()> {
+    ) -> Completion<Message, anyhow::Error, ()> {
         if self.pos >= Message::BYTESIZE {
             unreachable!("malformed state")
         }
@@ -49,8 +49,7 @@ impl MessageReader {
                 match Message::decode(&self.buf) {
                     Ok(m) => message = Some(m),
                     Err(err) => {
-                        error!("failed to decode message: {err:?}");
-                        return Completion::Failed;
+                        return Failed(err.context("failed to decode message in MessageReader"));
                     }
                 }
                 self.buf = [0; _];
@@ -59,9 +58,9 @@ impl MessageReader {
         }
 
         if let Some(message) = message {
-            Completion::Done(message)
+            Done(message)
         } else {
-            Completion::Pending(())
+            Pending(())
         }
     }
 }
@@ -75,7 +74,7 @@ impl Default for MessageReader {
 #[cfg(test)]
 mod tests {
     use super::MessageReader;
-    use crate::{Completion, Message, NonEmptyInlineString};
+    use crate::{Message, NonEmptyInlineString};
     use core::num::NonZeroUsize;
 
     #[test]
@@ -105,8 +104,10 @@ mod tests {
         let mut buf1 = [0; Message::BYTESIZE];
         buf1[..100].copy_from_slice(&one[..100]);
         assert_eq!(
-            reader.received(buf1, NonZeroUsize::new(100).unwrap()),
-            Completion::Pending(())
+            reader
+                .received(buf1, NonZeroUsize::new(100).unwrap())
+                .unwrap_pending(),
+            ()
         );
 
         // write "bc"

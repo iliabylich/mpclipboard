@@ -1,11 +1,11 @@
 use super::{Diff, EventLoopResult, FdState};
 use crate::{Timerfd, Wants};
+use anyhow::{Result, bail};
 use core::mem::MaybeUninit;
 use rustix::{
     event::epoll,
     fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd, RawFd},
     fs::Timespec,
-    io::Errno,
 };
 
 pub struct EventLoop {
@@ -18,7 +18,7 @@ impl EventLoop {
     const TIMER_ID: u64 = 1;
     const FD_ID: u64 = 2;
 
-    pub fn new() -> Result<Self, EpollError> {
+    pub fn new() -> Result<Self> {
         let epoll_fd = epoll::create(epoll::CreateFlags::CLOEXEC)?;
 
         let this = Self {
@@ -31,7 +31,7 @@ impl EventLoop {
         Ok(this)
     }
 
-    pub fn sync(&mut self, wants: Option<(BorrowedFd<'_>, Wants)>) -> Result<(), EpollError> {
+    pub fn sync(&mut self, wants: Option<(BorrowedFd<'_>, Wants)>) -> Result<()> {
         match self.fd.transition(wants) {
             Diff::Add { fd, wants } => {
                 self.add(unsafe { BorrowedFd::borrow_raw(fd) }, Self::FD_ID, wants)?;
@@ -56,7 +56,7 @@ impl EventLoop {
         Ok(())
     }
 
-    pub fn drain_events_without_waiting(&mut self) -> Result<EventLoopResult, EpollError> {
+    pub fn drain_events_without_waiting(&mut self) -> Result<EventLoopResult> {
         let mut events = [MaybeUninit::uninit(); 4];
         let timeout = Timespec {
             tv_sec: 0,
@@ -91,7 +91,7 @@ impl EventLoop {
 
                 _ => {
                     let id = event.data.u64();
-                    return Err(EpollError::UnknownEvent { id });
+                    bail!("unknown epoll event {id}");
                 }
             }
         }
@@ -99,7 +99,7 @@ impl EventLoop {
         Ok(out)
     }
 
-    fn add(&self, fd: BorrowedFd<'_>, id: u64, wants: Wants) -> Result<(), EpollError> {
+    fn add(&self, fd: BorrowedFd<'_>, id: u64, wants: Wants) -> Result<()> {
         epoll::add(
             &self.epoll_fd,
             fd,
@@ -113,7 +113,7 @@ impl EventLoop {
         let _ = epoll::delete(&self.epoll_fd, fd);
     }
 
-    fn modify(&self, fd: BorrowedFd<'_>, id: u64, wants: Wants) -> Result<(), EpollError> {
+    fn modify(&self, fd: BorrowedFd<'_>, id: u64, wants: Wants) -> Result<()> {
         epoll::modify(
             &self.epoll_fd,
             fd,
@@ -131,7 +131,7 @@ impl EventLoop {
         }) | epoll::EventFlags::RDHUP
     }
 
-    fn add_timer(&self) -> Result<(), EpollError> {
+    fn add_timer(&self) -> Result<()> {
         epoll::add(
             &self.epoll_fd,
             &self.timer,
@@ -141,31 +141,8 @@ impl EventLoop {
         Ok(())
     }
 
-    fn drain_timer(&mut self) -> Result<u64, EpollError> {
+    fn drain_timer(&mut self) -> Result<u64> {
         Ok(self.timer.read()?)
-    }
-}
-
-#[derive(Debug)]
-pub enum EpollError {
-    Errno(Errno),
-    UnknownEvent { id: u64 },
-}
-
-impl core::fmt::Display for EpollError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self {
-            Self::Errno(errno) => write!(f, "{errno}"),
-            Self::UnknownEvent { id } => write!(f, "unknown epoll event {id}"),
-        }
-    }
-}
-
-impl core::error::Error for EpollError {}
-
-impl From<Errno> for EpollError {
-    fn from(error: Errno) -> Self {
-        Self::Errno(error)
     }
 }
 

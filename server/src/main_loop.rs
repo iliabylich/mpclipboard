@@ -3,9 +3,7 @@ use crate::{
     pre_source::PreSource, tcp_listener::TcpListener,
 };
 use anyhow::{Context, Result};
-use mpclipboard_shared::{
-    ID, Message, REvents, Store, Timerfd, enable_tcp_keep_alive, error, info, prelude::*, trace,
-};
+use mpclipboard_shared::{ID, Message, REvents, Store, Timerfd, enable_tcp_keep_alive, prelude::*};
 use rustix::event::PollFlags;
 use std::{
     collections::HashMap,
@@ -33,7 +31,7 @@ impl MainLoop {
             .duration_since(std::time::UNIX_EPOCH)
             .context("time goes backwards")?
             .as_secs();
-        trace!("start time: {now}");
+        log::trace!("start time: {now}");
 
         let pre_sources = FdSet::<20, PreSource>::new();
         let pre_sinks = FdSet::<20, PreSink>::new();
@@ -100,7 +98,7 @@ impl MainLoop {
             .timer
             .read()
             .unwrap_or_else(|err| unreachable!("failed to read timerfd: {err}"));
-        trace!("tick {}", self.now);
+        log::trace!("tick {}", self.now);
 
         self.pre_sources.reap(self.now);
         self.pre_sinks.reap(self.now);
@@ -113,13 +111,13 @@ impl MainLoop {
             Err(err) => unreachable!("failed to accept(): {err:?}"),
         };
         let source = PreSource::new(fd, self.now);
-        trace!("new {source}");
+        log::trace!("new {source}");
         self.pre_sources.insert(source);
     }
 
     fn on_pre_source_event(&mut self, source: PreSource, revents: PollFlags) {
         match source.on_poll_event(revents, self.now) {
-            Failed => {}
+            Failed(err) => log::error!("{err:?}"),
             Pending(source) => {
                 self.pre_sources.insert(source);
             }
@@ -127,10 +125,10 @@ impl MainLoop {
                 let id = req.id;
                 if req.token == self.config.token {
                     let sink = PreSink::new(fd, id, self.now);
-                    info!("promoting {id} to {sink}");
+                    log::info!("promoting {id} to {sink}");
                     self.pre_sinks.insert(sink);
                 } else {
-                    info!("auth failed for {id}: {req:?}");
+                    log::info!("auth failed for {id}: {req:?}");
                 }
             }
         }
@@ -138,30 +136,33 @@ impl MainLoop {
 
     fn on_pre_sink_event(&mut self, sink: PreSink, revents: PollFlags) {
         match sink.on_poll_event(revents, self.now) {
-            Failed => {}
+            Failed(err) => log::error!("{err:?}"),
             Pending(sink) => {
                 self.pre_sinks.insert(sink);
             }
-            Done((id, fd)) => match enable_tcp_keep_alive(&fd) {
-                Ok(()) => {
-                    let mut client = Client::new(fd, id);
-                    info!("promoting {id} to {client}");
-                    if let Some(message) = self.store.current() {
-                        client.push(&message);
+            Done((id, fd)) => {
+                log::trace!("Configuring TCP keepalive");
+                match enable_tcp_keep_alive(&fd) {
+                    Ok(()) => {
+                        let mut client = Client::new(fd, id);
+                        log::info!("promoting {id} to {client}");
+                        if let Some(message) = self.store.current() {
+                            client.push(&message);
+                        }
+                        self.clients.insert(client);
                     }
-                    self.clients.insert(client);
+                    Err(err) => log::error!("{err:?}"),
                 }
-                Err(err) => error!("{err:?}"),
-            },
+            }
         }
     }
 
     fn on_client_event(&mut self, client: Client, revents: PollFlags) {
         match client.on_poll_event(revents) {
-            Failed => {}
+            Failed(err) => log::error!("{err:?}"),
             Done((message, client)) => {
                 if self.store.add(message) {
-                    info!("broadcasting {message:?}");
+                    log::info!("broadcasting {message:?}");
                     self.broadcast(&message, client.id());
                 }
 

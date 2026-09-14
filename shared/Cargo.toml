@@ -6,4 +6,4 @@ edition = "2024"
 [dependencies]
 rustix = { version = "1", features = ["time", "fs", "event", "net"] }
 boml = "2"
-log = "0.4"
+anyhow = "1"

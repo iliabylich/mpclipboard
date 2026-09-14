@@ -1,5 +1,5 @@
 use crate::{as_poll_fd::AsPollFd, reaper::CanBeReaped};
-use mpclipboard_shared::{ID, REvents, UpgradeResponseWriter, error, prelude::*, trace};
+use mpclipboard_shared::{ID, REvents, UpgradeResponseWriter, prelude::*};
 use rustix::event::{PollFd, PollFlags};
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd};
 
@@ -24,13 +24,10 @@ impl PreSink {
         mut self,
         revents: PollFlags,
         now: u64,
-    ) -> Completion<(ID, OwnedFd), Self> {
+    ) -> Completion<(ID, OwnedFd), anyhow::Error, Self> {
         let revents = match REvents::new(revents) {
             Ok(revents) => revents,
-            Err(err) => {
-                error!("polling {self} returned an error: {err:?}");
-                return Failed;
-            }
+            Err(err) => return Failed(err.context(format!("polling {self} returned an error"))),
         };
 
         if revents.readable {
@@ -38,11 +35,11 @@ impl PreSink {
         }
 
         if revents.writable {
-            trace!("{self} is writable");
+            log::trace!("{self} is writable");
 
             return match self.write(now) {
                 Done(()) => Done((self.id, self.fd)),
-                Failed => Failed,
+                Failed(err) => Failed(err),
                 Pending(()) => Pending(self),
             };
         }
@@ -50,16 +47,18 @@ impl PreSink {
         Pending(self)
     }
 
-    fn write(&mut self, now: u64) -> Completion<(), ()> {
+    fn write(&mut self, now: u64) -> Completion<(), anyhow::Error, ()> {
         self.last_activity_at = now;
 
-        mpclipboard_shared::io::write(&self.fd, self.writer.remainder())
-            .map_err(|| error!("write() failed for {self}"))
-            .and_then(|len| {
-                self.writer
-                    .written(len)
-                    .map_err(|| error!("{self} failed to call UpgradeResponseWriter"))
-            })
+        let len = match mpclipboard_shared::io::write(&self.fd, self.writer.remainder()) {
+            Done(len) => len,
+            Failed(err) => return Failed(err.context(format!("write() failed for {self}"))),
+            Pending(()) => return Pending(()),
+        };
+
+        self.writer
+            .written(len)
+            .map_err(|err| err.context(format!("{self} failed to call UpgradeResponseWriter")))
     }
 }
 

@@ -1,5 +1,4 @@
 use anyhow::{Context, Result};
-use mpclipboard_shared::trace;
 use rustls::ClientConfig;
 use rustls_platform_verifier::ConfigVerifierExt;
 use std::sync::{Arc, OnceLock};
@@ -15,7 +14,7 @@ impl TLS {
 
         let client_config = ClientConfig::with_platform_verifier()
             .context("failed to create SSL client with platform verifier")?;
-        trace!("TLS has been configured");
+        log::trace!("TLS has been configured");
 
         let _ = CLIENT_CONFIG.set(Arc::new(client_config));
 

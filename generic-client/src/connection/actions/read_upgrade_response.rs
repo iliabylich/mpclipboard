@@ -1,6 +1,6 @@
 use crate::connection::maybe_tls_stream::MaybeTlsStream;
 use mpclipboard_shared::{
-    Message, MessageReader, UpgradeResponseReader, enable_tcp_keep_alive, error, prelude::*, trace,
+    Message, MessageReader, UpgradeResponseReader, enable_tcp_keep_alive, prelude::*,
 };
 use std::os::fd::AsFd;
 
@@ -8,37 +8,34 @@ pub fn read_upgrade_response(
     fd: impl AsFd,
     stream: &mut MaybeTlsStream,
     reader: &mut UpgradeResponseReader,
-) -> Completion<MessageReader, ()> {
+) -> Completion<MessageReader, anyhow::Error, ()> {
     let mut buf = [0; UpgradeResponseReader::BUFFER_SIZE];
     let len = match stream.read_bytes(&fd, &mut buf) {
         Done(len) => len,
         Pending(()) => {
-            trace!("handshake response still pending: {:?}", reader);
+            log::trace!("handshake response still pending: {reader:?}");
             return Pending(());
         }
-        Failed => {
-            error!("failed to read() handshake response");
-            return Failed;
-        }
+        Failed(err) => return Failed(err),
     };
 
     let (leftover, leftover_len) = match reader.received(buf, len) {
         Done((leftover, leftover_len)) => {
-            trace!("Handshake response matches");
+            log::trace!("Handshake response matches");
             (leftover, leftover_len)
         }
         Pending(()) => {
-            trace!("handshake response still pending: {:?}", reader);
+            log::trace!("handshake response still pending: {reader:?}");
             return Pending(());
         }
-        Failed => {
-            error!("failed to read() handshake response");
-            return Failed;
+        Failed(err) => {
+            return Failed(err);
         }
     };
+
+    log::trace!("Configuring TCP keepalive");
     if let Err(err) = enable_tcp_keep_alive(&fd) {
-        error!("{err:?}");
-        return Failed;
+        return Failed(err);
     }
 
     let mut buf = [0; Message::BYTESIZE];

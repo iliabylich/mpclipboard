@@ -1,6 +1,5 @@
 use crate::{Connectivity, MPClipboard, Output};
 use anyhow::{Context, Result};
-use mpclipboard_shared::error;
 use std::{ffi::c_char, os::fd::AsRawFd};
 
 macro_rules! try_or_null {
@@ -8,7 +7,7 @@ macro_rules! try_or_null {
         match $v {
             Ok(v) => v,
             Err(err) => {
-                error!("{err:?}");
+                log::error!("error at FFI boundary: {err:?}");
                 return core::ptr::null_mut();
             }
         }
@@ -102,7 +101,7 @@ pub extern "C" fn mpclipboard_read(mpclipboard: *mut MPClipboard) -> COutput {
         Ok(Some(output)) => output.into(),
         Ok(None) => COutput::Ignore,
         Err(err) => {
-            error!("{err:?}");
+            log::error!("error at FFI boundary: {err:?}");
             COutput::Error
         }
     }
@@ -130,7 +129,7 @@ pub extern "C" fn mpclipboard_push_text(
         Ok(true) => PushResult::Pushed,
         Ok(false) => PushResult::Dropped,
         Err(err) => {
-            error!("{err:?}");
+            log::error!("error at FFI boundary: {err:?}");
             PushResult::Error
         }
     }
@@ -156,10 +155,10 @@ pub extern "C" fn mpclipboard_setup_rustls_on_jvm(
     match outcome.into_outcome() {
         jni::Outcome::Ok(()) => {}
         jni::Outcome::Err(err) => {
-            error!("Failed to instantiate rustls_platform_verifier: {err:?}");
+            log::error!("Failed to instantiate rustls_platform_verifier: {err:?}");
         }
         jni::Outcome::Panic(_) => {
-            error!("mpclipboard_setup_rustls_on_jvm panicked");
+            log::error!("mpclipboard_setup_rustls_on_jvm panicked");
         }
     }
 }

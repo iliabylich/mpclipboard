@@ -1,4 +1,5 @@
 use crate::NonEmptyInlineString;
+use anyhow::{Context, Result};
 use core::num::NonZeroUsize;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -55,7 +56,7 @@ impl Message {
         buf
     }
 
-    pub(crate) fn decode(buf: &[u8; Self::BYTESIZE]) -> Result<Self, MessageDecodeError> {
+    pub(crate) fn decode(buf: &[u8; Self::BYTESIZE]) -> Result<Self> {
         let len = buf[0];
 
         let mut timestamp: [u8; 16] = [0; _];
@@ -65,11 +66,9 @@ impl Message {
         let mut bytes: [u8; MAX_TEXT_LEN] = [0; _];
         bytes.copy_from_slice(&buf[17..Self::BYTESIZE]);
 
-        let len = NonZeroUsize::new(usize::from(len)).ok_or(MessageDecodeError::MalformedLength)?;
-        let bytes = bytes
-            .get(..len.get())
-            .ok_or(MessageDecodeError::MalformedLength)?;
-        let text = core::str::from_utf8(bytes).map_err(|_| MessageDecodeError::NonUtf8Text)?;
+        let len = NonZeroUsize::new(usize::from(len)).context("malformed message length")?;
+        let bytes = bytes.get(..len.get()).context("malformed message length")?;
+        let text = core::str::from_utf8(bytes).context("non-utf8 message text")?;
         let string = NonEmptyInlineString::new(text).unwrap_or_else(|_| unreachable!());
 
         Ok(Self { string, timestamp })
@@ -81,23 +80,6 @@ impl core::fmt::Debug for Message {
         write!(f, "Text({:?} at {})", self.text_as_str(), self.timestamp)
     }
 }
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum MessageDecodeError {
-    MalformedLength,
-    NonUtf8Text,
-}
-
-impl core::fmt::Display for MessageDecodeError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self {
-            Self::MalformedLength => f.write_str("malformed message length"),
-            Self::NonUtf8Text => f.write_str("non-utf8 message text"),
-        }
-    }
-}
-
-impl core::error::Error for MessageDecodeError {}
 
 #[cfg(test)]
 mod tests {

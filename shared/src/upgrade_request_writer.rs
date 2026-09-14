@@ -1,7 +1,8 @@
 use crate::{
-    CONNECTION_UPGRADE_HEADER, Completion, HOST_PREFIX, ID_PREFIX, START_LINE, TOKEN_PREFIX,
-    UPGRADE_MPCLIPBOARD_RAW_HEADER, UpgradeRequest,
+    CONNECTION_UPGRADE_HEADER, HOST_PREFIX, ID_PREFIX, START_LINE, TOKEN_PREFIX,
+    UPGRADE_MPCLIPBOARD_RAW_HEADER, UpgradeRequest, prelude::*,
 };
+use anyhow::anyhow;
 use core::num::NonZeroUsize;
 
 #[must_use]
@@ -65,16 +66,16 @@ impl UpgradeRequestWriter {
             .unwrap_or_else(|| unreachable!("malformed internal state"))
     }
 
-    pub fn written(&mut self, n: NonZeroUsize) -> Completion<(), ()> {
+    pub fn written(&mut self, n: NonZeroUsize) -> Completion<(), anyhow::Error, ()> {
         self.pos = self
             .pos
             .checked_add(n.get())
             .unwrap_or_else(|| unreachable!("pos overflow"));
 
         match self.pos.cmp(&self.len) {
-            core::cmp::Ordering::Less => Completion::Pending(()),
-            core::cmp::Ordering::Equal => Completion::Done(()),
-            core::cmp::Ordering::Greater => Completion::Failed,
+            core::cmp::Ordering::Less => Pending(()),
+            core::cmp::Ordering::Equal => Done(()),
+            core::cmp::Ordering::Greater => Failed(anyhow!("buffer overflow")),
         }
     }
 }
@@ -82,7 +83,7 @@ impl UpgradeRequestWriter {
 #[cfg(test)]
 mod tests {
     use super::UpgradeRequestWriter;
-    use crate::{Completion, HostPort, ID, Token, UpgradeRequest};
+    use crate::{HostPort, ID, Token, UpgradeRequest};
     use core::num::NonZeroUsize;
 
     fn req() -> UpgradeRequest {
@@ -110,24 +111,20 @@ mod tests {
             "GET / HTTP/1.1\r\nHost: localhost:3000\r\nToken: sekret\r\nID: test-client\r\nConnection: Upgrade\r\nUpgrade: mpclipboard-raw\r\n\r\n"
         );
 
-        assert_eq!(
-            writer.written(NonZeroUsize::new(100).unwrap()),
-            Completion::Pending(())
-        );
+        writer
+            .written(NonZeroUsize::new(100).unwrap())
+            .unwrap_pending();
         assert_eq!(
             core::str::from_utf8(writer.remainder()).unwrap(),
             "mpclipboard-raw\r\n\r\n"
         );
 
-        assert_eq!(
-            writer.written(NonZeroUsize::new(writer.remainder().len()).unwrap()),
-            Completion::Done(())
-        );
+        writer
+            .written(NonZeroUsize::new(writer.remainder().len()).unwrap())
+            .unwrap();
         assert_eq!(writer.remainder(), b"");
 
-        assert_eq!(
-            writer.written(NonZeroUsize::new(1).unwrap()),
-            Completion::Failed
-        );
+        let err = writer.written(NonZeroUsize::new(1).unwrap()).unwrap_err();
+        assert_eq!(err.to_string(), "buffer overflow");
     }
 }

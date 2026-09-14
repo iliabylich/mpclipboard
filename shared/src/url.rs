@@ -2,6 +2,7 @@ use crate::{
     HostPort, MAX_HOST_LENGTH, MAX_HOST_PORT_LENGTH, NonEmptyInlineString,
     array_writer::ArrayWriter,
 };
+use anyhow::{Context, Result, bail};
 use core::{
     fmt::Write,
     net::{SocketAddr, SocketAddrV4},
@@ -17,20 +18,21 @@ pub struct Url {
 }
 
 impl Url {
-    pub fn parse(url: &str) -> Result<Self, UrlError> {
+    pub fn parse(url: &str) -> Result<Self> {
         let (scheme, url) = url
             .split_once("://")
-            .ok_or(UrlError::MissingSchemeSeparator)?;
-        let (host, port) = url.rsplit_once(':').ok_or(UrlError::MissingPortSeparator)?;
+            .context("no :// separator in the URL")?;
+        let (host, port) = url
+            .rsplit_once(':')
+            .context("no : separator between host and port")?;
 
         let tls = match scheme {
             "http" => false,
             "https" => true,
-            _ => return Err(UrlError::UnknownScheme),
+            _ => bail!("unknown URL scheme"),
         };
-        let host = NonEmptyInlineString::<MAX_HOST_LENGTH>::new(host)
-            .map_err(|_| UrlError::InvalidHost)?;
-        let port = port.parse::<u16>().map_err(|_| UrlError::InvalidPort)?;
+        let host = NonEmptyInlineString::<MAX_HOST_LENGTH>::new(host).context("invalid host")?;
+        let port = port.parse::<u16>().context("invalid port")?;
 
         let mut buf = [0; MAX_HOST_PORT_LENGTH];
         let mut writer = ArrayWriter::new(&mut buf);
@@ -48,17 +50,17 @@ impl Url {
         })
     }
 
-    pub fn resolve(&self) -> Result<SocketAddrV4, UrlError> {
+    pub fn resolve(&self) -> Result<SocketAddrV4> {
         let mut addrs = (self.host.as_str(), self.port)
             .to_socket_addrs()
-            .map_err(|_| UrlError::ResolveFailed)?;
+            .context("failed to resolve URL")?;
 
         addrs
             .find_map(|addr| match addr {
                 SocketAddr::V4(v4) => Some(v4),
                 SocketAddr::V6(_) => None,
             })
-            .ok_or(UrlError::NoIpv4Address)
+            .context("can't resolve URL to IPv4 address")
     }
 
     #[must_use]
@@ -75,33 +77,6 @@ impl Url {
         self.header
     }
 }
-
-#[derive(Debug)]
-pub enum UrlError {
-    MissingSchemeSeparator,
-    MissingPortSeparator,
-    UnknownScheme,
-    InvalidHost,
-    InvalidPort,
-    ResolveFailed,
-    NoIpv4Address,
-}
-
-impl core::fmt::Display for UrlError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self {
-            Self::MissingSchemeSeparator => f.write_str("no :// separator in the URL"),
-            Self::MissingPortSeparator => f.write_str("no : separator between host and port"),
-            Self::UnknownScheme => f.write_str("unknown URL scheme"),
-            Self::InvalidHost => f.write_str("host is empty or too long"),
-            Self::InvalidPort => f.write_str("invalid port"),
-            Self::ResolveFailed => f.write_str("failed to resolve URL"),
-            Self::NoIpv4Address => f.write_str("can't resolve URL to IPv4 address"),
-        }
-    }
-}
-
-impl core::error::Error for UrlError {}
 
 #[cfg(test)]
 mod tests {

@@ -1,4 +1,5 @@
-use crate::{Completion, upgrade_response::UpgradeResponse};
+use crate::{prelude::*, upgrade_response::UpgradeResponse};
+use anyhow::anyhow;
 use core::num::NonZeroUsize;
 
 #[must_use]
@@ -19,16 +20,16 @@ impl UpgradeResponseWriter {
             .unwrap_or_else(|| unreachable!("malformed state"))
     }
 
-    pub fn written(&mut self, len: NonZeroUsize) -> Completion<(), ()> {
+    pub fn written(&mut self, len: NonZeroUsize) -> Completion<(), anyhow::Error, ()> {
         self.pos = self
             .pos
             .checked_add(len.get())
             .unwrap_or_else(|| unreachable!("length overflow"));
 
         match self.pos.cmp(&UpgradeResponse::BYTES.len()) {
-            core::cmp::Ordering::Less => Completion::Pending(()),
-            core::cmp::Ordering::Equal => Completion::Done(()),
-            core::cmp::Ordering::Greater => Completion::Failed,
+            core::cmp::Ordering::Less => Pending(()),
+            core::cmp::Ordering::Equal => Done(()),
+            core::cmp::Ordering::Greater => Failed(anyhow!("buffer overflow")),
         }
     }
 }
@@ -42,7 +43,7 @@ impl Default for UpgradeResponseWriter {
 #[cfg(test)]
 mod tests {
     use super::UpgradeResponseWriter;
-    use crate::{Completion, upgrade_response::UpgradeResponse};
+    use crate::upgrade_response::UpgradeResponse;
     use core::num::NonZeroUsize;
 
     #[test]
@@ -50,18 +51,14 @@ mod tests {
         let mut w = UpgradeResponseWriter::new();
         assert_eq!(w.remainder(), UpgradeResponse::BYTES);
 
-        assert_eq!(
-            w.written(NonZeroUsize::new(50).unwrap()),
-            Completion::Pending(())
-        );
+        w.written(NonZeroUsize::new(50).unwrap()).unwrap_pending();
         assert_eq!(w.remainder(), &UpgradeResponse::BYTES[50..]);
 
-        assert_eq!(
-            w.written(NonZeroUsize::new(UpgradeResponse::BYTES.len() - 50).unwrap()),
-            Completion::Done(())
-        );
+        w.written(NonZeroUsize::new(UpgradeResponse::BYTES.len() - 50).unwrap())
+            .unwrap();
         assert_eq!(w.remainder(), b"");
 
-        assert_eq!(w.written(NonZeroUsize::new(1).unwrap()), Completion::Failed);
+        let err = w.written(NonZeroUsize::new(1).unwrap()).unwrap_err();
+        assert_eq!(err.to_string(), "buffer overflow");
     }
 }

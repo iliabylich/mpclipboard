@@ -1,7 +1,7 @@
 use crate::as_poll_fd::AsPollFd;
 use anyhow::{Context, Result};
 use core::net::SocketAddrV4;
-use mpclipboard_shared::{REvents, info};
+use mpclipboard_shared::REvents;
 use rustix::{
     event::{PollFd, PollFlags},
     net::{AddressFamily, SocketType},
@@ -20,7 +20,7 @@ impl TcpListener {
         rustix::io::ioctl_fionbio(&fd, true)?;
         rustix::net::bind(&fd, &addr).context("failed to bind()")?;
         rustix::net::listen(&fd, 256).context("failed to listen()")?;
-        info!("Listening on http://{addr}");
+        log::info!("Listening on http://{addr}");
 
         Ok(Self { fd })
     }

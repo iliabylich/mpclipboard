@@ -18,7 +18,7 @@
 #![doc = include_str!("../README.md")]
 
 mod config;
-pub use config::{ConfigParser, ConfigParserError};
+pub use config::ConfigParser;
 
 mod array_writer;
 
@@ -74,15 +74,10 @@ mod wants;
 pub use wants::Wants;
 
 mod event_loop;
-#[cfg(any(target_os = "linux", target_os = "android"))]
-pub use event_loop::EpollError;
 pub use event_loop::{EventLoop, EventLoopResult};
 
-#[doc(hidden)]
-pub mod logger;
-
 mod revents;
-pub use revents::{REvents, REventsError};
+pub use revents::REvents;
 
 mod store;
 pub use store::Store;
@@ -91,7 +86,7 @@ mod tcp_keep_alive;
 pub use tcp_keep_alive::enable_tcp_keep_alive;
 
 mod url;
-pub use url::{Url, UrlError};
+pub use url::Url;
 
 pub(crate) fn strip_prefix_ignore_ascii_case<'a>(line: &'a str, prefix: &str) -> Option<&'a str> {
     let (pre, post) = line.split_at_checked(prefix.len())?;

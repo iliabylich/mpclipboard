@@ -1,5 +1,5 @@
 use crate::{as_poll_fd::AsPollFd, reaper::CanBeReaped};
-use mpclipboard_shared::{REvents, UpgradeRequest, UpgradeRequestReader, error, prelude::*, trace};
+use mpclipboard_shared::{REvents, UpgradeRequest, UpgradeRequestReader, prelude::*};
 use rustix::event::{PollFd, PollFlags};
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd};
 
@@ -22,13 +22,10 @@ impl PreSource {
         mut self,
         revents: PollFlags,
         now: u64,
-    ) -> Completion<(UpgradeRequest, OwnedFd), Self> {
+    ) -> Completion<(UpgradeRequest, OwnedFd), anyhow::Error, Self> {
         let revents = match REvents::new(revents) {
             Ok(revents) => revents,
-            Err(err) => {
-                error!("polling {self} returned an error: {err:?}");
-                return Failed;
-            }
+            Err(err) => return Failed(err.context(format!("polling {self} returned an error"))),
         };
 
         if revents.writable {
@@ -36,11 +33,11 @@ impl PreSource {
         }
 
         if revents.readable {
-            trace!("{self} is readable");
+            log::trace!("{self} is readable");
 
             return match self.read(now) {
                 Done(req) => Done((req, self.fd)),
-                Failed => Failed,
+                Failed(err) => Failed(err),
                 Pending(()) => Pending(self),
             };
         }
@@ -48,17 +45,19 @@ impl PreSource {
         Pending(self)
     }
 
-    fn read(&mut self, now: u64) -> Completion<UpgradeRequest, ()> {
+    fn read(&mut self, now: u64) -> Completion<UpgradeRequest, anyhow::Error, ()> {
         self.last_activity_at = now;
 
         let mut buf = [0; UpgradeRequestReader::BUFFER_SIZE];
-        mpclipboard_shared::io::read(&self.fd, &mut buf)
-            .map_err(|| error!("read() failed for {self}"))
-            .and_then(|len| {
-                self.reader
-                    .received(buf, len)
-                    .map_err(|| error!("{self} failed to call UpgradeRequestReader"))
-            })
+        let len = match mpclipboard_shared::io::read(&self.fd, &mut buf) {
+            Done(len) => len,
+            Failed(err) => return Failed(err.context(format!("read() failed for {self}"))),
+            Pending(()) => return Pending(()),
+        };
+
+        self.reader
+            .received(buf, len)
+            .map_err(|err| err.context(format!("{self} failed to call UpgradeRequestReader")))
     }
 }
 
