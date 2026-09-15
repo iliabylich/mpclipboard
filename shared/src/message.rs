@@ -1,7 +1,6 @@
 use crate::NonEmptyInlineString;
 use anyhow::{Context, Result};
 use core::num::NonZeroUsize;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 const MAX_TEXT_LEN: usize = 255;
 
@@ -9,23 +8,17 @@ const MAX_TEXT_LEN: usize = 255;
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Message {
     pub(crate) string: NonEmptyInlineString<MAX_TEXT_LEN>,
-    pub(crate) timestamp: u128,
 }
 
 impl Message {
     pub const BYTESIZE: usize = {
-        let size = size_of::<u8>() + size_of::<u128>() + MAX_TEXT_LEN;
-        assert!(size == 272);
+        let size = size_of::<u8>() + MAX_TEXT_LEN;
+        assert!(size == 256);
         size
     };
 
-    pub fn new(string: NonEmptyInlineString<MAX_TEXT_LEN>) -> Result<Self> {
-        let timestamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .context("bug: time goes backwards")?
-            .as_nanos();
-
-        Ok(Self { string, timestamp })
+    pub const fn new(string: NonEmptyInlineString<MAX_TEXT_LEN>) -> Result<Self> {
+        Ok(Self { string })
     }
 
     #[must_use]
@@ -39,19 +32,12 @@ impl Message {
     }
 
     #[must_use]
-    pub const fn timestamp(&self) -> u128 {
-        self.timestamp
-    }
-
-    #[must_use]
     pub(crate) fn encode(&self) -> [u8; Self::BYTESIZE] {
         let len = self.string.len().get();
-        let timestamp: [u8; 16] = self.timestamp.to_le_bytes();
 
         let mut buf = [0; Self::BYTESIZE];
         buf[0] = len;
-        buf[1..17].copy_from_slice(&timestamp);
-        buf[17..Self::BYTESIZE].copy_from_slice(self.string.as_fixed_size_bytes());
+        buf[1..Self::BYTESIZE].copy_from_slice(self.string.as_fixed_size_bytes());
 
         buf
     }
@@ -59,25 +45,21 @@ impl Message {
     pub(crate) fn decode(buf: &[u8; Self::BYTESIZE]) -> Result<Self> {
         let len = buf[0];
 
-        let mut timestamp: [u8; 16] = [0; _];
-        timestamp.copy_from_slice(&buf[1..17]);
-        let timestamp = u128::from_le_bytes(timestamp);
-
         let mut bytes: [u8; MAX_TEXT_LEN] = [0; _];
-        bytes.copy_from_slice(&buf[17..Self::BYTESIZE]);
+        bytes.copy_from_slice(&buf[1..Self::BYTESIZE]);
 
         let len = NonZeroUsize::new(usize::from(len)).context("malformed message length")?;
         let bytes = bytes.get(..len.get()).context("malformed message length")?;
         let text = core::str::from_utf8(bytes).context("non-utf8 message text")?;
         let string = NonEmptyInlineString::new(text).context("bug")?;
 
-        Ok(Self { string, timestamp })
+        Ok(Self { string })
     }
 }
 
 impl core::fmt::Debug for Message {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "Text({:?} at {})", self.text_as_str(), self.timestamp)
+        write!(f, "Text({:?})", self.text_as_str())
     }
 }
 
