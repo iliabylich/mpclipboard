@@ -1,6 +1,6 @@
 use crate::{
     CONNECTION_UPGRADE_HEADER, HOST_PREFIX, ID_PREFIX, START_LINE, TOKEN_PREFIX,
-    UPGRADE_MPCLIPBOARD_RAW_HEADER, UpgradeRequest, prelude::*,
+    UPGRADE_MPCLIPBOARD_RAW_HEADER, UpgradeRequest, VERSION_PREFIX, prelude::*,
 };
 use anyhow::{Context, Result, anyhow};
 use core::num::NonZeroUsize;
@@ -43,6 +43,10 @@ impl UpgradeRequestWriter {
         append(&mut pos, req.id.as_str())?;
         append(&mut pos, "\r\n")?;
 
+        append(&mut pos, VERSION_PREFIX)?;
+        append(&mut pos, req.version.as_str())?;
+        append(&mut pos, "\r\n")?;
+
         append(&mut pos, CONNECTION_UPGRADE_HEADER)?;
         append(&mut pos, "\r\n")?;
 
@@ -81,7 +85,7 @@ impl UpgradeRequestWriter {
 #[cfg(test)]
 mod tests {
     use super::UpgradeRequestWriter;
-    use crate::{HostPort, ID, Token, UpgradeRequest, test_helpers::non_zero_usize};
+    use crate::{HostPort, ID, Token, UpgradeRequest, Version, test_helpers::non_zero_usize};
     use anyhow::Result;
 
     fn req() -> Result<UpgradeRequest> {
@@ -89,6 +93,7 @@ mod tests {
             host: HostPort::new("localhost:3000")?,
             token: Token::new("sekret")?,
             id: ID::new("test-client")?,
+            version: Version::new("0.100.10")?,
         })
     }
 
@@ -96,8 +101,8 @@ mod tests {
     fn test_encode() -> Result<()> {
         let writer = UpgradeRequestWriter::new(req()?)?;
         assert_eq!(
-            &writer.buf[..writer.len],
-            b"GET / HTTP/1.1\r\nHost: localhost:3000\r\nToken: sekret\r\nID: test-client\r\nConnection: Upgrade\r\nUpgrade: mpclipboard-raw\r\n\r\n"
+            core::str::from_utf8(&writer.buf[..writer.len])?,
+            "GET / HTTP/1.1\r\nHost: localhost:3000\r\nToken: sekret\r\nID: test-client\r\nVersion: 0.100.10\r\nConnection: Upgrade\r\nUpgrade: mpclipboard-raw\r\n\r\n"
         );
 
         Ok(())
@@ -108,11 +113,11 @@ mod tests {
         let mut writer = UpgradeRequestWriter::new(req()?)?;
         assert_eq!(
             core::str::from_utf8(writer.remainder()?)?,
-            "GET / HTTP/1.1\r\nHost: localhost:3000\r\nToken: sekret\r\nID: test-client\r\nConnection: Upgrade\r\nUpgrade: mpclipboard-raw\r\n\r\n"
+            "GET / HTTP/1.1\r\nHost: localhost:3000\r\nToken: sekret\r\nID: test-client\r\nVersion: 0.100.10\r\nConnection: Upgrade\r\nUpgrade: mpclipboard-raw\r\n\r\n"
         );
 
         writer
-            .written(non_zero_usize(100)?)
+            .written(non_zero_usize(119)?)
             .expect_pending("we've written only 100 bytes");
         assert_eq!(
             core::str::from_utf8(writer.remainder()?)?,

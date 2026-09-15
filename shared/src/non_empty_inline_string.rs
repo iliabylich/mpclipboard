@@ -71,6 +71,27 @@ impl<const MAXLEN: usize> NonEmptyInlineString<MAXLEN> {
     pub const fn len(&self) -> NonZeroU8 {
         self.len
     }
+
+    /// # Panics
+    ///
+    /// Panics if given string is either empty or too long.
+    ///
+    /// This function is designed to be used in a const context, that's why it panics instead of returning an error.
+    pub const fn const_new(s: &str) -> Self {
+        assert!(!s.is_empty(), "empty string");
+        assert!(s.len() < u8::MAX as usize, "string is too long");
+        assert!(s.len() <= MAXLEN, "string is too long");
+
+        let mut bytes = [0; MAXLEN];
+        let (head, _tail) = bytes.split_at_mut(s.len());
+        head.copy_from_slice(s.as_bytes());
+
+        #[expect(clippy::cast_possible_truncation)]
+        let Some(len) = NonZeroU8::new(s.len() as u8) else {
+            panic!("empty string, checked above");
+        };
+        Self { len, bytes }
+    }
 }
 
 impl<const MAXLEN: usize> core::fmt::Debug for NonEmptyInlineString<MAXLEN> {
@@ -133,5 +154,16 @@ mod tess {
                 .to_string(),
             "string is empty"
         );
+    }
+
+    #[test]
+    fn test_const_new() {
+        type Ten = NonEmptyInlineString<10>;
+
+        const S1: Ten = Ten::const_new("foobarbaz0");
+        assert_eq!(S1.as_str(), "foobarbaz0");
+
+        const S2: Ten = Ten::const_new("abc");
+        assert_eq!(S2.as_str(), "abc");
     }
 }

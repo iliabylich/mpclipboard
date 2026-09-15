@@ -60,10 +60,14 @@ pub type Token = NonEmptyInlineString<MAX_TOKEN_LENGTH>;
 pub(crate) const MAX_ID_LENGTH: usize = 100;
 pub type ID = NonEmptyInlineString<MAX_ID_LENGTH>;
 
+const MAX_VERSION_LENGTH: usize = 50;
+pub type Version = NonEmptyInlineString<MAX_VERSION_LENGTH>;
+
 pub(crate) const START_LINE: &str = "GET / HTTP/1.1";
 pub(crate) const HOST_PREFIX: &str = "Host: ";
 pub(crate) const TOKEN_PREFIX: &str = "Token: ";
 pub(crate) const ID_PREFIX: &str = "ID: ";
+pub(crate) const VERSION_PREFIX: &str = "Version: ";
 pub(crate) const CONNECTION_UPGRADE_HEADER: &str = "Connection: Upgrade";
 pub(crate) const UPGRADE_MPCLIPBOARD_RAW_HEADER: &str = "Upgrade: mpclipboard-raw";
 
@@ -108,3 +112,5 @@ mod test_helpers;
 pub mod prelude {
     pub use super::Completion::{self, *};
 }
+
+pub const PROTOCOL_VERSION: Version = Version::const_new("3");

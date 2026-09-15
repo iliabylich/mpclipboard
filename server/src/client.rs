@@ -30,23 +30,23 @@ impl Client {
     ) -> Completion<(Message, Self), anyhow::Error, Self> {
         let revents = match REvents::new(revents) {
             Ok(revents) => revents,
-            Err(err) => return Failed(err.context(format!("polling {self} returned an error"))),
+            Err(err) => return Failed(err.context(format!("[{self}] polling returned an error"))),
         };
 
         if revents.writable {
-            log::trace!("{self} is writable");
+            log::trace!("[{self}] is writable");
             match self.write() {
                 Done(()) | Pending(()) => {}
-                Failed(err) => return Failed(err.context(format!("write() failed for {self}"))),
+                Failed(err) => return Failed(err.context(format!("[{self}] write() failed"))),
             }
         }
 
         if revents.readable {
-            log::trace!("{self} is readable");
+            log::trace!("[{self}] is readable");
             match self.read() {
                 Done(message) => return Done((message, self)),
                 Pending(()) => {}
-                Failed(err) => return Failed(err.context(format!("read() failed for {self}"))),
+                Failed(err) => return Failed(err.context(format!("[{self}] read() failed"))),
             }
         }
 

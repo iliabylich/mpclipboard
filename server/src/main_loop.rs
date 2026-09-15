@@ -3,7 +3,10 @@ use crate::{
     pre_source::PreSource, tcp_listener::TcpListener,
 };
 use anyhow::{Context, Result};
-use mpclipboard_shared::{ID, Message, REvents, Store, Timerfd, enable_tcp_keep_alive, prelude::*};
+use mpclipboard_shared::{
+    ID, Message, PROTOCOL_VERSION, REvents, Store, Timerfd, UpgradeRequest, enable_tcp_keep_alive,
+    prelude::*,
+};
 use rustix::event::PollFlags;
 use std::{
     collections::HashMap,
@@ -111,25 +114,33 @@ impl MainLoop {
             Err(err) => unreachable!("failed to accept(): {err:?}"),
         };
         let source = PreSource::new(fd, self.now);
-        log::trace!("new {source}");
+        log::trace!("[{source}] new source");
         self.pre_sources.insert(source);
     }
 
     fn on_pre_source_event(&mut self, source: PreSource, revents: PollFlags) {
         match source.on_poll_event(revents, self.now) {
             Failed(err) => log::error!("{err:?}"),
-            Pending(source) => {
-                self.pre_sources.insert(source);
-            }
-            Done((req, fd)) => {
-                let id = req.id;
-                if req.token == self.config.token {
-                    let sink = PreSink::new(fd, id, self.now);
-                    log::info!("promoting {id} to {sink}");
-                    self.pre_sinks.insert(sink);
-                } else {
-                    log::info!("auth failed for {id}: {req:?}");
+            Pending(source) => self.pre_sources.insert(source),
+            Done((
+                UpgradeRequest {
+                    token, id, version, ..
+                },
+                fd,
+            )) => {
+                if token != self.config.token {
+                    log::info!("[{id}] invalid token={token:?}");
+                    return;
                 }
+
+                if version != PROTOCOL_VERSION {
+                    log::info!("[{id}] bad version: given={version}, expected={PROTOCOL_VERSION}");
+                    return;
+                }
+
+                let sink = PreSink::new(fd, id, self.now);
+                log::info!("[{id}] promoting to {sink}");
+                self.pre_sinks.insert(sink);
             }
         }
     }
@@ -137,21 +148,19 @@ impl MainLoop {
     fn on_pre_sink_event(&mut self, sink: PreSink, revents: PollFlags) {
         match sink.on_poll_event(revents, self.now) {
             Failed(err) => log::error!("{err:?}"),
-            Pending(sink) => {
-                self.pre_sinks.insert(sink);
-            }
+            Pending(sink) => self.pre_sinks.insert(sink),
             Done((id, fd)) => {
-                log::trace!("Configuring TCP keepalive");
+                log::trace!("[{id}] Configuring TCP keepalive");
                 match enable_tcp_keep_alive(&fd) {
                     Ok(()) => {
                         let mut client = Client::new(fd, id);
-                        log::info!("promoting {id} to {client}");
+                        log::info!("[{id}] promoting to {client}");
                         if let Some(message) = self.store.current() {
                             client.push(&message);
                         }
                         self.clients.insert(client);
                     }
-                    Err(err) => log::error!("{err:?}"),
+                    Err(err) => log::error!("[{id}] {err:?}"),
                 }
             }
         }
@@ -160,15 +169,13 @@ impl MainLoop {
     fn on_client_event(&mut self, client: Client, revents: PollFlags) {
         match client.on_poll_event(revents) {
             Failed(err) => log::error!("{err:?}"),
+            Pending(client) => self.clients.insert(client),
             Done((message, client)) => {
                 if self.store.add(message) {
                     log::info!("broadcasting {message:?}");
                     self.broadcast(&message, client.id());
                 }
 
-                self.clients.insert(client);
-            }
-            Pending(client) => {
                 self.clients.insert(client);
             }
         }

@@ -1,7 +1,7 @@
 use crate::{
     CONNECTION_UPGRADE_HEADER, HOST_PREFIX, HostPort, ID, ID_PREFIX, Message, START_LINE,
-    TOKEN_PREFIX, Token, UPGRADE_MPCLIPBOARD_RAW_HEADER, UpgradeRequest, prelude::*,
-    strip_prefix_ignore_ascii_case,
+    TOKEN_PREFIX, Token, UPGRADE_MPCLIPBOARD_RAW_HEADER, UpgradeRequest, VERSION_PREFIX, Version,
+    prelude::*, strip_prefix_ignore_ascii_case,
 };
 use anyhow::{Context, Result, anyhow};
 use core::num::NonZeroUsize;
@@ -14,9 +14,12 @@ pub struct UpgradeRequestReader {
     pos: usize,
 
     seen_start_line: bool,
+
     host: Option<HostPort>,
     token: Option<Token>,
     id: Option<ID>,
+    version: Option<Version>,
+
     seen_connection_upgrade: bool,
     seen_upgrade_mpclipboard_raw: bool,
     seen_eos: bool,
@@ -31,9 +34,12 @@ impl UpgradeRequestReader {
             pos: 0,
 
             seen_start_line: false,
+
             host: None,
             token: None,
             id: None,
+            version: None,
+
             seen_connection_upgrade: false,
             seen_upgrade_mpclipboard_raw: false,
             seen_eos: false,
@@ -75,6 +81,7 @@ impl UpgradeRequestReader {
                 HttpLine::HostPort(host) => self.host = Some(host),
                 HttpLine::Token(token) => self.token = Some(token),
                 HttpLine::ID(id) => self.id = Some(id),
+                HttpLine::Version(version) => self.version = Some(version),
                 HttpLine::ConnectionUpgrade => self.seen_connection_upgrade = true,
                 HttpLine::UpgradeMPClipboardRaw => self.seen_upgrade_mpclipboard_raw = true,
                 HttpLine::EndOfRequest => {
@@ -119,11 +126,17 @@ impl UpgradeRequestReader {
             && let Some(host) = self.host
             && let Some(token) = self.token
             && let Some(id) = self.id
+            && let Some(version) = self.version
             && self.seen_connection_upgrade
             && self.seen_upgrade_mpclipboard_raw
             && self.seen_eos
         {
-            Some(UpgradeRequest { host, token, id })
+            Some(UpgradeRequest {
+                host,
+                token,
+                id,
+                version,
+            })
         } else {
             None
         }
@@ -142,6 +155,7 @@ enum HttpLine {
     HostPort(HostPort),
     Token(Token),
     ID(ID),
+    Version(Version),
     ConnectionUpgrade,
     UpgradeMPClipboardRaw,
     EndOfRequest,
@@ -168,8 +182,11 @@ impl HttpLine {
             let token = Token::new(value).context("malformed token")?;
             Ok(Some(Self::Token(token)))
         } else if let Some(value) = strip_prefix_ignore_ascii_case(line, ID_PREFIX) {
-            let id = ID::new(value).ok().context("malformed id")?;
+            let id = ID::new(value).context("malformed id")?;
             Ok(Some(Self::ID(id)))
+        } else if let Some(version) = strip_prefix_ignore_ascii_case(line, VERSION_PREFIX) {
+            let version = Version::new(version).context("malformed version")?;
+            Ok(Some(Self::Version(version)))
         } else if strip_prefix_ignore_ascii_case(line, CONNECTION_UPGRADE_HEADER) == Some("") {
             Ok(Some(Self::ConnectionUpgrade))
         } else if strip_prefix_ignore_ascii_case(line, UPGRADE_MPCLIPBOARD_RAW_HEADER) == Some("") {
@@ -186,7 +203,7 @@ impl HttpLine {
 mod tests {
     use super::UpgradeRequestReader;
     use crate::{
-        HostPort, ID, Token, UpgradeRequest, UpgradeRequestWriter,
+        HostPort, ID, Token, UpgradeRequest, UpgradeRequestWriter, Version,
         test_helpers::{as_chunks_with_guaranteed_trailer, non_zero_usize},
     };
     use anyhow::Result;
@@ -196,6 +213,7 @@ mod tests {
             host: HostPort::new("localhost:3000")?,
             token: Token::new("sekret")?,
             id: ID::new("test-client")?,
+            version: Version::new("1.2.3")?,
         })
     }
 

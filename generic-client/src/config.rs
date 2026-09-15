@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use mpclipboard_shared::{ConfigParser, ID, Token, UpgradeRequest, Url};
+use mpclipboard_shared::{ConfigParser, ID, PROTOCOL_VERSION, Token, UpgradeRequest, Url};
 use std::path::{Path, PathBuf};
 
 #[derive(Clone, Copy)]
@@ -61,6 +61,7 @@ impl Config {
             host: self.url.header(),
             token: self.token,
             id: self.id,
+            version: PROTOCOL_VERSION,
         }
     }
 }

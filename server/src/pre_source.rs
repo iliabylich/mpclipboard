@@ -25,19 +25,19 @@ impl PreSource {
     ) -> Completion<(UpgradeRequest, OwnedFd), anyhow::Error, Self> {
         let revents = match REvents::new(revents) {
             Ok(revents) => revents,
-            Err(err) => return Failed(err.context(format!("polling {self} returned an error"))),
+            Err(err) => return Failed(err.context(format!("[{self}] polling returned an error"))),
         };
 
         if revents.writable {
-            unreachable!("{self} is writable but noone asked for it");
+            unreachable!("[{self}] is writable but noone asked for it");
         }
 
         if revents.readable {
-            log::trace!("{self} is readable");
+            log::trace!("[{self}] is readable");
 
             return match self.read(now) {
                 Done(req) => Done((req, self.fd)),
-                Failed(err) => Failed(err.context(format!("read() failed for {self}"))),
+                Failed(err) => Failed(err.context(format!("[{self}] read() failed for"))),
                 Pending(()) => Pending(self),
             };
         }
