@@ -1,21 +1,21 @@
 dev log="info":
-    RUST_LOG_STYLE=always RUST_LOG={{log}} cargo run
+    RUST_LOG_STYLE=always RUST_LOG="{{log}}" cargo run
 
-release version out:
+_build-musl:
     cargo build --target=x86_64-unknown-linux-musl --release
-    strip target/x86_64-unknown-linux-musl/release/mpclipboard-server
-    cargo deb --deb-version {{version}} -p mpclipboard-server --target=x86_64-unknown-linux-musl
-    mv target/debian/mpclipboard-server_{{version}}_amd64.deb {{out}}
 
-container-build version:
-    cd .. && docker build -t ghcr.io/iliabylich/mpclipboard:{{version}} -f server/Dockerfile .
+release-deb version:
+    @just _build-musl
 
-container-push version:
+    cargo deb --deb-version "{{version}}" -p mpclipboard-server --target=x86_64-unknown-linux-musl
+    mv "target/debian/mpclipboard-server_{{version}}_amd64.deb" "$ROOT_DIR"
+    mv target/x86_64-unknown-linux-musl/release/mpclipboard-server "$ROOT_DIR/mpclipboard-server-bin-{{version}}"
+
+release-container version:
+    @just _build-musl
+
+    docker build -t ghcr.io/iliabylich/mpclipboard:{{version}} .
     docker push ghcr.io/iliabylich/mpclipboard:{{version}}
 
-container-mark-latest version:
     docker tag ghcr.io/iliabylich/mpclipboard:{{version}} ghcr.io/iliabylich/mpclipboard:latest
     docker push ghcr.io/iliabylich/mpclipboard:latest
-
-upload version ref="master":
-    gh workflow run release-server --ref {{ref}} -f version={{version}}

@@ -3,15 +3,15 @@ dev log="info":
     RUST_LOG_STYLE=always RUST_LOG={{log}} cargo run
 
 [linux]
-release version out:
+release-deb version:
     cargo build --release
-    cargo deb --deb-version {{version}} -p mpclipboard-client
-    mv target/debian/mpclipboard-client_{{version}}_amd64.deb {{out}}
+    cargo deb --deb-version "{{version}}" -p mpclipboard-client
+    mv "target/debian/mpclipboard-client_{{version}}_amd64.deb" "$ROOT_DIR/mpclipboard-client_{{version}}_amd64.deb"
 
 baseicon := '../icon_512x512.png'
 
 _generate-icon name rgb:
-    magick {{baseicon}} \
+    convert {{baseicon}} \
         -resize 32x32 \
         -alpha extract \
         -background '{{rgb}}' \
@@ -25,6 +25,3 @@ generate-all-resources:
     @just _generate-icon assets/green.argb32 'rgb(23, 199, 23)'
     @just _generate-icon assets/red.argb32 'rgb(195, 40, 40)'
     @just _generate-icon assets/yellow.argb32 'rgb(236, 223, 41)'
-
-upload version ref="master":
-    gh workflow run release-linux --ref {{ref}} -f version={{version}}

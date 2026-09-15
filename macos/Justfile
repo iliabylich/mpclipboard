@@ -23,9 +23,9 @@ dev:
     @just build Debug
     @just run Debug
 
-# Builds a release and places it at given "out" argument
+# Builds a release and places it at "rootdir/mpclipboard_<version>.dmg"
 [macos]
-release out:
+release-dmg version:
     @just clean
     @just generate
     cd ../generic-client && cargo build --release
@@ -38,7 +38,7 @@ release out:
         ln -s /Applications dmg-root/Applications && \
         hdiutil create -volname mpclipboard -srcfolder dmg-root -ov -format UDZO mpclipboard.dmg
 
-    mv build/Release/mpclipboard.dmg {{out}}
+    mv build/Release/mpclipboard.dmg "$ROOT_DIR/mpclipboard_{{version}}_arm64.dmg"
 
 # Removes build artifacts
 clean:
@@ -46,10 +46,6 @@ clean:
     rm -rf dmg-root
     rm -rf mpclipboard.xcodeproj
     rm -f mpclipboard.app.zip
-
-# Schedules build on CI
-upload version ref="master":
-    gh workflow run release-macos --ref {{ref}} -f version={{version}}
 
 baseicon := '../icon_512x512.png'
 assetsdir := 'Assets.xcassets'

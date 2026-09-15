@@ -1,0 +1,71 @@
+name: release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: release version in MAJOR.MINOR.PATCH version, no "v" prefix
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  artifact-metadata: write
+  packages: write
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  # build-server:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - run: sudo apt update && sudo apt install musl musl-dev
+  #     - uses: actions/checkout@v7
+  #     - uses: dtolnay/rust-toolchain@stable
+  #       with:
+  #         targets: x86_64-unknown-linux-musl
+  #     - uses: extractions/setup-just@v4
+  #     - uses: taiki-e/install-action@v2
+  #       with:
+  #         tool: cargo-deb
+  #     - run: just server::release-deb "${{ inputs.version }}"
+  #     - uses: actions/upload-artifact@v7
+  #       with:
+  #         name: mpclipboard-server_${{ inputs.version }}_amd64.deb
+  #         path: mpclipboard-server_${{ inputs.version }}_amd64.deb
+  #     - uses: actions/upload-artifact@v7
+  #       with:
+  #         name: mpclipboard-server-bin-${{ inputs.version }}
+  #         path: mpclipboard-server-bin-${{ inputs.version }}
+
+  # build-linux-client:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v7
+  #     - uses: dtolnay/rust-toolchain@stable
+  #     - uses: extractions/setup-just@v4
+  #     - uses: taiki-e/install-action@v2
+  #       with:
+  #         tool: cargo-deb
+  #     - run: just linux::release-deb "${{ inputs.version }}"
+  #     - uses: actions/upload-artifact@v7
+  #       with:
+  #         name: mpclipboard-client_${{ inputs.version }}_amd64.deb
+  #         path: mpclipboard-client_${{ inputs.version }}_amd64.deb
+
+  build-macos-client:
+    runs-on: macos-latest
+    steps:
+      - run: ls -l /Applications | grep Xcode
+      - run: sudo xcode-select -switch /Applications/Xcode_26.3.app/Contents/Developer
+      - run: brew install xcodegen imagemagick
+      - uses: actions/checkout@v4
+      - uses: extractions/setup-just@v3
+      - uses: dtolnay/rust-toolchain@stable
+      - run: just macos::release-dmg "${{ inputs.version }}"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: mpclipboard_${{ inputs.version }}_arm64.dmg
+          path: mpclipboard_${{ inputs.version }}_arm64.dmg
