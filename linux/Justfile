@@ -10,7 +10,7 @@ release version out:
 
 baseicon := '../icon_512x512.png'
 
-generate-icon name rgb:
+_generate-icon name rgb:
     magick {{baseicon}} \
         -resize 32x32 \
         -alpha extract \
@@ -22,9 +22,9 @@ generate-icon name rgb:
         rgba:{{name}}
 
 generate-all-resources:
-    @just generate-icon assets/green.argb32 'rgb(23, 199, 23)'
-    @just generate-icon assets/red.argb32 'rgb(195, 40, 40)'
-    @just generate-icon assets/yellow.argb32 'rgb(236, 223, 41)'
+    @just _generate-icon assets/green.argb32 'rgb(23, 199, 23)'
+    @just _generate-icon assets/red.argb32 'rgb(195, 40, 40)'
+    @just _generate-icon assets/yellow.argb32 'rgb(236, 223, 41)'
 
 upload version ref="master":
     gh workflow run release-linux --ref {{ref}} -f version={{version}}
