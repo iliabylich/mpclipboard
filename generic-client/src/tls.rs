@@ -1,6 +1,5 @@
 use anyhow::{Context, Result};
 use rustls::ClientConfig;
-use rustls_platform_verifier::ConfigVerifierExt;
 use std::sync::{Arc, OnceLock};
 
 static CLIENT_CONFIG: OnceLock<Arc<ClientConfig>> = OnceLock::new();
@@ -12,8 +11,12 @@ impl TLS {
     pub(crate) fn init() -> Result<()> {
         let _ = rustls::crypto::ring::default_provider().install_default();
 
-        let client_config = ClientConfig::with_platform_verifier()
-            .context("failed to create SSL client with platform verifier")?;
+        let root_store =
+            rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+
+        let client_config = ClientConfig::builder()
+            .with_root_certificates(root_store)
+            .with_no_client_auth();
         log::trace!("TLS has been configured");
 
         let _ = CLIENT_CONFIG.set(Arc::new(client_config));

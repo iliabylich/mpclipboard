@@ -20,8 +20,6 @@ pub use mpclipboard::MPClipboard;
 pub use output::Output;
 
 pub use ffi::COutput;
-#[cfg(target_os = "android")]
-pub use ffi::mpclipboard_setup_rustls_on_jvm;
 
 mod config;
 mod connection;

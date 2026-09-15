@@ -19,7 +19,6 @@ class MPClipboard private constructor(
                 }
 
                 Ffi.loadLibrary(context.applicationContext)
-                Ffi.mpclipboard_setup_rustls_on_jvm(context.applicationContext)
                 didInit = true
                 return true
             }

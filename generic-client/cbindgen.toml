@@ -12,5 +12,4 @@ rename_variants = "QualifiedScreamingSnakeCase"
 "COutput" = "Output"
 
 [export]
-exclude = ["mpclipboard_setup_rustls_on_jvm"]
 prefix = "mpclipboard_"

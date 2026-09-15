@@ -1,5 +1,5 @@
 use crate::connection::maybe_tls_stream::MaybeTlsStream;
-use mpclipboard_shared::{Completion, Message, MessageReader};
+use mpclipboard_shared::{Message, MessageReader, prelude::*};
 use std::os::fd::AsFd;
 
 pub fn read_message(
@@ -8,7 +8,25 @@ pub fn read_message(
     fd: &impl AsFd,
 ) -> Completion<Message, anyhow::Error, ()> {
     let mut buf = [0; Message::BYTESIZE];
-    stream
-        .read_bytes(fd, &mut buf)
-        .and_then(|len| reader.received(buf, len))
+    let mut message = None;
+
+    loop {
+        let len = match stream.read_bytes(fd, &mut buf) {
+            Done(len) => len,
+            Failed(err) => return Failed(err),
+            Pending(()) => break,
+        };
+
+        match reader.received(buf, len) {
+            Done(m) => message = Some(m),
+            Failed(err) => return Failed(err),
+            Pending(()) => {}
+        }
+    }
+
+    if let Some(message) = message {
+        Done(message)
+    } else {
+        Pending(())
+    }
 }

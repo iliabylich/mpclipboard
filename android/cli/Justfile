@@ -5,7 +5,7 @@ build:
     mise build:android-cli
 
 install:
-    adb install -r {{apk}}
+    mise x -- adb install -r {{apk}}
 
 run host token name:
-    adb shell 'APK=$(pm path {{package}} | sed "s/package://"); CLASSPATH=$APK app_process /system/bin dev.mpclipboard.android.cli.Main {{host}} {{token}} {{name}}'
+    mise x -- adb shell 'APK=$(pm path {{package}} | sed "s/package://"); CLASSPATH=$APK app_process /system/bin dev.mpclipboard.android.cli.Main {{host}} {{token}} {{name}}'

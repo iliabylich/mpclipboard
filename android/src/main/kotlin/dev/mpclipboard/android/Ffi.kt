@@ -39,9 +39,6 @@ internal object Ffi {
     }
 
     @JvmStatic
-    external fun mpclipboard_setup_rustls_on_jvm(context: Context)
-
-    @JvmStatic
     external fun mpclipboard_new_inline(uri: ByteArray, token: ByteArray, name: ByteArray): Long
 
     @JvmStatic

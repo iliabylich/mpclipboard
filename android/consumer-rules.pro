@@ -9,8 +9,3 @@
 -keepclasseswithmembernames class dev.mpclipboard.android.Ffi {
     native <methods>;
 }
-
-# rustls-platform-verifier calls this package from Rust/JNI by exact class and method names.
--keep class org.rustls.platformverifier.** {
-    *;
-}

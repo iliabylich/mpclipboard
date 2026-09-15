@@ -7,7 +7,6 @@ gradle = ["9.2.0", "7.5.1"]
 android-sdk = "17.0"
 
 [env]
-RUSTLS_PLATFORM_VERIFIER_VERSION = "v/0.7.0"
 FLORISBOARD_VERSION = "v0.5.2"
 GRADLE_USER_HOME = "{{config_root}}/.cache/gradle"
 ANDROID_USER_HOME = "{{config_root}}/.cache/android"
@@ -45,20 +44,6 @@ run = """
 """
 description = "Installs Android SDK"
 
-[tasks."build:rustls-platform-verifier"]
-tools = { gradle = "7.5.1" }
-run = """
-    pushd rustls-platform-verifier
-        git reset --hard "$RUSTLS_PLATFORM_VERIFIER_VERSION"
-        git apply ../rustls-platform-verifier-patches/prefer-crls-on-android.patch
-        gradle --no-daemon -p android :rustls-platform-verifier:assembleRelease
-        git reset --hard "$RUSTLS_PLATFORM_VERIFIER_VERSION"
-    popd
-
-    ls -l rustls-platform-verifier/android/rustls-platform-verifier/build/outputs/aar/rustls-platform-verifier-release.aar
-"""
-description = "Builds patched rustls-platform-verifier"
-
 [tasks."build:mpclipboard-generic-client"]
 depends = ["setup:rust-target", "setup:cargo-ndk"]
 run = """
@@ -72,7 +57,7 @@ description = "Builds Rust part of MPClipboard"
 
 [tasks."build:mpclipboard-android"]
 tools = { gradle = "9.2.0" }
-depends = ["build:rustls-platform-verifier", "build:mpclipboard-generic-client"]
+depends = ["build:mpclipboard-generic-client"]
 run = """
     pushd android
         gradle --no-daemon assembleRelease
@@ -84,7 +69,7 @@ description = "Builds Kotlin wrapper of MPClipboard"
 
 [tasks."build:florisboard"]
 tools = { gradle = "9.2.0" }
-depends = ["build:mpclipboard-android", "build:rustls-platform-verifier"]
+depends = ["build:mpclipboard-android"]
 usage = """
 arg "<android-keystore-path>" help="Path to Android keystore file for signing"
 """
@@ -111,7 +96,7 @@ description = "Builds patched Florisboard"
 
 [tasks."build:android-cli"]
 tools = { gradle = "9.2.0" }
-depends = ["build:mpclipboard-android", "build:rustls-platform-verifier"]
+depends = ["build:mpclipboard-android"]
 run = """
     pushd android/cli
         gradle --no-daemon -p .. :cli:assembleDebug

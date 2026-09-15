@@ -61,8 +61,8 @@ jobs:
       - run: ls -l /Applications | grep Xcode
       - run: sudo xcode-select -switch /Applications/Xcode_26.3.app/Contents/Developer
       - run: brew install xcodegen imagemagick
-      - uses: actions/checkout@v4
-      - uses: extractions/setup-just@v3
+      - uses: actions/checkout@v7
+      - uses: extractions/setup-just@v4
       - uses: dtolnay/rust-toolchain@stable
       - run: just macos::release-dmg "${{ inputs.version }}"
       - uses: actions/upload-artifact@v7
