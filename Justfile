@@ -13,3 +13,6 @@ clippy:
     cd shared && cargo clippy
     cd generic-client && cargo clippy
     cd server && cargo clippy
+
+release version:
+    gh workflow run release --ref master -f version={{version}}

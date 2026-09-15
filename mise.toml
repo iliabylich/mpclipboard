@@ -3,7 +3,7 @@ shell = "bash -c"
 
 [tools]
 java = "17.0.2"
-gradle = ["9.2.0", "7.5.1"]
+gradle = "9.2.0"
 android-sdk = "17.0"
 
 [env]
@@ -56,7 +56,6 @@ run = """
 description = "Builds Rust part of MPClipboard"
 
 [tasks."build:mpclipboard-android"]
-tools = { gradle = "9.2.0" }
 depends = ["build:mpclipboard-generic-client"]
 run = """
     pushd android
@@ -68,7 +67,6 @@ run = """
 description = "Builds Kotlin wrapper of MPClipboard"
 
 [tasks."build:florisboard"]
-tools = { gradle = "9.2.0" }
 depends = ["build:mpclipboard-android"]
 usage = """
 arg "<android-keystore-path>" help="Path to Android keystore file for signing"
@@ -95,7 +93,6 @@ run = """
 description = "Builds patched Florisboard"
 
 [tasks."build:android-cli"]
-tools = { gradle = "9.2.0" }
 depends = ["build:mpclipboard-android"]
 run = """
     pushd android/cli

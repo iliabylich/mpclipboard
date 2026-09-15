@@ -55,17 +55,34 @@ jobs:
   #         name: mpclipboard-client_${{ inputs.version }}_amd64.deb
   #         path: mpclipboard-client_${{ inputs.version }}_amd64.deb
 
-  build-macos-client:
-    runs-on: macos-latest
+  # build-macos-client:
+  #   runs-on: macos-latest
+  #   steps:
+  #     - run: ls -l /Applications | grep Xcode
+  #     - run: sudo xcode-select -switch /Applications/Xcode_26.3.app/Contents/Developer
+  #     - run: brew install xcodegen imagemagick
+  #     - uses: actions/checkout@v7
+  #     - uses: extractions/setup-just@v4
+  #     - uses: dtolnay/rust-toolchain@stable
+  #     - run: just macos::release-dmg "${{ inputs.version }}"
+  #     - uses: actions/upload-artifact@v7
+  #       with:
+  #         name: mpclipboard_${{ inputs.version }}_arm64.dmg
+  #         path: mpclipboard_${{ inputs.version }}_arm64.dmg
+
+  build-florisboard:
+    runs-on: ubuntu-latest
     steps:
-      - run: ls -l /Applications | grep Xcode
-      - run: sudo xcode-select -switch /Applications/Xcode_26.3.app/Contents/Developer
-      - run: brew install xcodegen imagemagick
       - uses: actions/checkout@v7
-      - uses: extractions/setup-just@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - run: just macos::release-dmg "${{ inputs.version }}"
-      - uses: actions/upload-artifact@v7
         with:
-          name: mpclipboard_${{ inputs.version }}_arm64.dmg
-          path: mpclipboard_${{ inputs.version }}_arm64.dmg
+          submodules: true
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+      - uses: cargo-bins/cargo-binstall@main
+      - run: cargo binstall --no-confirm cargo-ndk
+      - uses: jdx/mise-action@v4
+        with:
+          install: true
+      - run: mise setup:android-sdk
+      - run: mise build:florisboard
