@@ -1,0 +1,12 @@
+---
+repo_url: https://iliabylich.github.io/mpclipboard/repo
+repo_name: MPClipboard
+repo_description: >-
+  This repo hosts a package built at https://github.com/iliabylich/mpclipboard.
+
+repo_icon: icon.png
+
+repo_keyalias: { env: FDROID_KEY_ALIAS }
+keystore: { env: FDROID_KEYSTORE_PATH }
+keystorepass: { env: FDROID_KEYSTORE_PASSWORD }
+keypass: { env: FDROID_KEYSTORE_PASSWORD }

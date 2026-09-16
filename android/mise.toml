@@ -1,0 +1,92 @@
+[task_config]
+shell = "bash -euo pipefail -c"
+
+[tools]
+java = "17.0.2"
+gradle = "9.2.0"
+android-sdk = "17.0"
+
+[env]
+GRADLE_USER_HOME = "{{config_root}}/.cache/gradle"
+ANDROID_USER_HOME = "{{config_root}}/.cache/android"
+ANDROID_KEY_ALIAS = "release"
+FDROID_KEY_ALIAS = "debian"
+_.file = { path = ".env", redacted = true }
+
+[tasks."setup:rust-target"]
+run = "rustup target add aarch64-linux-android"
+
+[tasks."setup:cargo-ndk"]
+run = """
+    if ! command -v cargo-binstall > /dev/null 2>&1; then
+        cargo install cargo-binstall --locked
+    fi
+
+    if ! command -v cargo-ndk >/dev/null 2>&1; then
+        cargo binstall --no-confirm cargo-ndk
+    fi
+"""
+
+[tasks."setup:android-sdk"]
+run = """
+    (set +o pipefail; yes | sdkmanager --licenses > /dev/null)
+    sdkmanager \
+        "platform-tools" \
+        "platforms;android-33" \
+        "platforms;android-35" \
+        "platforms;android-36" \
+        "build-tools;30.0.3" \
+        "build-tools;35.0.0" \
+        "ndk;26.1.10909125" \
+        "ndk;27.0.12077973" \
+        "cmake;3.22.1" \
+        "cmake;4.0.2"
+"""
+
+[tasks."build:generic-client"]
+depends = ["setup:rust-target", "setup:cargo-ndk"]
+run = """
+    pushd ../generic-client
+        cargo ndk -t arm64-v8a build --release
+        ls -l target/aarch64-linux-android/release/libmpclipboard_generic_client.a bindings.h
+    popd
+"""
+
+[tasks."build:debug"]
+depends = ["build:generic-client"]
+run = """
+    gradle --no-daemon assembleDebug
+    ls -l build/outputs/apk/debug/mpclipboard-debug.apk
+"""
+
+[tasks."build:release"]
+depends = ["build:generic-client"]
+run = """
+    gradle --no-daemon assembleRelease
+    ls -l build/outputs/apk/release/mpclipboard-release.apk
+"""
+
+[tasks."install:debug"]
+run = "adb install -r build/outputs/apk/debug/mpclipboard-debug.apk"
+
+[tasks."install:release"]
+run = "adb install -r build/outputs/apk/release/mpclipboard-release.apk"
+
+[tasks.logs]
+run = """
+    adb logcat --pid="$(adb shell pidof -s dev.ibylich.mpclipboard)"
+"""
+
+[tasks."fdroid:update"]
+run = """
+    pushd fdroid
+        chmod 600 config.yml
+
+        rm -rf metadata repo srclibs tmp
+        mkdir -p repo
+
+        cp ../build/outputs/apk/release/mpclipboard-release.apk repo/mpclipboard.apk
+
+        fdroid update --verbose --create-metadata
+    popd
+"""

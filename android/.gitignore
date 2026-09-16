@@ -1,1 +1,11 @@
+.env
 bindings.h
+.cache
+.cxx
+.gradle
+.kotlin
+build
+fdroid/metadata
+fdroid/repo
+fdroid/srclibs
+fdroid/tmp

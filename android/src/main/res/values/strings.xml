@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="app_name">MPClipboard</string>
     <string name="mpclipboard_widget_name">MPClipboard</string>
     <string name="mpclipboard_widget_connecting">MPClipboard connecting</string>
     <string name="mpclipboard_widget_connected">MPClipboard connected</string>

@@ -1,12 +1,33 @@
-## mpclipboard-android
+## MPClipboard for Android
 
-This is a Kotlin wrapper around `generic-client` that wraps native MPClipboard API and additionally provides two classes:
+This directory contains the standalone MPClipboard Android app. The app owns the
+network connection, exposes it to a separately installed clipboard app through
+AIDL, provides a settings screen for host/token/name, and includes a home-screen
+connectivity widget.
 
-1. `MPClipboardSettingsScreen` - a simple screen with a text field for host/token/name
-2. `MPClipboardWidgetProvider` - a home screen widget provider with connectivity indicator
+The service component is:
 
-### CLI demo
+```text
+dev.ibylich.mpclipboard/dev.ibylich.mpclipboard.MPClipboardService
+```
 
-Additionally there's a tiny CLI demo app that you can install on your Android device to check if it's going to works.
+Clients must request the signature-only permission and be signed with the same
+certificate as this app:
 
-It can be built and installed manually, [the recipe is in its own sub-directory](/android/cli/Justfile)
+```xml
+<uses-permission android:name="dev.ibylich.mpclipboard.permission.BIND_SERVICE" />
+```
+
+Both debug and release builds require these environment variables and are signed
+with the configured key:
+
+```text
+ANDROID_KEYSTORE_PATH
+ANDROID_KEYSTORE_PASSWORD
+ANDROID_KEY_ALIAS
+ANDROID_KEY_PASSWORD
+```
+
+The native `generic-client` library must be built before Gradle assembles the app.
+Use `just android::build-debug` or `just android::build-release` from the repository
+root after exporting the signing variables.

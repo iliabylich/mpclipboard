@@ -1,4 +1,4 @@
-package dev.mpclipboard.android
+package dev.ibylich.mpclipboard
 
 internal data class NativeOutput(
     val tag: Int,

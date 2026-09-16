@@ -1,6 +1,4 @@
-package dev.mpclipboard.android
-
-import android.content.Context
+package dev.ibylich.mpclipboard
 
 class MPClipboard private constructor(
     private var ptr: Long,
@@ -12,13 +10,13 @@ class MPClipboard private constructor(
         private var didInit = false
 
         @JvmStatic
-        fun init(context: Context): Boolean {
+        fun init(): Boolean {
             synchronized(lock) {
                 if (didInit) {
                     return true
                 }
 
-                Ffi.loadLibrary(context.applicationContext)
+                Ffi.loadLibrary()
                 didInit = true
                 return true
             }

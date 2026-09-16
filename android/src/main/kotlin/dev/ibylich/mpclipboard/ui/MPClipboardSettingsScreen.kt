@@ -1,4 +1,4 @@
-package dev.mpclipboard.android.ui
+package dev.ibylich.mpclipboard.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -23,9 +23,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import dev.mpclipboard.android.Connectivity
-import dev.mpclipboard.android.MPClipboardConfig
-import dev.mpclipboard.android.MPClipboardStore
+import dev.ibylich.mpclipboard.Connectivity
+import dev.ibylich.mpclipboard.MPClipboardConfig
+import dev.ibylich.mpclipboard.MPClipboardStore
 import kotlinx.coroutines.launch
 
 @Composable

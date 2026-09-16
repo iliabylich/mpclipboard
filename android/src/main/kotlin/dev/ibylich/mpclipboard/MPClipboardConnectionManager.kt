@@ -1,10 +1,10 @@
-package dev.mpclipboard.android
+package dev.ibylich.mpclipboard
 
 import android.content.Context
 import android.os.Looper
 import android.os.MessageQueue
 import java.io.FileDescriptor
-import dev.mpclipboard.android.widget.MPClipboardWidgetProvider
+import dev.ibylich.mpclipboard.widget.MPClipboardWidgetProvider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -14,55 +14,41 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 class MPClipboardConnectionManager(
     context: Context,
     private val store: MPClipboardStore = MPClipboardStore.from(context),
-    private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
+    private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
 ) {
     private val appContext = context.applicationContext
     private val mutableConnectivity = MutableStateFlow(Connectivity.Disconnected)
     private val mutableIncomingText = MutableSharedFlow<String>(extraBufferCapacity = 16)
     private var client: MPClipboard? = null
     private var clientFd: FileDescriptor? = null
-    private var startJob: Job? = null
+    private var configJob: Job? = null
+    private var activeConfig: MPClipboardConfig? = null
 
     val connectivity: StateFlow<Connectivity> = mutableConnectivity
     val incomingText: SharedFlow<String> = mutableIncomingText
 
     fun start() {
-        if (startJob?.isActive == true || client != null) {
+        if (configJob?.isActive == true) {
             return
         }
 
-        startJob = scope.launch {
-            setConnectivity(Connectivity.Connecting)
-            val config = store.config.first()
-
-            if (!config.isComplete || !MPClipboard.init(appContext)) {
-                setConnectivity(Connectivity.Disconnected)
-                return@launch
+        configJob = scope.launch {
+            store.config.collect { config ->
+                applyConfig(config)
             }
-
-            val nextClient = MPClipboard.initialize(config.host, config.token, config.name)
-            if (nextClient == null) {
-                setConnectivity(Connectivity.Disconnected)
-                return@launch
-            }
-
-            client = nextClient
-            registerFileDescriptorListener(nextClient)
         }
     }
 
     fun stop() {
-        startJob?.cancel()
-        startJob = null
-        unregisterFileDescriptorListener()
-        client?.close()
-        client = null
+        configJob?.cancel()
+        configJob = null
+        activeConfig = null
+        closeClient()
         setConnectivity(Connectivity.Disconnected)
     }
 
@@ -72,7 +58,47 @@ class MPClipboardConnectionManager(
     }
 
     fun pushText(text: String): PushResult {
-        return client?.pushText(text) ?: PushResult.Dropped
+        val currentClient = client ?: return PushResult.Dropped
+        return try {
+            currentClient.pushText(text)
+        } catch (_: RuntimeException) {
+            closeClient()
+            setConnectivity(Connectivity.Disconnected)
+            PushResult.Dropped
+        }
+    }
+
+    private fun applyConfig(config: MPClipboardConfig) {
+        if (config == activeConfig) {
+            return
+        }
+
+        activeConfig = config
+        closeClient()
+        if (!config.isComplete) {
+            setConnectivity(Connectivity.Disconnected)
+            return
+        }
+
+        setConnectivity(Connectivity.Connecting)
+        try {
+            if (!MPClipboard.init()) {
+                setConnectivity(Connectivity.Disconnected)
+                return
+            }
+
+            val nextClient = MPClipboard.initialize(config.host, config.token, config.name)
+            if (nextClient == null) {
+                setConnectivity(Connectivity.Disconnected)
+                return
+            }
+
+            client = nextClient
+            registerFileDescriptorListener(nextClient)
+        } catch (_: RuntimeException) {
+            closeClient()
+            setConnectivity(Connectivity.Disconnected)
+        }
     }
 
     private fun registerFileDescriptorListener(mpclipboard: MPClipboard) {
@@ -84,8 +110,7 @@ class MPClipboardConnectionManager(
             MessageQueue.OnFileDescriptorEventListener.EVENT_INPUT,
         ) { _, events ->
             if ((events and MessageQueue.OnFileDescriptorEventListener.EVENT_ERROR) != 0) {
-                mpclipboard.close()
-                client = null
+                closeClient()
                 setConnectivity(Connectivity.Disconnected)
                 return@addOnFileDescriptorEventListener 0
             }
@@ -109,15 +134,26 @@ class MPClipboardConnectionManager(
         clientFd = null
     }
 
+    private fun closeClient() {
+        unregisterFileDescriptorListener()
+        client?.close()
+        client = null
+    }
+
     private fun readOnce(mpclipboard: MPClipboard) {
-        when (val output = mpclipboard.read()) {
-            is Output.ConnectivityChanged -> setConnectivity(output.connectivity)
-            is Output.NewText -> mutableIncomingText.tryEmit(output.text)
-            is Output.Both -> {
-                setConnectivity(output.connectivity)
-                mutableIncomingText.tryEmit(output.text)
+        try {
+            when (val output = mpclipboard.read()) {
+                is Output.ConnectivityChanged -> setConnectivity(output.connectivity)
+                is Output.NewText -> mutableIncomingText.tryEmit(output.text)
+                is Output.Both -> {
+                    setConnectivity(output.connectivity)
+                    mutableIncomingText.tryEmit(output.text)
+                }
+                null -> Unit
             }
-            null -> Unit
+        } catch (_: RuntimeException) {
+            closeClient()
+            setConnectivity(Connectivity.Disconnected)
         }
     }
 

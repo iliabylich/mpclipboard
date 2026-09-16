@@ -1,4 +1,4 @@
-package dev.mpclipboard.android
+package dev.ibylich.mpclipboard
 
 sealed interface Output {
     data class ConnectivityChanged(

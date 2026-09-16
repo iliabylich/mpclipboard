@@ -1,4 +1,4 @@
-package dev.mpclipboard.android
+package dev.ibylich.mpclipboard
 
 import android.content.Context
 import androidx.datastore.core.DataStore

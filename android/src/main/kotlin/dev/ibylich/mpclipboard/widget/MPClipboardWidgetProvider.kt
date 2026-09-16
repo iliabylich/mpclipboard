@@ -1,4 +1,4 @@
-package dev.mpclipboard.android.widget
+package dev.ibylich.mpclipboard.widget
 
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
@@ -8,9 +8,9 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.widget.RemoteViews
-import dev.mpclipboard.android.Connectivity
-import dev.mpclipboard.android.MPClipboardStore
-import dev.mpclipboard.android.R
+import dev.ibylich.mpclipboard.Connectivity
+import dev.ibylich.mpclipboard.MPClipboardStore
+import dev.ibylich.mpclipboard.R
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first

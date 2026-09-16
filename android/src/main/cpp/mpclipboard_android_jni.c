@@ -52,7 +52,7 @@ static char *copy_bytes_as_c_string(JNIEnv *env, jbyteArray array) {
 
 static jobject new_output(JNIEnv *env, jint tag, jint connectivity,
                           jbyteArray text) {
-  jclass cls = (*env)->FindClass(env, "dev/mpclipboard/android/NativeOutput");
+  jclass cls = (*env)->FindClass(env, "dev/ibylich/mpclipboard/NativeOutput");
   if (cls == NULL) {
     return NULL;
   }
@@ -66,7 +66,7 @@ static jobject new_output(JNIEnv *env, jint tag, jint connectivity,
 }
 
 JNIEXPORT jlong JNICALL
-Java_dev_mpclipboard_android_Ffi_mpclipboard_1new_1inline(JNIEnv *env,
+Java_dev_ibylich_mpclipboard_Ffi_mpclipboard_1new_1inline(JNIEnv *env,
                                                           jclass clazz,
                                                           jbyteArray uri,
                                                           jbyteArray token,
@@ -93,14 +93,14 @@ Java_dev_mpclipboard_android_Ffi_mpclipboard_1new_1inline(JNIEnv *env,
   return (jlong)(intptr_t)mpclipboard;
 }
 
-JNIEXPORT jint JNICALL Java_dev_mpclipboard_android_Ffi_mpclipboard_1get_1fd(
+JNIEXPORT jint JNICALL Java_dev_ibylich_mpclipboard_Ffi_mpclipboard_1get_1fd(
     JNIEnv *env, jclass clazz, jlong client_ptr) {
   (void)env;
   (void)clazz;
   return mpclipboard_get_fd((mpclipboard_MPClipboard *)(intptr_t)client_ptr);
 }
 
-JNIEXPORT void JNICALL Java_dev_mpclipboard_android_Ffi_mpclipboard_1drop(
+JNIEXPORT void JNICALL Java_dev_ibylich_mpclipboard_Ffi_mpclipboard_1drop(
     JNIEnv *env, jclass clazz, jlong client_ptr) {
   (void)env;
   (void)clazz;
@@ -110,7 +110,7 @@ JNIEXPORT void JNICALL Java_dev_mpclipboard_android_Ffi_mpclipboard_1drop(
   }
 }
 
-JNIEXPORT jobject JNICALL Java_dev_mpclipboard_android_Ffi_mpclipboard_1read(
+JNIEXPORT jobject JNICALL Java_dev_ibylich_mpclipboard_Ffi_mpclipboard_1read(
     JNIEnv *env, jclass clazz, jlong client_ptr) {
   (void)clazz;
 
@@ -162,7 +162,7 @@ JNIEXPORT jobject JNICALL Java_dev_mpclipboard_android_Ffi_mpclipboard_1read(
   }
 }
 
-JNIEXPORT jint JNICALL Java_dev_mpclipboard_android_Ffi_mpclipboard_1push_1text(
+JNIEXPORT jint JNICALL Java_dev_ibylich_mpclipboard_Ffi_mpclipboard_1push_1text(
     JNIEnv *env, jclass clazz, jlong client_ptr, jbyteArray text) {
   (void)clazz;
 
