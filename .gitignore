@@ -1,11 +1,2 @@
 target
 Cargo.lock
-.env
-*.aar
-*.apk
-*.a
-.gradle
-.cxx
-local.properties
-build
-.cache
