@@ -2,7 +2,7 @@
 shell = "bash -euo pipefail -c"
 
 [tools]
-java = "17.0.2"
+java = "temurin-17"
 gradle = "9.2.0"
 android-sdk = "17.0"
 
@@ -10,7 +10,7 @@ android-sdk = "17.0"
 GRADLE_USER_HOME = "{{config_root}}/.cache/gradle"
 ANDROID_USER_HOME = "{{config_root}}/.cache/android"
 ANDROID_KEY_ALIAS = "release"
-FDROID_KEY_ALIAS = "debian"
+FDROID_KEY_ALIAS = "release"
 _.file = { path = ".env", redacted = true }
 
 [tasks."setup:rust-target"]

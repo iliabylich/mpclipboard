@@ -12,70 +12,73 @@ permissions:
   contents: write
   artifact-metadata: write
   packages: write
+  pages: write
+  id-token: write
 
 defaults:
   run:
     shell: bash
 
 jobs:
-  # build-server:
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - run: sudo apt update && sudo apt install musl musl-dev
-  #     - uses: actions/checkout@v7
-  #     - uses: dtolnay/rust-toolchain@stable
-  #       with:
-  #         targets: x86_64-unknown-linux-musl
-  #     - uses: extractions/setup-just@v4
-  #     - uses: taiki-e/install-action@v2
-  #       with:
-  #         tool: cargo-deb
-  #     - run: just server::release-deb "${{ inputs.version }}"
-  #     - uses: actions/upload-artifact@v7
-  #       with:
-  #         name: mpclipboard-server_${{ inputs.version }}_amd64.deb
-  #         path: mpclipboard-server_${{ inputs.version }}_amd64.deb
-  #     - uses: actions/upload-artifact@v7
-  #       with:
-  #         name: mpclipboard-server-bin-${{ inputs.version }}
-  #         path: mpclipboard-server-bin-${{ inputs.version }}
+  build-server:
+    runs-on: ubuntu-latest
+    steps:
+      - run: sudo apt update && sudo apt install musl musl-dev
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with: { targets: x86_64-unknown-linux-musl }
+      - uses: extractions/setup-just@v4
+      - uses: taiki-e/install-action@v2
+        with: { tool: cargo-deb }
+      - run: just server::release-deb "${{ inputs.version }}"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: mpclipboard-server_${{ inputs.version }}_amd64.deb
+          path: mpclipboard-server_${{ inputs.version }}_amd64.deb
 
-  # build-linux-client:
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v7
-  #     - uses: dtolnay/rust-toolchain@stable
-  #     - uses: extractions/setup-just@v4
-  #     - uses: taiki-e/install-action@v2
-  #       with:
-  #         tool: cargo-deb
-  #     - run: just linux::release-deb "${{ inputs.version }}"
-  #     - uses: actions/upload-artifact@v7
-  #       with:
-  #         name: mpclipboard-client_${{ inputs.version }}_amd64.deb
-  #         path: mpclipboard-client_${{ inputs.version }}_amd64.deb
-
-  # build-macos-client:
-  #   runs-on: macos-latest
-  #   steps:
-  #     - run: ls -l /Applications | grep Xcode
-  #     - run: sudo xcode-select -switch /Applications/Xcode_26.3.app/Contents/Developer
-  #     - run: brew install xcodegen imagemagick
-  #     - uses: actions/checkout@v7
-  #     - uses: extractions/setup-just@v4
-  #     - uses: dtolnay/rust-toolchain@stable
-  #     - run: just macos::release-dmg "${{ inputs.version }}"
-  #     - uses: actions/upload-artifact@v7
-  #       with:
-  #         name: mpclipboard_${{ inputs.version }}_arm64.dmg
-  #         path: mpclipboard_${{ inputs.version }}_arm64.dmg
-
-  build-florisboard:
+  build-linux-client:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: extractions/setup-just@v4
+      - uses: taiki-e/install-action@v2
+        with: { tool: cargo-deb }
+      - run: just linux::release-deb "${{ inputs.version }}"
+      - uses: actions/upload-artifact@v7
         with:
-          submodules: true
+          name: mpclipboard-client_${{ inputs.version }}_amd64.deb
+          path: mpclipboard-client_${{ inputs.version }}_amd64.deb
+
+  build-macos-client:
+    runs-on: macos-latest
+    steps:
+      - run: ls -l /Applications | grep Xcode
+      - run: sudo xcode-select -switch /Applications/Xcode_26.3.app/Contents/Developer
+      - run: brew install xcodegen imagemagick
+      - uses: actions/checkout@v7
+      - uses: extractions/setup-just@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: just macos::release-dmg "${{ inputs.version }}"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: mpclipboard_${{ inputs.version }}_arm64.dmg
+          path: mpclipboard_${{ inputs.version }}_arm64.dmg
+
+  build-android-client:
+    runs-on: ubuntu-latest
+    env:
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      FDROID_KEYSTORE_PASSWORD: ${{ secrets.FDROID_KEYSTORE_PASSWORD }}
+    steps:
+      - run: |
+          echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/android-keystore.jks" >> "$GITHUB_ENV"
+          echo "FDROID_KEYSTORE_PATH=$RUNNER_TEMP/fdroid-keystore.jks" >> "$GITHUB_ENV"
+
+          echo "${{ secrets.ANDROID_KEYSTORE }}" | base64 -d > "$RUNNER_TEMP/android-keystore.jks"
+          echo "${{ secrets.FDROID_KEYSTORE }}"  | base64 -d > "$RUNNER_TEMP/fdroid-keystore.jks"
+
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-linux-android
@@ -84,5 +87,69 @@ jobs:
       - uses: jdx/mise-action@v4
         with:
           install: true
+          working_directory: ./android
       - run: mise setup:android-sdk
-      - run: mise build:florisboard
+        working-directory: ./android
+      - run: mise build:generic-client
+        working-directory: ./android
+      - run: mise build:release
+        working-directory: ./android
+
+      - run: cp android/build/outputs/apk/release/mpclipboard-release.apk mpclipboard_${{ inputs.version }}_arm64.apk
+      - uses: actions/upload-artifact@v7
+        with:
+          name: mpclipboard_${{ inputs.version }}_arm64.apk
+          path: mpclipboard_${{ inputs.version }}_arm64.apk
+
+      - run: pipx install fdroidserver==2.4.5
+      - run: fdroid --version
+      - run: mise fdroid:update
+        working-directory: ./android
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: android/fdroid
+
+
+  release:
+    needs:
+      - build-server
+      - build-linux-client
+      - build-macos-client
+      - build-android-client
+    runs-on: ubuntu-latest
+    env:
+      DEB_DEPLOY_URL: ${{ secrets.DEB_DEPLOY_URL }}
+      DEB_DEPLOY_TOKEN: ${{ secrets.DEB_DEPLOY_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with: { name: "mpclipboard-server_${{ inputs.version }}_amd64.deb" }
+      - uses: actions/download-artifact@v8
+        with: { name: "mpclipboard-client_${{ inputs.version }}_amd64.deb" }
+      - uses: actions/download-artifact@v8
+        with: { name: "mpclipboard_${{ inputs.version }}_arm64.dmg" }
+      - uses: actions/download-artifact@v8
+        with: { name: "mpclipboard_${{ inputs.version }}_arm64.apk" }
+
+      - run: ls -l
+
+      - uses: ncipollo/release-action@v1
+        with:
+          artifacts: "*.deb,*.dmg,*.apk"
+          tag: v${{ inputs.version }}
+
+      - run: ./.github/scripts/deploy-deb.sh mpclipboard-server_${{ inputs.version }}_amd64.deb
+      - run: ./.github/scripts/deploy-deb.sh mpclipboard-client_${{ inputs.version }}_amd64.deb
+
+  deploy-pages:
+    needs: build-android-client
+    runs-on: ubuntu-latest
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5
