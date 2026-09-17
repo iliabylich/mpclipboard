@@ -22,7 +22,8 @@ impl MPClipboard {
 
         let result = INIT.get_or_init(|| {
             Logger::init();
-            TLS::init()
+            TLS::init()?;
+            Ok(())
         });
 
         match result {
@@ -94,6 +95,7 @@ impl MPClipboard {
         };
         let next_connectivity = Connectivity::new(&self.conn);
 
+        log::trace!("Connection wants: {:?}", self.conn.wants());
         self.event_loop
             .sync(self.conn.wants())
             .context("failed to update connection fd in event loop")?;

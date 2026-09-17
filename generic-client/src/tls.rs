@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use rustls::ClientConfig;
 use std::sync::{Arc, OnceLock};
 
@@ -17,9 +17,11 @@ impl TLS {
         let client_config = ClientConfig::builder()
             .with_root_certificates(root_store)
             .with_no_client_auth();
-        log::trace!("TLS has been configured");
 
-        let _ = CLIENT_CONFIG.set(Arc::new(client_config));
+        if CLIENT_CONFIG.set(Arc::new(client_config)).is_err() {
+            bail!("TLS has been already initialized");
+        }
+        log::trace!("TLS has been configured");
 
         Ok(())
     }

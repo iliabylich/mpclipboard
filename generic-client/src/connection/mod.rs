@@ -135,6 +135,8 @@ impl Connection {
     }
 
     pub(crate) fn on_readable(&mut self, now: u64, config: &Config) -> Option<Message> {
+        log::trace!("{self:?} reading...");
+
         match self {
             Self::Disconnected { .. } => {
                 unreachable!("can't read() in Disconnected state")
@@ -184,6 +186,8 @@ impl Connection {
     }
 
     pub(crate) fn on_writable(&mut self, now: u64, config: &Config) {
+        log::trace!("{self:?} writing...");
+
         match self {
             Self::Disconnected { .. } => {
                 unreachable!("can't write() in Disconencted state")

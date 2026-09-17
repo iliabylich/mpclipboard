@@ -73,7 +73,8 @@ impl MaybeTlsStream {
             Self::Tls(conn) => match (conn.wants_read(), conn.wants_write()) {
                 (true, true) => Some(Wants::ReadWrite),
                 (true, false) => Some(Wants::Read),
-                (false, true | false) => Some(Wants::Write),
+                (false, true) => Some(Wants::Write),
+                (false, false) => None,
             },
         }
     }
