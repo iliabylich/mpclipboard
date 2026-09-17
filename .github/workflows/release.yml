@@ -120,7 +120,6 @@ jobs:
     env:
       DEB_DEPLOY_URL: ${{ secrets.DEB_DEPLOY_URL }}
       DEB_DEPLOY_TOKEN: ${{ secrets.DEB_DEPLOY_TOKEN }}
-      HOMEBREW_DEPLOY_GH_TOKEN: ${{ secrets.HOMEBREW_DEPLOY_GH_TOKEN }}
     steps:
       - uses: actions/checkout@v7
 
@@ -143,7 +142,9 @@ jobs:
       - run: ./.github/scripts/deploy-deb.sh mpclipboard-server_${{ inputs.version }}_amd64.deb
       - run: ./.github/scripts/deploy-deb.sh mpclipboard-client_${{ inputs.version }}_amd64.deb
 
-      - run: |
+      - env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_DEPLOY_GH_TOKEN }}
+        run: |
           gh workflow run \
             update.yml \
             --repo iliabylich/homebrew-mpclipboard \
