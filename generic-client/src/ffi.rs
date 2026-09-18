@@ -19,8 +19,10 @@ fn cstring_to_str(s: *const c_char) -> Result<&'static str> {
     s.to_str().context("non-utf8 string")
 }
 fn string_to_c(s: String) -> (*mut c_char, usize) {
-    let (ptr, len, _capacity) = s.into_raw_parts();
-    (ptr.cast(), len)
+    let s = s.into_boxed_str().into_boxed_bytes();
+    let len = s.len();
+    let ptr = Box::into_raw(s).cast::<c_char>();
+    (ptr, len)
 }
 
 #[unsafe(no_mangle)]
@@ -138,4 +140,11 @@ pub extern "C" fn mpclipboard_push_text(
 #[unsafe(no_mangle)]
 pub extern "C" fn mpclipboard_drop(mpclipboard: *mut MPClipboard) {
     unsafe { core::ptr::drop_in_place(mpclipboard) };
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn mpclipboard_drop_str(ptr: *mut c_char, len: usize) {
+    let bytes: *mut [u8] = std::ptr::slice_from_raw_parts_mut(ptr.cast(), len);
+    let boxed: Box<[u8]> = unsafe { Box::from_raw(bytes) };
+    drop(boxed);
 }

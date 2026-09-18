@@ -1,4 +1,5 @@
 #include <jni.h>
+#include <limits.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -65,6 +66,21 @@ static jobject new_output(JNIEnv *env, jint tag, jint connectivity,
   return (*env)->NewObject(env, cls, ctor, tag, connectivity, text);
 }
 
+static jbyteArray copy_owned_text(JNIEnv *env, char *ptr, size_t len) {
+  if (len > INT_MAX) {
+    mpclipboard_drop_str(ptr, len);
+    throw_out_of_memory_error(env, "clipboard text exceeds Java array limit");
+    return NULL;
+  }
+
+  jbyteArray text = (*env)->NewByteArray(env, (jsize)len);
+  if (text != NULL && len != 0) {
+    (*env)->SetByteArrayRegion(env, text, 0, (jsize)len, (const jbyte *)ptr);
+  }
+  mpclipboard_drop_str(ptr, len);
+  return (*env)->ExceptionCheck(env) ? NULL : text;
+}
+
 JNIEXPORT jlong JNICALL
 Java_dev_ibylich_mpclipboard_Ffi_mpclipboard_1new_1inline(JNIEnv *env,
                                                           jclass clazz,
@@ -122,28 +138,17 @@ JNIEXPORT jobject JNICALL Java_dev_ibylich_mpclipboard_Ffi_mpclipboard_1read(
     return new_output(env, (jint)output.tag,
                       (jint)output.CONNECTIVITY_CHANGED.connectivity, NULL);
   case MPCLIPBOARD_OUTPUT_NEW_TEXT: {
-    jsize len = (jsize)output.NEW_TEXT.len;
-    jbyteArray text = (*env)->NewByteArray(env, len);
+    jbyteArray text =
+        copy_owned_text(env, output.NEW_TEXT.ptr, output.NEW_TEXT.len);
     if (text == NULL) {
-      return NULL;
-    }
-    (*env)->SetByteArrayRegion(env, text, 0, len,
-                               (const jbyte *)output.NEW_TEXT.ptr);
-    if ((*env)->ExceptionCheck(env)) {
       return NULL;
     }
 
     return new_output(env, (jint)output.tag, 0, text);
   }
   case MPCLIPBOARD_OUTPUT_BOTH: {
-    jsize len = (jsize)output.BOTH.len;
-    jbyteArray text = (*env)->NewByteArray(env, len);
+    jbyteArray text = copy_owned_text(env, output.BOTH.ptr, output.BOTH.len);
     if (text == NULL) {
-      return NULL;
-    }
-    (*env)->SetByteArrayRegion(env, text, 0, len,
-                               (const jbyte *)output.BOTH.ptr);
-    if ((*env)->ExceptionCheck(env)) {
       return NULL;
     }
 

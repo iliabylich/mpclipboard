@@ -46,7 +46,7 @@ struct Output {
     private static func string(ptr: UnsafeMutablePointer<CChar>?, len: Int) -> String {
         let ptr = ptr!
         let data = Data(bytes: ptr, count: len)
-        free(ptr)
+        mpclipboard_drop_str(ptr, len)
 
         guard let text = String(data: data, encoding: .utf8) else {
             fatalError("non-utf8 new text in output")

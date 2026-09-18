@@ -65,3 +65,5 @@ mpclipboard_PushResult mpclipboard_push_text(mpclipboard_MPClipboard *mpclipboar
                                              size_t len);
 
 void mpclipboard_drop(mpclipboard_MPClipboard *mpclipboard);
+
+void mpclipboard_drop_str(char *ptr, size_t len);
