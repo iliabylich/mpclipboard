@@ -1,6 +1,7 @@
 package dev.ibylich.mpclipboard
 
 import android.app.Application
+import dev.ibylich.mpclipboard.widget.MPClipboardWidgetProvider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -17,6 +18,7 @@ class MPClipboardApplication : Application() {
         MPClipboard.setConnectivityChangedCallback { connectivity ->
             scope.launch {
                 store.writeConnectivity(connectivity)
+                MPClipboardWidgetProvider.updateAll(this@MPClipboardApplication)
             }
         }
         MPClipboard.setTextReceivedCallback(AidlTransport::pushText)

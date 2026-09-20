@@ -1,16 +1,13 @@
 package dev.ibylich.mpclipboard.widget
 
-import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
-import android.content.Intent
-import android.os.Build
 import android.widget.RemoteViews
-import dev.ibylich.mpclipboard.Connectivity
-import dev.ibylich.mpclipboard.MPClipboardStore
+import dev.ibylich.mpclipboard.Ffi.Connectivity
 import dev.ibylich.mpclipboard.R
+import dev.ibylich.mpclipboard.Store
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -25,8 +22,7 @@ class MPClipboardWidgetProvider : AppWidgetProvider() {
         val pendingResult = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val connectivity = MPClipboardStore.from(context).connectivity.first()
-                updateWidgets(context, appWidgetManager, appWidgetIds, connectivity)
+                updateAll(context)
             } finally {
                 pendingResult.finish()
             }
@@ -34,8 +30,9 @@ class MPClipboardWidgetProvider : AppWidgetProvider() {
     }
 
     companion object {
-        fun updateAll(context: Context, connectivity: Connectivity) {
+        suspend fun updateAll(context: Context) {
             val appContext = context.applicationContext
+            val connectivity = Store.from(appContext).connectivity.first()
             val appWidgetManager = AppWidgetManager.getInstance(appContext)
             val componentName = ComponentName(appContext, MPClipboardWidgetProvider::class.java)
             val appWidgetIds = appWidgetManager.getAppWidgetIds(componentName)
@@ -57,39 +54,17 @@ class MPClipboardWidgetProvider : AppWidgetProvider() {
         }
 
         private fun remoteViews(context: Context, connectivity: Connectivity): RemoteViews {
-            val (icon, description) = when (connectivity) {
-                Connectivity.Connecting -> R.drawable.mpclipboard_widget_connecting to
-                    R.string.mpclipboard_widget_connecting
-                Connectivity.Connected -> R.drawable.mpclipboard_widget_connected to
-                    R.string.mpclipboard_widget_connected
-                Connectivity.Disconnected -> R.drawable.mpclipboard_widget_disconnected to
-                    R.string.mpclipboard_widget_disconnected
+            val icon = when (connectivity) {
+                Connectivity.Connecting -> R.drawable.mpclipboard_widget_connecting
+                Connectivity.Connected -> R.drawable.mpclipboard_widget_connected
+                Connectivity.Disconnected -> R.drawable.mpclipboard_widget_disconnected
             }
             val remoteViews = RemoteViews(context.packageName, R.layout.mpclipboard_widget)
             remoteViews.setImageViewResource(
                 R.id.mpclipboard_widget_icon,
                 icon,
             )
-            remoteViews.setContentDescription(
-                R.id.mpclipboard_widget_icon,
-                context.getString(description),
-            )
-            remoteViews.setOnClickPendingIntent(
-                R.id.mpclipboard_widget_root,
-                launchAppPendingIntent(context),
-            )
             return remoteViews
-        }
-
-        private fun launchAppPendingIntent(context: Context): PendingIntent? {
-            val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
-                ?: return null
-            val flags = PendingIntent.FLAG_UPDATE_CURRENT or if (Build.VERSION.SDK_INT >= 23) {
-                PendingIntent.FLAG_IMMUTABLE
-            } else {
-                0
-            }
-            return PendingIntent.getActivity(context, 0, intent, flags)
         }
     }
 }
