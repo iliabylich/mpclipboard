@@ -9,13 +9,6 @@ object MPClipboard {
     private var connectivityChangedCallback: ((Ffi.Connectivity) -> Unit)? = null
     private var textReceivedCallback: ((String) -> Unit)? = null
 
-    fun start(host: String, token: String, id: String) {
-        checkMainThread()
-        val mpclipboard = Ffi.Client.new(host, token, id) ?: return
-        current = mpclipboard
-        registerFileDescriptorListener(mpclipboard)
-    }
-
     fun restart(host: String, token: String, id: String) {
         checkMainThread()
         closeCurrentIfPresent()
