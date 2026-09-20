@@ -10,52 +10,33 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import dev.ibylich.mpclipboard.Connectivity
-import dev.ibylich.mpclipboard.MPClipboardConfig
-import dev.ibylich.mpclipboard.MPClipboardStore
+import dev.ibylich.mpclipboard.Ffi.Connectivity
+import dev.ibylich.mpclipboard.Store
 import kotlinx.coroutines.launch
 
 @Composable
-fun rememberMPClipboardStore(): MPClipboardStore {
-    val context = LocalContext.current.applicationContext
-    return remember(context) {
-        MPClipboardStore.from(context)
-    }
-}
-
-@Composable
-fun MPClipboardSettingsScreen(
+fun SettingsForm(
+    initialHost: String,
+    initialToken: String,
+    initialId: String,
+    store: Store,
     modifier: Modifier = Modifier,
-    store: MPClipboardStore = rememberMPClipboardStore(),
 ) {
-    val savedConfig by store.config.collectAsState(initial = MPClipboardConfig())
     val connectivity by store.connectivity.collectAsState(initial = Connectivity.Disconnected)
     val scope = rememberCoroutineScope()
-    var hasUserEdited by rememberSaveable { mutableStateOf(false) }
-    var host by rememberSaveable { mutableStateOf("") }
-    var token by rememberSaveable { mutableStateOf("") }
-    var name by rememberSaveable { mutableStateOf("") }
-
-    LaunchedEffect(savedConfig) {
-        if (!hasUserEdited && savedConfig.isComplete) {
-            host = savedConfig.host
-            token = savedConfig.token
-            name = savedConfig.name
-        }
-    }
+    var host by rememberSaveable { mutableStateOf(initialHost) }
+    var token by rememberSaveable { mutableStateOf(initialToken) }
+    var id by rememberSaveable { mutableStateOf(initialId) }
 
     Column(
         modifier = modifier.padding(16.dp),
@@ -68,10 +49,7 @@ fun MPClipboardSettingsScreen(
 
         OutlinedTextField(
             value = host,
-            onValueChange = {
-                host = it
-                hasUserEdited = true
-            },
+            onValueChange = { host = it },
             modifier = Modifier.fillMaxWidth(),
             label = { Text("Host") },
             singleLine = true,
@@ -79,10 +57,7 @@ fun MPClipboardSettingsScreen(
 
         OutlinedTextField(
             value = token,
-            onValueChange = {
-                token = it
-                hasUserEdited = true
-            },
+            onValueChange = { token = it },
             modifier = Modifier.fillMaxWidth(),
             label = { Text("Token") },
             singleLine = true,
@@ -90,11 +65,8 @@ fun MPClipboardSettingsScreen(
         )
 
         OutlinedTextField(
-            value = name,
-            onValueChange = {
-                name = it
-                hasUserEdited = true
-            },
+            value = id,
+            onValueChange = { id = it },
             modifier = Modifier.fillMaxWidth(),
             label = { Text("Name") },
             singleLine = true,
@@ -113,16 +85,10 @@ fun MPClipboardSettingsScreen(
             Button(
                 onClick = {
                     scope.launch {
-                        val config = MPClipboardConfig(
-                            host = host.trim(),
-                            token = token.trim(),
-                            name = name.trim(),
-                        )
-                        store.saveConfig(config)
-                        host = config.host
-                        token = config.token
-                        name = config.name
-                        hasUserEdited = false
+                        host = host.trim()
+                        token = token.trim()
+                        id = id.trim()
+                        store.writeConfig(host, token, id)
                     }
                 },
             ) {
