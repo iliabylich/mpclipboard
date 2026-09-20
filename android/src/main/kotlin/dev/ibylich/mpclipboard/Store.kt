@@ -14,34 +14,54 @@ private val Context.mpClipboardDataStore: DataStore<Preferences> by preferencesD
     name = "mpclipboard",
 )
 
-class MPClipboardStore private constructor(
+class Store private constructor(
     private val dataStore: DataStore<Preferences>,
 ) {
-    val config: Flow<MPClipboardConfig> = dataStore.data
+    data class Config(
+        val host: String,
+        val token: String,
+        val id: String,
+    )
+
+    val host: Flow<String> = dataStore.data
+        .map { preferences -> preferences[HOST].orEmpty() }
+        .distinctUntilChanged()
+
+    val token: Flow<String> = dataStore.data
+        .map { preferences -> preferences[TOKEN].orEmpty() }
+        .distinctUntilChanged()
+
+    val id: Flow<String> = dataStore.data
+        .map { preferences -> preferences[ID].orEmpty() }
+        .distinctUntilChanged()
+
+    val config: Flow<Config> = dataStore.data
         .map { preferences ->
-            MPClipboardConfig(
+            Config(
                 host = preferences[HOST].orEmpty(),
                 token = preferences[TOKEN].orEmpty(),
-                name = preferences[NAME].orEmpty(),
+                id = preferences[ID].orEmpty(),
             )
         }
         .distinctUntilChanged()
 
-    val connectivity: Flow<Connectivity> = dataStore.data
+    val connectivity: Flow<Ffi.Connectivity> = dataStore.data
         .map { preferences ->
-            preferences[CONNECTIVITY]?.let(Connectivity::valueOfOrNull) ?: Connectivity.Disconnected
+            preferences[CONNECTIVITY]
+                ?.let(Ffi.Connectivity::valueOfOrNull)
+                ?: Ffi.Connectivity.Disconnected
         }
         .distinctUntilChanged()
 
-    suspend fun saveConfig(config: MPClipboardConfig) {
+    suspend fun writeConfig(host: String, token: String, id: String) {
         dataStore.edit { preferences ->
-            preferences[HOST] = config.host
-            preferences[TOKEN] = config.token
-            preferences[NAME] = config.name
+            preferences[HOST] = host
+            preferences[TOKEN] = token
+            preferences[ID] = id
         }
     }
 
-    suspend fun saveConnectivity(connectivity: Connectivity) {
+    suspend fun writeConnectivity(connectivity: Ffi.Connectivity) {
         dataStore.edit { preferences ->
             preferences[CONNECTIVITY] = connectivity.name
         }
@@ -50,11 +70,11 @@ class MPClipboardStore private constructor(
     companion object {
         private val HOST = stringPreferencesKey("host")
         private val TOKEN = stringPreferencesKey("token")
-        private val NAME = stringPreferencesKey("name")
+        private val ID = stringPreferencesKey("name")
         private val CONNECTIVITY = stringPreferencesKey("connectivity")
 
-        fun from(context: Context): MPClipboardStore {
-            return MPClipboardStore(context.applicationContext.mpClipboardDataStore)
+        fun from(context: Context): Store {
+            return Store(context.applicationContext.mpClipboardDataStore)
         }
     }
 }
