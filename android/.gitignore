@@ -9,3 +9,8 @@ fdroid/metadata
 fdroid/repo
 fdroid/srclibs
 fdroid/tmp
+.idea
+gradle/
+gradlew
+gradlew.bat
+local.properties
