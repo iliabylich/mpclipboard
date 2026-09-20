@@ -16,6 +16,7 @@ set_target_properties(
 )
 
 add_library(mpclipboard_android SHARED mpclipboard_android_jni.c)
+set_target_properties(mpclipboard_android PROPERTIES C_STANDARD 23 C_STANDARD_REQUIRED YES)
 target_include_directories(mpclipboard_android PRIVATE "${ROOT_DIR}/../generic-client")
 
 target_link_options(
