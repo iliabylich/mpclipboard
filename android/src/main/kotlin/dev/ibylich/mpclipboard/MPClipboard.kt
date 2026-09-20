@@ -1,58 +1,85 @@
 package dev.ibylich.mpclipboard
 
-class MPClipboard private constructor(
-    private var ptr: Long,
-) {
-    companion object {
-        private val lock = Any()
+import android.os.Looper
+import android.os.MessageQueue
 
-        @Volatile
-        private var didInit = false
+object MPClipboard {
+    private var current: Ffi.Client? = null
 
-        @JvmStatic
-        fun init(): Boolean {
-            synchronized(lock) {
-                if (didInit) {
-                    return true
-                }
+    private var connectivityChangedCallback: ((Ffi.Connectivity) -> Unit)? = null
+    private var textReceivedCallback: ((String) -> Unit)? = null
 
-                Ffi.loadLibrary()
-                didInit = true
-                return true
+    fun start(host: String, token: String, id: String) {
+        checkMainThread()
+        val mpclipboard = Ffi.Client.new(host, token, id) ?: return
+        current = mpclipboard
+        registerFileDescriptorListener(mpclipboard)
+    }
+
+    fun restart(host: String, token: String, id: String) {
+        checkMainThread()
+        closeCurrentIfPresent()
+        val mpclipboard = Ffi.Client.new(host, token, id) ?: return
+        current = mpclipboard
+        registerFileDescriptorListener(mpclipboard)
+    }
+
+    fun pushText(text: String) {
+        checkMainThread()
+        current?.pushText(text)
+    }
+
+    fun setConnectivityChangedCallback(
+        callback: (Ffi.Connectivity) -> Unit,
+    ) {
+        checkMainThread()
+        connectivityChangedCallback = callback
+    }
+
+    fun setTextReceivedCallback(callback: (String) -> Unit) {
+        checkMainThread()
+        textReceivedCallback = callback
+    }
+
+    private fun registerFileDescriptorListener(mpclipboard: Ffi.Client) {
+        Looper.getMainLooper().queue.addOnFileDescriptorEventListener(
+            mpclipboard.fd,
+            MessageQueue.OnFileDescriptorEventListener.EVENT_INPUT,
+        ) { _, events ->
+            if (mpclipboard !== current) {
+                return@addOnFileDescriptorEventListener 0
             }
-        }
-
-        @JvmStatic
-        fun initialize(host: String, token: String, name: String): MPClipboard? {
-            check(didInit) { "MPClipboard.init() must be called first" }
-
-            val mpclipboard = Ffi.mpclipboard_new_inline(
-                host.toByteArray(Charsets.UTF_8),
-                token.toByteArray(Charsets.UTF_8),
-                name.toByteArray(Charsets.UTF_8),
-            )
-            if (mpclipboard == 0L) {
-                return null
+            if ((events and MessageQueue.OnFileDescriptorEventListener.EVENT_ERROR) != 0) {
+                closeCurrentIfPresent()
+                return@addOnFileDescriptorEventListener 0
             }
-
-            return MPClipboard(mpclipboard)
+            if ((events and MessageQueue.OnFileDescriptorEventListener.EVENT_INPUT) != 0) {
+                read(mpclipboard)
+            }
+            MessageQueue.OnFileDescriptorEventListener.EVENT_INPUT
         }
     }
 
-    fun getFd(): Int {
-        return Ffi.mpclipboard_get_fd(ptr)
+    private fun read(mpclipboard: Ffi.Client) {
+        val output = mpclipboard.read() ?: return
+        output.connectivity?.let { connectivity ->
+            connectivityChangedCallback?.invoke(connectivity)
+        }
+        output.text?.let { text ->
+            textReceivedCallback?.invoke(text)
+        }
     }
 
-    fun read(): Output? = Ffi.mpclipboard_read(ptr)?.let(Output::from)
-
-    fun pushText(text: String): PushResult {
-        return PushResult.from(Ffi.mpclipboard_push_text(ptr, text.toByteArray(Charsets.UTF_8)))
+    private fun closeCurrentIfPresent() {
+        val mpclipboard = current ?: return
+        current = null
+        Looper.getMainLooper().queue.removeOnFileDescriptorEventListener(mpclipboard.fd)
+        mpclipboard.close()
     }
 
-    fun close() {
-        if (ptr != 0L) {
-            Ffi.mpclipboard_drop(ptr)
-            ptr = 0L
+    private fun checkMainThread() {
+        check(Looper.myLooper() === Looper.getMainLooper()) {
+            "MPClipboard must be called from the main thread"
         }
     }
 }
