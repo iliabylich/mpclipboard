@@ -9,6 +9,7 @@
     <application
         android:name=".MPClipboardApplication"
         android:hasCode="true"
+        android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name">
         <activity
             android:name=".MainActivity"
