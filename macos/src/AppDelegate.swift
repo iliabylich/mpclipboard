@@ -14,8 +14,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ aNotification: Notification) {
         ProcessInfo.processInfo.disableAutomaticTermination("MPClipboard runs continuously as a menu bar clipboard sync agent")
         ProcessInfo.processInfo.disableSuddenTermination()
-        // Hide Dock icon
-        NSApp.setActivationPolicy(.accessory)
 
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert]) { granted, error in
             if granted {
