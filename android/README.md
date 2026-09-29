@@ -27,5 +27,5 @@ Use `mise build:debug` or `mise build:release` from the `android/` directory.
 Additionally, there are:
 
 1. `mise install:{debug,release}` to install APK on the connected device using adb
-2. `muse logs` to view logs of the running app
+2. `mise logs` to view logs of the running app
 3. `mise fdroid:update` to update F-Droid index (server via GitHub Pages)

@@ -2,8 +2,8 @@
 shell = "bash -euo pipefail -c"
 
 [tools]
-java = "temurin-17"
-gradle = "9.2.0"
+java = "temurin-25"
+gradle = "9.8.0"
 android-sdk = "17.0"
 
 [env]
@@ -11,6 +11,9 @@ GRADLE_USER_HOME = "{{config_root}}/.cache/gradle"
 ANDROID_USER_HOME = "{{config_root}}/.cache/android"
 ANDROID_HOME = "{{config_root}}/.cache/android-sdk"
 ANDROID_SDK_ROOT = "{{config_root}}/.cache/android-sdk"
+ANDROID_NDK_VERSION = "30.0.16248370"
+ANDROID_NDK_HOME = "{{config_root}}/.cache/android-sdk/ndk/{{env.ANDROID_NDK_VERSION}}"
+ANDROID_CMAKE_VERSION = "4.1.2"
 _.path = ["{{config_root}}/.cache/android-sdk/platform-tools"]
 ANDROID_KEY_ALIAS = "release"
 FDROID_KEY_ALIAS = "release"
@@ -35,15 +38,10 @@ run = """
     (set +o pipefail; yes | sdkmanager --sdk_root="$ANDROID_HOME" --licenses > /dev/null)
     sdkmanager --sdk_root="$ANDROID_HOME" \
         "platform-tools" \
-        "platforms;android-33" \
-        "platforms;android-35" \
-        "platforms;android-36" \
-        "build-tools;30.0.3" \
-        "build-tools;35.0.0" \
-        "ndk;26.1.10909125" \
-        "ndk;27.0.12077973" \
-        "cmake;3.22.1" \
-        "cmake;4.0.2"
+        "platforms;android-37.0" \
+        "build-tools;36.0.0" \
+        "ndk;$ANDROID_NDK_VERSION" \
+        "cmake;$ANDROID_CMAKE_VERSION"
 """
 
 [tasks."build:generic-client"]

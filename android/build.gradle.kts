@@ -1,9 +1,9 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
-    id("com.android.application") version "8.12.0"
-    id("org.jetbrains.kotlin.android") version "2.2.20"
-    id("org.jetbrains.kotlin.plugin.compose") version "2.2.20"
+    id("com.android.application") version "9.4.1"
+    id("org.jetbrains.kotlin.android") version "2.4.20" apply false
+    id("org.jetbrains.kotlin.plugin.compose") version "2.4.20"
 }
 
 val dotenv: Map<String, String> = file(".env").takeIf { it.isFile }
@@ -46,12 +46,13 @@ kotlin {
 
 android {
     namespace = "dev.ibylich.mpclipboard"
-    compileSdk = 35
+    compileSdk = 37
+    ndkVersion = requiredEnvironmentVariable("ANDROID_NDK_VERSION")
 
     defaultConfig {
         applicationId = "dev.ibylich.mpclipboard"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 36
         versionCode = appVersion?.let(::versionCodeOf) ?: 1
         versionName = appVersion ?: "0.0.0-dev"
 
@@ -106,16 +107,17 @@ android {
     externalNativeBuild {
         cmake {
             path = file("src/main/cpp/CMakeLists.txt")
+            version = requiredEnvironmentVariable("ANDROID_CMAKE_VERSION")
         }
     }
 }
 
 dependencies {
-    implementation("androidx.activity:activity-compose:1.10.1")
-    implementation(platform("androidx.compose:compose-bom:2025.11.00"))
+    implementation("androidx.activity:activity-compose:1.13.0")
+    implementation(platform("androidx.compose:compose-bom:2026.09.00"))
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.runtime:runtime")
-    implementation("androidx.datastore:datastore-preferences:1.1.7")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
+    implementation("androidx.datastore:datastore-preferences:1.2.1")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
 }
