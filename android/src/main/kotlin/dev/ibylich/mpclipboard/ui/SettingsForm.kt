@@ -20,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import dev.ibylich.mpclipboard.BuildConfig
 import dev.ibylich.mpclipboard.Ffi.Connectivity
 import dev.ibylich.mpclipboard.Store
 import kotlinx.coroutines.launch
@@ -95,5 +96,10 @@ fun SettingsForm(
                 Text("Save")
             }
         }
+
+        Text(
+            text = "Version: ${BuildConfig.VERSION_NAME}",
+            style = MaterialTheme.typography.bodySmall,
+        )
     }
 }

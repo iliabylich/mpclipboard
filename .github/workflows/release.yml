@@ -92,7 +92,7 @@ jobs:
         working-directory: ./android
       - run: mise build:generic-client
         working-directory: ./android
-      - run: mise build:release
+      - run: mise build:release "${{ inputs.version }}"
         working-directory: ./android
 
       - run: cp android/build/outputs/apk/release/mpclipboard-release.apk mpclipboard_${{ inputs.version }}_arm64.apk

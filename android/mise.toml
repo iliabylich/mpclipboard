@@ -61,8 +61,9 @@ run = """
 
 [tasks."build:release"]
 depends = ["build:generic-client"]
+usage = 'arg "<version>" help="Release version in MAJOR.MINOR.PATCH format"'
 run = """
-    gradle --no-daemon assembleRelease
+    gradle --no-daemon assembleRelease -PappVersion="${usage_version}"
     ls -l build/outputs/apk/release/mpclipboard-release.apk
 """
 
