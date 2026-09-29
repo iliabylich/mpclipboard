@@ -15,9 +15,9 @@ object Ffi {
         ;
 
         internal companion object {
-            private var CONNECTING = 0
-            private var CONNECTED = 0
-            private var DISCONNECTED = 0
+            private val CONNECTING = connectivityConnecting()
+            private val CONNECTED = connectivityConnected()
+            private val DISCONNECTED = connectivityDisconnected()
 
             fun from(tag: Int): Connectivity {
                 return when (tag) {
@@ -54,8 +54,8 @@ object Ffi {
         ;
 
         companion object {
-            private var PUSHED = 0
-            private var DROPPED = 0
+            private val PUSHED = pushResultPushed()
+            private val DROPPED = pushResultDropped()
 
             internal fun from(tag: Int): PushResult {
                 return when (tag) {
@@ -69,7 +69,6 @@ object Ffi {
 
     init {
         System.loadLibrary("mpclipboard_android")
-        mpclipboard_define_enums()
     }
 
     private fun fatal(message: String): Nothing {
@@ -121,7 +120,19 @@ object Ffi {
     }
 
     @JvmStatic
-    private external fun mpclipboard_define_enums()
+    private external fun connectivityConnecting(): Int
+
+    @JvmStatic
+    private external fun connectivityConnected(): Int
+
+    @JvmStatic
+    private external fun connectivityDisconnected(): Int
+
+    @JvmStatic
+    private external fun pushResultPushed(): Int
+
+    @JvmStatic
+    private external fun pushResultDropped(): Int
 
     @JvmStatic
     private external fun mpclipboard_new_inline(uri: ByteArray, token: ByteArray, name: ByteArray): Long

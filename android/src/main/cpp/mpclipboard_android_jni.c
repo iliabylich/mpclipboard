@@ -72,36 +72,22 @@ static jbyteArray new_jbytearray(JNIEnv *env, char *ptr, size_t len) {
   return bytes;
 }
 
-JNIEXPORT void JNICALL
-Java_dev_ibylich_mpclipboard_Ffi_mpclipboard_1define_1enums(
-    JNIEnv *env, [[maybe_unused]] jclass clazz) {
-  jclass connectivity =
-      (*env)->FindClass(env, "dev/ibylich/mpclipboard/Ffi$Connectivity");
-  CHECK(connectivity != NULL, "failed to find Ffi.Connectivity");
-  jclass push_result =
-      (*env)->FindClass(env, "dev/ibylich/mpclipboard/Ffi$PushResult");
-  CHECK(push_result != NULL, "failed to find Ffi.PushResult");
+#define CONSTANT(NAME, VALUE)                                                  \
+  JNIEXPORT jint JNICALL Java_dev_ibylich_mpclipboard_Ffi_##NAME(              \
+      [[maybe_unused]] JNIEnv *env, [[maybe_unused]] jclass clazz) {           \
+    return VALUE;                                                              \
+  }
 
-#define SET(CLASS, NAME, VALUE)                                                \
-  do {                                                                         \
-    jfieldID field = (*env)->GetStaticFieldID(env, CLASS, #NAME, "I");         \
-    CHECK(field != NULL, "failed to find field " #NAME);                       \
-    (*env)->SetStaticIntField(env, CLASS, field, VALUE);                       \
-    CHECK(!(*env)->ExceptionCheck(env), "failed to set field " #NAME);         \
-  } while (0)
+CONSTANT(connectivityConnecting, MPCLIPBOARD_CONNECTIVITY_CONNECTING)
+CONSTANT(connectivityConnected, MPCLIPBOARD_CONNECTIVITY_CONNECTED)
+CONSTANT(connectivityDisconnected, MPCLIPBOARD_CONNECTIVITY_DISCONNECTED)
+CONSTANT(pushResultPushed, MPCLIPBOARD_PUSH_RESULT_PUSHED)
+CONSTANT(pushResultDropped, MPCLIPBOARD_PUSH_RESULT_DROPPED)
 
-  SET(connectivity, CONNECTING, MPCLIPBOARD_CONNECTIVITY_CONNECTING);
-  SET(connectivity, CONNECTED, MPCLIPBOARD_CONNECTIVITY_CONNECTED);
-  SET(connectivity, DISCONNECTED, MPCLIPBOARD_CONNECTIVITY_DISCONNECTED);
+#undef CONSTANT
 
-  SET(push_result, PUSHED, MPCLIPBOARD_PUSH_RESULT_PUSHED);
-  SET(push_result, DROPPED, MPCLIPBOARD_PUSH_RESULT_DROPPED);
-
-#undef SET
-}
-
-JNIEXPORT jlong JNICALL
-Java_dev_ibylich_mpclipboard_Ffi_mpclipboard_1new_1inline(
+JNIEXPORT
+jlong JNICALL Java_dev_ibylich_mpclipboard_Ffi_mpclipboard_1new_1inline(
     JNIEnv *env, [[maybe_unused]] jclass clazz, jbyteArray uri,
     jbyteArray token, jbyteArray name) {
 
@@ -130,7 +116,6 @@ JNIEXPORT jint JNICALL Java_dev_ibylich_mpclipboard_Ffi_mpclipboard_1get_1fd(
 JNIEXPORT void JNICALL Java_dev_ibylich_mpclipboard_Ffi_mpclipboard_1drop(
     [[maybe_unused]] JNIEnv *env, [[maybe_unused]] jclass clazz,
     jlong mpclipboard_ptr) {
-
   mpclipboard_MPClipboard *mpclipboard =
       (mpclipboard_MPClipboard *)(intptr_t)mpclipboard_ptr;
   CHECK(mpclipboard != NULL, "mpclipboard pointer must not be null");
