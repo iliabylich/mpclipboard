@@ -31,9 +31,9 @@ object Ffi {
         val text: String?,
     ) {
         companion object {
-            internal fun from(output: Pair<Int?, String?>): Output {
+            internal fun from(output: Pair<Int?, ByteArray?>): Output {
                 val connectivity = output.first?.let(Connectivity::from)
-                val text = output.second
+                val text = output.second?.let { String(it, Charsets.UTF_8) }
                 if (connectivity == null && text == null) {
                     fatal("native output contains neither connectivity nor text")
                 }
@@ -122,7 +122,7 @@ object Ffi {
     private external fun mpclipboard_get_fd(clientPtr: Long): Int
 
     @JvmStatic
-    private external fun mpclipboard_read(clientPtr: Long): Pair<Int?, String?>?
+    private external fun mpclipboard_read(clientPtr: Long): Pair<Int?, ByteArray?>?
 
     @JvmStatic
     private external fun mpclipboard_push_text(clientPtr: Long, text: ByteArray): Int

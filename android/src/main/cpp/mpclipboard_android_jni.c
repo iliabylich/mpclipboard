@@ -60,7 +60,7 @@ static jobject new_pair(JNIEnv *env, jobject first, jobject second) {
   return pair;
 }
 
-static jstring new_jstring(JNIEnv *env, char *ptr, size_t len) {
+static jbyteArray new_jbytearray(JNIEnv *env, char *ptr, size_t len) {
   CHECK(len <= INT_MAX, "clipboard text exceeds Java array limit");
 
   jbyteArray bytes = (*env)->NewByteArray(env, (jsize)len);
@@ -69,18 +69,7 @@ static jstring new_jstring(JNIEnv *env, char *ptr, size_t len) {
   CHECK(!(*env)->ExceptionCheck(env),
         "failed to copy native text into Java array");
   mpclipboard_drop_str(ptr, len);
-
-  jclass string_class = (*env)->FindClass(env, "java/lang/String");
-  CHECK(string_class != NULL, "failed to find java.lang.String");
-  jmethodID ctor = (*env)->GetMethodID(env, string_class, "<init>",
-                                       "([BLjava/lang/String;)V");
-  CHECK(ctor != NULL, "failed to find String(byte[], String) constructor");
-  jstring utf8 = (*env)->NewStringUTF(env, "UTF-8");
-  CHECK(utf8 != NULL, "failed to create UTF-8 charset name");
-  jstring string =
-      (jstring)(*env)->NewObject(env, string_class, ctor, bytes, utf8);
-  CHECK(string != NULL, "failed to construct Java string");
-  return string;
+  return bytes;
 }
 
 JNIEXPORT void JNICALL Java_dev_ibylich_mpclipboard_Ffi_mpclipboard_1fatal(
@@ -163,18 +152,18 @@ JNIEXPORT jobject JNICALL Java_dev_ibylich_mpclipboard_Ffi_mpclipboard_1read(
   CHECK(mpclipboard != NULL, "mpclipboard pointer must not be null");
   mpclipboard_Output output = mpclipboard_read(mpclipboard);
   jobject connectivity = NULL;
-  jstring text = NULL;
+  jbyteArray text = NULL;
 
   switch (output.tag) {
   case MPCLIPBOARD_OUTPUT_CONNECTIVITY_CHANGED:
     connectivity = box_int(env, (jint)output.CONNECTIVITY_CHANGED.connectivity);
     break;
   case MPCLIPBOARD_OUTPUT_NEW_TEXT:
-    text = new_jstring(env, output.NEW_TEXT.ptr, output.NEW_TEXT.len);
+    text = new_jbytearray(env, output.NEW_TEXT.ptr, output.NEW_TEXT.len);
     break;
   case MPCLIPBOARD_OUTPUT_BOTH:
     connectivity = box_int(env, (jint)output.BOTH.connectivity);
-    text = new_jstring(env, output.BOTH.ptr, output.BOTH.len);
+    text = new_jbytearray(env, output.BOTH.ptr, output.BOTH.len);
     break;
   case MPCLIPBOARD_OUTPUT_IGNORE:
     return NULL;
