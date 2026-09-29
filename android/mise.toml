@@ -9,6 +9,9 @@ android-sdk = "17.0"
 [env]
 GRADLE_USER_HOME = "{{config_root}}/.cache/gradle"
 ANDROID_USER_HOME = "{{config_root}}/.cache/android"
+ANDROID_HOME = "{{config_root}}/.cache/android-sdk"
+ANDROID_SDK_ROOT = "{{config_root}}/.cache/android-sdk"
+_.path = ["{{config_root}}/.cache/android-sdk/platform-tools"]
 ANDROID_KEY_ALIAS = "release"
 FDROID_KEY_ALIAS = "release"
 _.file = { path = ".env", redacted = true }
@@ -29,8 +32,8 @@ run = """
 
 [tasks."setup:android-sdk"]
 run = """
-    (set +o pipefail; yes | sdkmanager --licenses > /dev/null)
-    sdkmanager \
+    (set +o pipefail; yes | sdkmanager --sdk_root="$ANDROID_HOME" --licenses > /dev/null)
+    sdkmanager --sdk_root="$ANDROID_HOME" \
         "platform-tools" \
         "platforms;android-33" \
         "platforms;android-35" \
