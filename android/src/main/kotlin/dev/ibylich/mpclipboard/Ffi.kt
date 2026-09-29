@@ -1,7 +1,11 @@
 package dev.ibylich.mpclipboard
 
 import android.os.ParcelFileDescriptor
+import android.system.Os
+import android.system.OsConstants
+import android.util.Log
 import java.io.FileDescriptor
+import java.io.IOException
 
 object Ffi {
     enum class Connectivity {
@@ -32,8 +36,9 @@ object Ffi {
     ) {
         companion object {
             internal fun from(output: Pair<Int?, ByteArray?>): Output {
-                val connectivity = output.first?.let(Connectivity::from)
-                val text = output.second?.let { String(it, Charsets.UTF_8) }
+                val (tag, bytes) = output
+                val connectivity = tag?.let(Connectivity::from)
+                val text = bytes?.let { String(it, Charsets.UTF_8) }
                 if (connectivity == null && text == null) {
                     fatal("native output contains neither connectivity nor text")
                 }
@@ -68,8 +73,9 @@ object Ffi {
     }
 
     private fun fatal(message: String): Nothing {
-        mpclipboard_fatal(message)
-        error("mpclipboard_fatal unexpectedly returned")
+        Log.e("MPClipboard", message)
+        Os.kill(Os.getpid(), OsConstants.SIGABRT)
+        error("unreachable")
     }
 
     class Client private constructor(
@@ -87,7 +93,11 @@ object Ffi {
                     name.toByteArray(),
                 )
                 if (handle == 0L) return null
-                val pfd = ParcelFileDescriptor.fromFd(mpclipboard_get_fd(handle))
+                val pfd = try {
+                    ParcelFileDescriptor.fromFd(mpclipboard_get_fd(handle))
+                } catch (e: IOException) {
+                    fatal("failed to dup mpclipboard fd: $e")
+                }
                 return Client(handle, pfd)
             }
         }
@@ -101,13 +111,14 @@ object Ffi {
         }
 
         fun close() {
-            pfd.close()
+            try {
+                pfd.close()
+            } catch (e: IOException) {
+                fatal("failed to close mpclipboard fd: $e")
+            }
             mpclipboard_drop(handle)
         }
     }
-
-    @JvmStatic
-    private external fun mpclipboard_fatal(message: String)
 
     @JvmStatic
     private external fun mpclipboard_define_enums()

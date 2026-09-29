@@ -72,14 +72,6 @@ static jbyteArray new_jbytearray(JNIEnv *env, char *ptr, size_t len) {
   return bytes;
 }
 
-JNIEXPORT void JNICALL Java_dev_ibylich_mpclipboard_Ffi_mpclipboard_1fatal(
-    JNIEnv *env, [[maybe_unused]] jclass clazz, jstring message) {
-  CHECK(message != NULL, "message argument must not be null");
-  const char *message_chars = (*env)->GetStringUTFChars(env, message, NULL);
-  CHECK(message_chars != NULL, "failed to access message");
-  FATAL(message_chars);
-}
-
 JNIEXPORT void JNICALL
 Java_dev_ibylich_mpclipboard_Ffi_mpclipboard_1define_1enums(
     JNIEnv *env, [[maybe_unused]] jclass clazz) {
