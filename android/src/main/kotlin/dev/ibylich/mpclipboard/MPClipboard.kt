@@ -44,8 +44,7 @@ object MPClipboard {
                 return@addOnFileDescriptorEventListener 0
             }
             if ((events and MessageQueue.OnFileDescriptorEventListener.EVENT_ERROR) != 0) {
-                closeCurrentIfPresent()
-                return@addOnFileDescriptorEventListener 0
+                error("mpclipboard fd reported EVENT_ERROR (events=$events)")
             }
             if ((events and MessageQueue.OnFileDescriptorEventListener.EVENT_INPUT) != 0) {
                 read(mpclipboard)

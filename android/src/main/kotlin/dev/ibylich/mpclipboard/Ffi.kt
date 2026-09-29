@@ -64,7 +64,6 @@ object Ffi {
         val fd: FileDescriptor = pfd.fileDescriptor
 
         companion object {
-            @JvmStatic
             fun new(host: String, token: String, name: String): Client? {
                 val handle = mpclipboard_new_inline(
                     host.toByteArray(),
