@@ -1,35 +1,31 @@
 package dev.ibylich.mpclipboard
 
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.os.RemoteCallbackList
 import android.os.RemoteException
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
 
 object AidlTransport {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val mainHandler = Handler(Looper.getMainLooper())
+
+    @Volatile
     private var callbacks = RemoteCallbackList<IMPClipboardCallback>()
     private var onNewTextCallback: ((String) -> Unit)? = null
 
     internal val binder: IBinder = object : IMPClipboardService.Stub() {
         override fun onNewLocalText(text: String) {
-            scope.launch {
+            mainHandler.post {
                 onNewTextCallback?.invoke(text)
             }
         }
 
         override fun registerRemoteTextCallback(callback: IMPClipboardCallback) {
-            scope.launch {
-                callbacks.register(callback)
-            }
+            callbacks.register(callback)
         }
 
         override fun unregisterRemoteTextCallback(callback: IMPClipboardCallback) {
-            scope.launch {
-                callbacks.unregister(callback)
-            }
+            callbacks.unregister(callback)
         }
     }
 
@@ -38,19 +34,15 @@ object AidlTransport {
     }
 
     fun pushText(text: String) {
-        scope.launch {
-            val count = callbacks.beginBroadcast()
-            try {
-                for (index in 0 until count) {
-                    try {
-                        callbacks.getBroadcastItem(index).onNewRemoteText(text)
-                    } catch (_: RemoteException) {
-                        // RemoteCallbackList removes dead callback binders automatically.
-                    }
-                }
-            } finally {
-                callbacks.finishBroadcast()
+        val count = callbacks.beginBroadcast()
+        try {
+            for (index in 0 until count) {
+                try {
+                    callbacks.getBroadcastItem(index).onNewRemoteText(text)
+                } catch (_: RemoteException) { }
             }
+        } finally {
+            callbacks.finishBroadcast()
         }
     }
 
