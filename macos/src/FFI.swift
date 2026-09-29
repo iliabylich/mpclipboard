@@ -66,12 +66,12 @@ final class MPClipboard {
 
     init() {
 #if DEBUG
-        puts("Debug build, using local config")
+        log.notice("Debug build, using local config")
         guard let handle = mpclipboard_new_with_local_config() else {
             fatalError("NULL mpclipboard")
         }
 #else
-        puts("Release build, using config from XDG dir")
+        log.notice("Release build, using config from XDG dir")
         guard let handle = mpclipboard_new_with_xdg_config() else {
             fatalError("NULL mpclipboard")
         }

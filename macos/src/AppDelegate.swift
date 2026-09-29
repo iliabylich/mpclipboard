@@ -17,11 +17,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert]) { granted, error in
             if granted {
-                print("Got permission to send notifications")
+                log.notice("Got permission to send notifications")
             } else {
-                fputs("Failed to get permission to send notifications", stderr)
+                log.error("Failed to get permission to send notifications")
                 if let error = error {
-                    fputs("Error showing notification: \(error)", stderr)
+                    log.error("Error requesting notification permission: \(error, privacy: .public)")
                 }
             }
         }
@@ -44,7 +44,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc
     func quit() {
-        print("Quitting...")
+        log.notice("Quitting...")
         self.clipboardTimer?.invalidate()
         NSApp.terminate(self)
     }
@@ -73,7 +73,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
         UNUserNotificationCenter.current().add(request) { error in
             if let error = error {
-                fputs("Error showing notification: \(error)", stderr)
+                log.error("Error showing notification: \(error, privacy: .public)")
             }
         }
     }
