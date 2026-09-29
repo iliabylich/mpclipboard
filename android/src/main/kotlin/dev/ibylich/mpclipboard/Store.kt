@@ -26,18 +26,6 @@ class Store private constructor(
         val id: String,
     )
 
-    val host: Flow<String> = dataStore.data
-        .map { preferences -> preferences[HOST].orEmpty() }
-        .distinctUntilChanged()
-
-    val token: Flow<String> = dataStore.data
-        .map { preferences -> preferences[TOKEN].orEmpty() }
-        .distinctUntilChanged()
-
-    val id: Flow<String> = dataStore.data
-        .map { preferences -> preferences[ID].orEmpty() }
-        .distinctUntilChanged()
-
     val config: Flow<Config> = dataStore.data
         .map { preferences ->
             Config(
