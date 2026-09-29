@@ -44,6 +44,12 @@ run = """
         "cmake;$ANDROID_CMAKE_VERSION"
 """
 
+[tasks."setup:local-properties"]
+run = 'echo "sdk.dir=$ANDROID_HOME" > local.properties'
+
+[tasks."setup:gradle-wrapper"]
+run = 'gradle --no-daemon wrapper --gradle-version "$(mise current gradle)"'
+
 [tasks."build:generic-client"]
 depends = ["setup:rust-target", "setup:cargo-ndk"]
 run = """
@@ -54,14 +60,14 @@ run = """
 """
 
 [tasks."build:debug"]
-depends = ["build:generic-client"]
+depends = ["setup:local-properties", "build:generic-client"]
 run = """
     gradle --no-daemon assembleDebug
     ls -l build/outputs/apk/debug/mpclipboard-debug.apk
 """
 
 [tasks."build:release"]
-depends = ["build:generic-client"]
+depends = ["setup:local-properties", "build:generic-client"]
 usage = 'arg "<version>" help="Release version in MAJOR.MINOR.PATCH format"'
 run = """
     gradle --no-daemon assembleRelease -PappVersion="${usage_version}"
@@ -92,3 +98,7 @@ run = """
         fdroid update --verbose --create-metadata
     popd
 """
+
+[tasks."macos:androidstudio"]
+depends = ["setup:local-properties", "setup:gradle-wrapper"]
+run = '"/Applications/Android Studio.app/Contents/MacOS/studio" "$PWD"'
