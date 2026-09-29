@@ -16,7 +16,7 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         PRODUCT_BUNDLE_IDENTIFIER: org.mpclipboard.MPClipboard
         SWIFT_OBJC_BRIDGING_HEADER: $(SRCROOT)/src/BridgingHeader.h
-        SWIFT_VERSION: 5.9
+        SWIFT_VERSION: 6.0
       configs:
         Debug:
           OTHER_LDFLAGS: ../generic-client/target/debug/libmpclipboard_generic_client.a

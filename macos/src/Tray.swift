@@ -1,5 +1,6 @@
 import Cocoa
 
+@MainActor
 final class Tray {
     private let redImage: NSImage? = NSImage(named: "red")
     private let greenImage: NSImage? = NSImage(named: "green")

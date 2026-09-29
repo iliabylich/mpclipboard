@@ -1,5 +1,6 @@
 import Cocoa
 
+@MainActor
 final class Clipboard {
     private let pasteboard: NSPasteboard = NSPasteboard.general
     private var lastChangeCount: Int
@@ -21,10 +22,12 @@ final class Clipboard {
         isChanged() ? pasteboard.string(forType: .string) : nil
     }
 
-    func startPolling(onCopy: @escaping (String) -> Void) -> Timer {
+    func startPolling(onCopy: @escaping @MainActor (String) -> Void) -> Timer {
         let timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [self] _ in
-            if let copiedText = pollOnce() {
-                onCopy(copiedText)
+            MainActor.assumeIsolated {
+                if let copiedText = pollOnce() {
+                    onCopy(copiedText)
+                }
             }
         }
         RunLoop.main.add(timer, forMode: .common)

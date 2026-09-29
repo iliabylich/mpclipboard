@@ -1,6 +1,7 @@
 import Cocoa
 import UserNotifications
 
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let mpclipboard: MPClipboard = MPClipboard()
     private var mpclipboardSource: DispatchSourceRead?
@@ -29,7 +30,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let source = DispatchSource.makeReadSource(fileDescriptor: mpclipboard.fd(), queue: .main)
         source.setEventHandler { [weak self] in
-            self?.readMPClipboard()
+            MainActor.assumeIsolated {
+                self?.readMPClipboard()
+            }
         }
         source.resume()
         mpclipboardSource = source
@@ -53,16 +56,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        DispatchQueue.main.async {
-            if let connectivity = output.connectivity {
-                self.tray.setConnectivity(connectivity)
-            }
+        if let connectivity = output.connectivity {
+            tray.setConnectivity(connectivity)
+        }
 
-            if let text = output.text {
-                self.clipboard.writeText(text)
-                self.tray.pushReceived(text)
-                self.showNotification(text)
-            }
+        if let text = output.text {
+            clipboard.writeText(text)
+            tray.pushReceived(text)
+            showNotification(text)
         }
     }
 
