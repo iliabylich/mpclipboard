@@ -22,15 +22,12 @@ target_include_directories(mpclipboard_android PRIVATE "${ROOT_DIR}/../generic-c
 target_link_options(
     mpclipboard_android
     PRIVATE
-    -Wl,--allow-multiple-definition
     -Wl,--build-id=none
 )
 
 target_link_libraries(
     mpclipboard_android
-    -Wl,--whole-archive
     mpclipboard_generic_client
-    -Wl,--no-whole-archive
     android
     log
 )
