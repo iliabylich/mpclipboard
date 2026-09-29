@@ -1,6 +1,7 @@
 import Cocoa
 import UserNotifications
 
+@main
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let mpclipboard: MPClipboard = MPClipboard()
@@ -11,18 +12,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private let tray: Tray = Tray()
 
+    static func main() {
+        let app = NSApplication.shared
+        let delegate = AppDelegate()
+        app.delegate = delegate
+        app.run()
+    }
+
     func applicationDidFinishLaunching(_ aNotification: Notification) {
         ProcessInfo.processInfo.disableAutomaticTermination("MPClipboard runs continuously as a menu bar clipboard sync agent")
         ProcessInfo.processInfo.disableSuddenTermination()
 
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert]) { granted, error in
-            if granted {
-                log.notice("Got permission to send notifications")
-            } else {
-                log.error("Failed to get permission to send notifications")
-                if let error = error {
-                    log.error("Error requesting notification permission: \(error, privacy: .public)")
+        Task {
+            do {
+                if try await UNUserNotificationCenter.current().requestAuthorization(options: [.alert]) {
+                    log.notice("Got permission to send notifications")
+                } else {
+                    log.error("Failed to get permission to send notifications")
                 }
+            } catch {
+                log.error("Error requesting notification permission: \(error, privacy: .public)")
             }
         }
 
@@ -71,8 +80,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         content.body = text
 
         let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
-        UNUserNotificationCenter.current().add(request) { error in
-            if let error = error {
+        Task {
+            do {
+                try await UNUserNotificationCenter.current().add(request)
+            } catch {
                 log.error("Error showing notification: \(error, privacy: .public)")
             }
         }
