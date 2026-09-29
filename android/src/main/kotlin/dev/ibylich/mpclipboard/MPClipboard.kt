@@ -12,6 +12,7 @@ object MPClipboard {
     fun restart(host: String, token: String, id: String) {
         checkMainThread()
         closeCurrentIfPresent()
+        connectivityChangedCallback?.invoke(Ffi.Connectivity.Disconnected)
         val mpclipboard = Ffi.Client.new(host, token, id) ?: return
         current = mpclipboard
         registerFileDescriptorListener(mpclipboard)

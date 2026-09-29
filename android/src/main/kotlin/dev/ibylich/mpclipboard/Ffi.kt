@@ -22,10 +22,6 @@ object Ffi {
                     else -> fatal("unknown native connectivity tag: $tag")
                 }
             }
-
-            fun valueOfOrNull(value: String): Connectivity? {
-                return entries.firstOrNull { it.name == value }
-            }
         }
     }
 

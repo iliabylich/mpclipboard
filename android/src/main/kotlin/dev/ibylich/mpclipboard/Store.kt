@@ -7,6 +7,9 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 
@@ -45,13 +48,7 @@ class Store private constructor(
         }
         .distinctUntilChanged()
 
-    val connectivity: Flow<Ffi.Connectivity> = dataStore.data
-        .map { preferences ->
-            preferences[CONNECTIVITY]
-                ?.let(Ffi.Connectivity::valueOfOrNull)
-                ?: Ffi.Connectivity.Disconnected
-        }
-        .distinctUntilChanged()
+    val connectivity: StateFlow<Ffi.Connectivity> = connectivityState.asStateFlow()
 
     suspend fun writeConfig(host: String, token: String, id: String) {
         dataStore.edit { preferences ->
@@ -61,17 +58,16 @@ class Store private constructor(
         }
     }
 
-    suspend fun writeConnectivity(connectivity: Ffi.Connectivity) {
-        dataStore.edit { preferences ->
-            preferences[CONNECTIVITY] = connectivity.name
-        }
+    fun writeConnectivity(connectivity: Ffi.Connectivity) {
+        connectivityState.value = connectivity
     }
 
     companion object {
         private val HOST = stringPreferencesKey("host")
         private val TOKEN = stringPreferencesKey("token")
         private val ID = stringPreferencesKey("name")
-        private val CONNECTIVITY = stringPreferencesKey("connectivity")
+
+        private val connectivityState = MutableStateFlow(Ffi.Connectivity.Disconnected)
 
         fun from(context: Context): Store {
             return Store(context.applicationContext.mpClipboardDataStore)
