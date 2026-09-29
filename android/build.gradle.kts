@@ -6,8 +6,18 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose") version "2.2.20"
 }
 
+val dotenv: Map<String, String> = file(".env").takeIf { it.isFile }
+    ?.readLines()
+    ?.map { it.trim() }
+    ?.filter { it.isNotEmpty() && !it.startsWith("#") && "=" in it }
+    ?.associate { line ->
+        val (key, value) = line.split("=", limit = 2)
+        key.trim() to value.trim().removeSurrounding("\"").removeSurrounding("'")
+    }
+    .orEmpty()
+
 fun requiredEnvironmentVariable(name: String): String {
-    return System.getenv(name)?.takeIf(String::isNotBlank)
+    return (System.getenv(name) ?: dotenv[name])?.takeIf(String::isNotBlank)
         ?: error("Required environment variable $name is missing or blank")
 }
 
