@@ -20,7 +20,24 @@ defaults:
     shell: bash
 
 jobs:
+  validate:
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+      - run: |
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "version must be MAJOR.MINOR.PATCH, got: $VERSION"
+            exit 1
+          fi
+          if git ls-remote --exit-code --tags origin "refs/tags/v$VERSION" > /dev/null; then
+            echo "tag v$VERSION already exists"
+            exit 1
+          fi
+
   build-server:
+    needs: validate
     runs-on: ubuntu-latest
     steps:
       - run: sudo apt update && sudo apt install musl musl-dev
@@ -37,6 +54,7 @@ jobs:
           path: mpclipboard-server_${{ inputs.version }}_amd64.deb
 
   build-linux-client:
+    needs: validate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -51,6 +69,7 @@ jobs:
           path: mpclipboard-client_${{ inputs.version }}_amd64.deb
 
   build-macos-client:
+    needs: validate
     runs-on: macos-latest
     steps:
       - run: ls -l /Applications | grep Xcode
@@ -66,6 +85,7 @@ jobs:
           path: mpclipboard_${{ inputs.version }}_arm64.dmg
 
   build-android-client:
+    needs: validate
     runs-on: ubuntu-latest
     env:
       ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -152,7 +172,9 @@ jobs:
             -f version="${{ inputs.version }}"
 
   deploy-pages:
-    needs: build-android-client
+    needs:
+      - build-android-client
+      - release
     runs-on: ubuntu-latest
 
     environment:
