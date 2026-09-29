@@ -50,7 +50,7 @@ C API fully mirrors Rust API
 ```c
 mpclipboard_MPClipboard *mpclipboard = mpclipboard_new_with_xdg_config();
 // or mpclipboard_new_with_local_config()
-// or mpclipboard_new_inline("https://your.host:443", "<TOKEN>", "<ID>")
+// or mpclipboard_new_inline(url, url_len, token, token_len, id, id_len)
 assert(mpclipboard);
 
 int fd = mpclipboard_get_fd(mpclipboard);

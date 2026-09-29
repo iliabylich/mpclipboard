@@ -14,9 +14,9 @@ macro_rules! try_or_null {
     };
 }
 
-fn cstring_to_str(s: *const c_char) -> Result<&'static str> {
-    let s = unsafe { std::ffi::CStr::from_ptr(s) };
-    s.to_str().context("non-utf8 string")
+fn bytes_to_str<'a>(ptr: *const c_char, len: usize) -> Result<&'a str> {
+    let bytes = unsafe { core::slice::from_raw_parts(ptr.cast::<u8>(), len) };
+    core::str::from_utf8(bytes).context("non-utf8 string")
 }
 fn string_to_c(s: String) -> (*mut c_char, usize) {
     let s = s.into_boxed_str().into_boxed_bytes();
@@ -27,13 +27,16 @@ fn string_to_c(s: String) -> (*mut c_char, usize) {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn mpclipboard_new_inline(
-    url: *const c_char,
-    token: *const c_char,
-    id: *const c_char,
+    url_ptr: *const c_char,
+    url_len: usize,
+    token_ptr: *const c_char,
+    token_len: usize,
+    id_ptr: *const c_char,
+    id_len: usize,
 ) -> *mut MPClipboard {
-    let url = try_or_null!(cstring_to_str(url));
-    let token = try_or_null!(cstring_to_str(token));
-    let id = try_or_null!(cstring_to_str(id));
+    let url = try_or_null!(bytes_to_str(url_ptr, url_len));
+    let token = try_or_null!(bytes_to_str(token_ptr, token_len));
+    let id = try_or_null!(bytes_to_str(id_ptr, id_len));
 
     let mpclipboard = try_or_null!(MPClipboard::new_inline(url, token, id));
     Box::leak(Box::new(mpclipboard))
