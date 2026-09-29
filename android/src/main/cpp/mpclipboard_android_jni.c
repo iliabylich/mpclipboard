@@ -2,7 +2,6 @@
 #include <limits.h>
 #include <stdint.h>
 #include <stdlib.h>
-#include <string.h>
 
 #include "bindings.h"
 
@@ -18,29 +17,24 @@
       FATAL(MESSAGE);                                                          \
   } while (0)
 
-static char *jstring_to_c_string(JNIEnv *env, jstring string) {
-  CHECK(string != NULL, "string argument must not be null");
+typedef struct {
+  jbyteArray array;
+  const char *ptr;
+  size_t len;
+} bytes_t;
 
-  jclass string_class = (*env)->FindClass(env, "java/lang/String");
-  CHECK(string_class != NULL, "failed to find java.lang.String");
-  jmethodID get_bytes = (*env)->GetMethodID(env, string_class, "getBytes",
-                                            "(Ljava/lang/String;)[B");
-  CHECK(get_bytes != NULL, "failed to find String.getBytes(String)");
-  jstring utf8 = (*env)->NewStringUTF(env, "UTF-8");
-  CHECK(utf8 != NULL, "failed to create UTF-8 charset name");
-  jbyteArray bytes =
-      (jbyteArray)(*env)->CallObjectMethod(env, string, get_bytes, utf8);
-  CHECK(bytes != NULL, "failed to encode string as UTF-8");
+static bytes_t bytes_acquire(JNIEnv *env, jbyteArray array) {
+  CHECK(array != NULL, "byte array argument must not be null");
+  jbyte *ptr = (*env)->GetByteArrayElements(env, array, NULL);
+  CHECK(ptr != NULL, "failed to access byte array");
+  jsize len = (*env)->GetArrayLength(env, array);
+  return (bytes_t){
+      .array = array, .ptr = (const char *)ptr, .len = (size_t)len};
+}
 
-  jsize len = (*env)->GetArrayLength(env, bytes);
-  char *buffer = malloc((size_t)len + 1U);
-  CHECK(buffer != NULL, "failed to allocate string buffer");
-  (*env)->GetByteArrayRegion(env, bytes, 0, len, (jbyte *)buffer);
-  CHECK(!(*env)->ExceptionCheck(env), "failed to copy UTF-8 bytes");
-  CHECK(memchr(buffer, '\0', (size_t)len) == NULL,
-        "string argument contains a NUL byte");
-  buffer[len] = '\0';
-  return buffer;
+static void bytes_release(JNIEnv *env, bytes_t bytes) {
+  (*env)->ReleaseByteArrayElements(env, bytes.array, (jbyte *)bytes.ptr,
+                                   JNI_ABORT);
 }
 
 static jobject box_int(JNIEnv *env, jint value) {
@@ -91,8 +85,10 @@ static jstring new_jstring(JNIEnv *env, char *ptr, size_t len) {
 
 JNIEXPORT void JNICALL Java_dev_ibylich_mpclipboard_Ffi_mpclipboard_1fatal(
     JNIEnv *env, [[maybe_unused]] jclass clazz, jstring message) {
-  char *message_bytes = jstring_to_c_string(env, message);
-  FATAL(message_bytes);
+  CHECK(message != NULL, "message argument must not be null");
+  const char *message_chars = (*env)->GetStringUTFChars(env, message, NULL);
+  CHECK(message_chars != NULL, "failed to access message");
+  FATAL(message_chars);
 }
 
 JNIEXPORT void JNICALL
@@ -125,18 +121,19 @@ Java_dev_ibylich_mpclipboard_Ffi_mpclipboard_1define_1enums(
 
 JNIEXPORT jlong JNICALL
 Java_dev_ibylich_mpclipboard_Ffi_mpclipboard_1new_1inline(
-    JNIEnv *env, [[maybe_unused]] jclass clazz, jstring uri, jstring token,
-    jstring name) {
+    JNIEnv *env, [[maybe_unused]] jclass clazz, jbyteArray uri,
+    jbyteArray token, jbyteArray name) {
 
-  char *uri_bytes = jstring_to_c_string(env, uri);
-  char *token_bytes = jstring_to_c_string(env, token);
-  char *name_bytes = jstring_to_c_string(env, name);
+  bytes_t uri_bytes = bytes_acquire(env, uri);
+  bytes_t token_bytes = bytes_acquire(env, token);
+  bytes_t name_bytes = bytes_acquire(env, name);
 
   mpclipboard_MPClipboard *mpclipboard =
-      mpclipboard_new_inline(uri_bytes, token_bytes, name_bytes);
-  free(uri_bytes);
-  free(token_bytes);
-  free(name_bytes);
+      mpclipboard_new_inline(uri_bytes.ptr, uri_bytes.len, token_bytes.ptr,
+                             token_bytes.len, name_bytes.ptr, name_bytes.len);
+  bytes_release(env, uri_bytes);
+  bytes_release(env, token_bytes);
+  bytes_release(env, name_bytes);
 
   return (jlong)(intptr_t)mpclipboard;
 }
@@ -192,17 +189,16 @@ JNIEXPORT jobject JNICALL Java_dev_ibylich_mpclipboard_Ffi_mpclipboard_1read(
 
 JNIEXPORT jint JNICALL Java_dev_ibylich_mpclipboard_Ffi_mpclipboard_1push_1text(
     JNIEnv *env, [[maybe_unused]] jclass clazz, jlong mpclipboard_ptr,
-    jstring text) {
+    jbyteArray text) {
 
   mpclipboard_MPClipboard *mpclipboard =
       (mpclipboard_MPClipboard *)(intptr_t)mpclipboard_ptr;
   CHECK(mpclipboard != NULL, "mpclipboard pointer must not be null");
-  char *bytes = jstring_to_c_string(env, text);
-  size_t len = strlen(bytes);
+  bytes_t text_bytes = bytes_acquire(env, text);
 
   mpclipboard_PushResult push_result =
-      mpclipboard_push_text(mpclipboard, bytes, len);
-  free(bytes);
+      mpclipboard_push_text(mpclipboard, text_bytes.ptr, text_bytes.len);
+  bytes_release(env, text_bytes);
 
   switch (push_result) {
   case MPCLIPBOARD_PUSH_RESULT_PUSHED:

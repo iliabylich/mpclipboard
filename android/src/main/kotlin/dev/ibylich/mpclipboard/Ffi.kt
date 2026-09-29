@@ -83,9 +83,9 @@ object Ffi {
             @JvmStatic
             fun new(host: String, token: String, name: String): Client? {
                 val handle = mpclipboard_new_inline(
-                    host,
-                    token,
-                    name,
+                    host.toByteArray(),
+                    token.toByteArray(),
+                    name.toByteArray(),
                 )
                 if (handle == 0L) return null
                 val fileDescriptor = FileDescriptor()
@@ -105,7 +105,7 @@ object Ffi {
         }
 
         fun pushText(text: String): PushResult {
-            return PushResult.from(mpclipboard_push_text(handle, text))
+            return PushResult.from(mpclipboard_push_text(handle, text.toByteArray()))
         }
 
         fun close() {
@@ -120,7 +120,7 @@ object Ffi {
     private external fun mpclipboard_define_enums()
 
     @JvmStatic
-    private external fun mpclipboard_new_inline(uri: String, token: String, name: String): Long
+    private external fun mpclipboard_new_inline(uri: ByteArray, token: ByteArray, name: ByteArray): Long
 
     @JvmStatic
     private external fun mpclipboard_drop(clientPtr: Long)
@@ -132,5 +132,5 @@ object Ffi {
     private external fun mpclipboard_read(clientPtr: Long): Pair<Int?, String?>?
 
     @JvmStatic
-    private external fun mpclipboard_push_text(clientPtr: Long, text: String): Int
+    private external fun mpclipboard_push_text(clientPtr: Long, text: ByteArray): Int
 }
