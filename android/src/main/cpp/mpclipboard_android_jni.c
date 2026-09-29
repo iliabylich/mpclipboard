@@ -81,8 +81,6 @@ static jbyteArray new_jbytearray(JNIEnv *env, char *ptr, size_t len) {
 CONSTANT(connectivityConnecting, MPCLIPBOARD_CONNECTIVITY_CONNECTING)
 CONSTANT(connectivityConnected, MPCLIPBOARD_CONNECTIVITY_CONNECTED)
 CONSTANT(connectivityDisconnected, MPCLIPBOARD_CONNECTIVITY_DISCONNECTED)
-CONSTANT(pushResultPushed, MPCLIPBOARD_PUSH_RESULT_PUSHED)
-CONSTANT(pushResultDropped, MPCLIPBOARD_PUSH_RESULT_DROPPED)
 
 #undef CONSTANT
 
@@ -153,7 +151,7 @@ JNIEXPORT jobject JNICALL Java_dev_ibylich_mpclipboard_Ffi_mpclipboard_1read(
   return new_pair(env, connectivity, text);
 }
 
-JNIEXPORT jint JNICALL Java_dev_ibylich_mpclipboard_Ffi_mpclipboard_1push_1text(
+JNIEXPORT void JNICALL Java_dev_ibylich_mpclipboard_Ffi_mpclipboard_1push_1text(
     JNIEnv *env, [[maybe_unused]] jclass clazz, jlong mpclipboard_ptr,
     jbyteArray text) {
 
@@ -169,7 +167,7 @@ JNIEXPORT jint JNICALL Java_dev_ibylich_mpclipboard_Ffi_mpclipboard_1push_1text(
   switch (push_result) {
   case MPCLIPBOARD_PUSH_RESULT_PUSHED:
   case MPCLIPBOARD_PUSH_RESULT_DROPPED:
-    return (jint)push_result;
+    return;
   case MPCLIPBOARD_PUSH_RESULT_ERROR:
     FATAL("mpclipboard_push_text failed");
   default:

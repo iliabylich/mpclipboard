@@ -47,26 +47,6 @@ object Ffi {
         }
     }
 
-    enum class PushResult {
-        Pushed,
-        Dropped,
-
-        ;
-
-        companion object {
-            private val PUSHED = pushResultPushed()
-            private val DROPPED = pushResultDropped()
-
-            internal fun from(tag: Int): PushResult {
-                return when (tag) {
-                    PUSHED -> Pushed
-                    DROPPED -> Dropped
-                    else -> fatal("unknown native push result: $tag")
-                }
-            }
-        }
-    }
-
     init {
         System.loadLibrary("mpclipboard_android")
     }
@@ -105,8 +85,8 @@ object Ffi {
             return mpclipboard_read(handle)?.let(Output::from)
         }
 
-        fun pushText(text: String): PushResult {
-            return PushResult.from(mpclipboard_push_text(handle, text.toByteArray()))
+        fun pushText(text: String) {
+            mpclipboard_push_text(handle, text.toByteArray())
         }
 
         fun close() {
@@ -129,12 +109,6 @@ object Ffi {
     private external fun connectivityDisconnected(): Int
 
     @JvmStatic
-    private external fun pushResultPushed(): Int
-
-    @JvmStatic
-    private external fun pushResultDropped(): Int
-
-    @JvmStatic
     private external fun mpclipboard_new_inline(uri: ByteArray, token: ByteArray, name: ByteArray): Long
 
     @JvmStatic
@@ -147,5 +121,5 @@ object Ffi {
     private external fun mpclipboard_read(clientPtr: Long): Pair<Int?, ByteArray?>?
 
     @JvmStatic
-    private external fun mpclipboard_push_text(clientPtr: Long, text: ByteArray): Int
+    private external fun mpclipboard_push_text(clientPtr: Long, text: ByteArray)
 }
