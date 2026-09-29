@@ -1,5 +1,6 @@
 package dev.ibylich.mpclipboard
 
+import android.os.ParcelFileDescriptor
 import java.io.FileDescriptor
 
 object Ffi {
@@ -73,8 +74,10 @@ object Ffi {
 
     class Client private constructor(
         private val handle: Long,
-        val fd: FileDescriptor,
+        private val pfd: ParcelFileDescriptor,
     ) {
+        val fd: FileDescriptor = pfd.fileDescriptor
+
         companion object {
             @JvmStatic
             fun new(host: String, token: String, name: String): Client? {
@@ -84,15 +87,8 @@ object Ffi {
                     name.toByteArray(),
                 )
                 if (handle == 0L) return null
-                val fileDescriptor = FileDescriptor()
-                val setInt =
-                    FileDescriptor::class.java.getDeclaredMethod(
-                        "setInt$",
-                        Int::class.javaPrimitiveType,
-                    )
-                setInt.isAccessible = true
-                setInt.invoke(fileDescriptor, mpclipboard_get_fd(handle))
-                return Client(handle, fileDescriptor)
+                val pfd = ParcelFileDescriptor.fromFd(mpclipboard_get_fd(handle))
+                return Client(handle, pfd)
             }
         }
 
@@ -105,6 +101,7 @@ object Ffi {
         }
 
         fun close() {
+            pfd.close()
             mpclipboard_drop(handle)
         }
     }
