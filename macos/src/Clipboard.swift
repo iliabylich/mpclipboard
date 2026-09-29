@@ -35,7 +35,7 @@ final class Clipboard {
     }
 
     func writeText(_ text: String) {
-        pasteboard.declareTypes([.string], owner: nil)
+        pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
     }
 }
