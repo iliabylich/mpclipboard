@@ -52,7 +52,7 @@ android {
     defaultConfig {
         applicationId = "dev.ibylich.mpclipboard"
         minSdk = 26
-        targetSdk = 36
+        targetSdk = 37
         versionCode = appVersion?.let(::versionCodeOf) ?: 1
         versionName = appVersion ?: "0.0.0-dev"
 

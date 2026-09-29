@@ -9,6 +9,8 @@ android-sdk = "17.0"
 [env]
 GRADLE_USER_HOME = "{{config_root}}/.cache/gradle"
 ANDROID_USER_HOME = "{{config_root}}/.cache/android"
+ANDROID_EMULATOR_HOME = "{{config_root}}/.cache/android"
+ANDROID_AVD_HOME = "{{config_root}}/.cache/android/avd"
 ANDROID_HOME = "{{config_root}}/.cache/android-sdk"
 ANDROID_SDK_ROOT = "{{config_root}}/.cache/android-sdk"
 ANDROID_NDK_VERSION = "30.0.16248370"
