@@ -5,7 +5,6 @@ import dev.ibylich.mpclipboard.widget.MPClipboardWidgetProvider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 
 class MPClipboardApplication : Application() {
@@ -16,10 +15,8 @@ class MPClipboardApplication : Application() {
 
         val store = Store.from(this)
         MPClipboard.setConnectivityChangedCallback { connectivity ->
-            scope.launch {
-                store.writeConnectivity(connectivity)
-                MPClipboardWidgetProvider.updateAll(this@MPClipboardApplication)
-            }
+            store.writeConnectivity(connectivity)
+            MPClipboardWidgetProvider.updateAll(this, connectivity)
         }
         MPClipboard.setTextReceivedCallback(AidlTransport::pushText)
         AidlTransport.setOnNewTextCallback(MPClipboard::pushText)

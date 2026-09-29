@@ -8,10 +8,6 @@ import android.widget.RemoteViews
 import dev.ibylich.mpclipboard.Ffi.Connectivity
 import dev.ibylich.mpclipboard.R
 import dev.ibylich.mpclipboard.Store
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.launch
 
 class MPClipboardWidgetProvider : AppWidgetProvider() {
     override fun onUpdate(
@@ -19,24 +15,16 @@ class MPClipboardWidgetProvider : AppWidgetProvider() {
         appWidgetManager: AppWidgetManager,
         appWidgetIds: IntArray,
     ) {
-        val pendingResult = goAsync()
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
-                updateAll(context)
-            } finally {
-                pendingResult.finish()
-            }
-        }
+        val connectivity = Store.from(context).connectivity.value
+        updateWidgets(context, appWidgetManager, appWidgetIds, connectivity)
     }
 
     companion object {
-        suspend fun updateAll(context: Context) {
-            val appContext = context.applicationContext
-            val connectivity = Store.from(appContext).connectivity.first()
-            val appWidgetManager = AppWidgetManager.getInstance(appContext)
-            val componentName = ComponentName(appContext, MPClipboardWidgetProvider::class.java)
+        fun updateAll(context: Context, connectivity: Connectivity) {
+            val appWidgetManager = AppWidgetManager.getInstance(context)
+            val componentName = ComponentName(context, MPClipboardWidgetProvider::class.java)
             val appWidgetIds = appWidgetManager.getAppWidgetIds(componentName)
-            updateWidgets(appContext, appWidgetManager, appWidgetIds, connectivity)
+            updateWidgets(context, appWidgetManager, appWidgetIds, connectivity)
         }
 
         private fun updateWidgets(
