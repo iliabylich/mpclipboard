@@ -1,51 +1,41 @@
-use crate::prelude::*;
+use crate::{Buffer, prelude::*};
 use anyhow::anyhow;
 
 #[must_use]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum LineReader<const N: usize> {
-    LineWaitingForSlashR { buf: [u8; N], len: usize },
-    LineWaitingForSlashN { buf: [u8; N], len: usize },
+    LineWaitingForSlashR(Buffer<N>),
+    LineWaitingForSlashN(Buffer<N>),
     SkipWaitingForSlashR,
     SkipWaitingForSlashN,
 }
 
 impl<const N: usize> LineReader<N> {
     pub(crate) const fn new() -> Self {
-        Self::LineWaitingForSlashR {
-            buf: [0; N],
-            len: 0,
-        }
+        Self::LineWaitingForSlashR(Buffer::new())
     }
 
-    pub(crate) fn push(&mut self, byte: u8) -> Completion<([u8; N], usize), anyhow::Error, ()> {
+    pub(crate) fn push(&mut self, byte: u8) -> Completion<Buffer<N>, anyhow::Error, ()> {
         match self {
-            Self::LineWaitingForSlashR { buf, len } => match byte {
+            Self::LineWaitingForSlashR(buf) => match byte {
                 b'\r' => {
-                    *self = Self::LineWaitingForSlashN {
-                        buf: *buf,
-                        len: *len,
-                    };
+                    *self = Self::LineWaitingForSlashN(*buf);
                     Pending(())
                 }
 
                 b'\n' => Failed(anyhow!("bare LF in HTTP line")),
 
                 byte => {
-                    let Some((slot, nextlen)) = buf.get_mut(*len).zip(len.checked_add(1)) else {
+                    if !buf.push(byte) {
                         *self = Self::SkipWaitingForSlashR;
-                        return Pending(());
-                    };
-
-                    *slot = byte;
-                    *len = nextlen;
+                    }
                     Pending(())
                 }
             },
 
-            Self::LineWaitingForSlashN { buf, len } => match byte {
+            Self::LineWaitingForSlashN(buf) => match byte {
                 b'\n' => {
-                    let line = (*buf, *len);
+                    let line = *buf;
                     *self = Self::new();
                     Done(line)
                 }
@@ -83,9 +73,8 @@ mod tests {
         let mut out = vec![];
         for &byte in input {
             match reader.push(byte) {
-                Done((buf, len)) => {
-                    let text = buf.get(..len).unwrap_or_default();
-                    out.push(String::from_utf8_lossy(text).into_owned());
+                Done(line) => {
+                    out.push(String::from_utf8_lossy(line.as_slice()).into_owned());
                 }
                 Failed(err) => return Err(err),
                 Pending(()) => {}

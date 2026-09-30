@@ -75,6 +75,9 @@ pub(crate) const UPGRADE_MPCLIPBOARD_RAW_HEADER: &str = "Upgrade: mpclipboard-ra
 mod non_empty_inline_string;
 pub use non_empty_inline_string::NonEmptyInlineString;
 
+mod buffer;
+pub use buffer::Buffer;
+
 mod wants;
 pub use wants::Wants;
 

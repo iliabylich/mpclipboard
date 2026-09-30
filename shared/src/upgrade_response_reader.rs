@@ -1,5 +1,5 @@
 use crate::{
-    CONNECTION_UPGRADE_HEADER, UPGRADE_MPCLIPBOARD_RAW_HEADER, line_reader::LineReader,
+    Buffer, CONNECTION_UPGRADE_HEADER, UPGRADE_MPCLIPBOARD_RAW_HEADER, line_reader::LineReader,
     message::Message, prelude::*, strip_prefix_ignore_ascii_case,
 };
 use anyhow::{Context, Result, anyhow};
@@ -35,25 +35,21 @@ impl UpgradeResponseReader {
         &mut self,
         buf: [u8; Self::BUFFER_SIZE],
         len: NonZeroUsize,
-    ) -> Completion<([u8; Self::BUFFER_SIZE], usize), anyhow::Error, ()> {
+    ) -> Completion<Buffer<{ Self::BUFFER_SIZE }>, anyhow::Error, ()> {
         let Some(buf) = buf.get(..len.get()) else {
             return Failed(anyhow!("given buffer is malformed"));
         };
 
-        let mut leftover = [0; Self::BUFFER_SIZE];
-        let mut leftover_len = 0;
+        let mut leftover = Buffer::new();
 
         for (pos, &byte) in buf.iter().enumerate() {
-            let (line, len) = match self.lines.push(byte) {
+            let line = match self.lines.push(byte) {
                 Done(line) => line,
                 Pending(()) => continue,
                 Failed(err) => return Failed(err),
             };
-            let Some(line) = line.get(..len) else {
-                return Failed(anyhow!("malformed line"));
-            };
 
-            let line = match HttpLine::parse(line) {
+            let line = match HttpLine::parse(line.as_slice()) {
                 Ok(line) => line,
                 Err(err) => return Failed(err),
             };
@@ -71,11 +67,10 @@ impl UpgradeResponseReader {
                     let Some(rest) = buf.get(start..) else {
                         return Failed(anyhow!("worst case is leftover is empty"));
                     };
-                    let Some(dst) = leftover.get_mut(..rest.len()) else {
+                    let Some(rest) = Buffer::from_slice(rest) else {
                         return Failed(anyhow!("leftover can't be longer than given buffer"));
                     };
-                    dst.copy_from_slice(rest);
-                    leftover_len = rest.len();
+                    leftover = rest;
                     break;
                 }
                 HttpLine::Other => {}
@@ -83,7 +78,7 @@ impl UpgradeResponseReader {
         }
 
         if self.try_finish() {
-            Done((leftover, leftover_len))
+            Done(leftover)
         } else if self.seen_eos {
             Failed(anyhow!("got EOS but UpgradeResponse is incomplete"))
         } else {
@@ -162,23 +157,11 @@ mod tests {
             .copy_from_slice(b"abc");
         len = non_zero_usize(len.get() + 3)?;
 
-        let levftover = reader
+        let leftover = reader
             .received(buf, len)
             .expect_done("trailer has been written");
 
-        assert_eq!(
-            levftover,
-            (
-                {
-                    let mut buf = [0; _];
-                    buf[0] = b'a';
-                    buf[1] = b'b';
-                    buf[2] = b'c';
-                    buf
-                },
-                3,
-            )
-        );
+        assert_eq!(leftover.as_slice(), b"abc");
 
         Ok(())
     }
@@ -202,7 +185,7 @@ mod tests {
             .received(buf, len)
             .expect_done("trailer has been written");
 
-        assert_eq!(leftover, ([0; _], 0));
+        assert_eq!(leftover.as_slice(), b"");
     }
 
     #[test]
@@ -246,7 +229,7 @@ mod tests {
         let leftover = reader
             .received(buf, len)
             .expect_done("long unknown header is skipped");
-        assert_eq!(leftover, ([0; _], 0));
+        assert_eq!(leftover.as_slice(), b"");
 
         Ok(())
     }

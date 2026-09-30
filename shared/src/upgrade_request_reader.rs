@@ -54,16 +54,13 @@ impl UpgradeRequestReader {
         };
 
         for (pos, &byte) in buf.iter().enumerate() {
-            let (line, len) = match self.lines.push(byte) {
+            let line = match self.lines.push(byte) {
                 Done(line) => line,
                 Pending(()) => continue,
                 Failed(err) => return Failed(err),
             };
-            let Some(line) = line.get(..len) else {
-                return Failed(anyhow!("malformed line"));
-            };
 
-            let line = match HttpLine::parse(line) {
+            let line = match HttpLine::parse(line.as_slice()) {
                 Ok(line) => line,
                 Err(err) => return Failed(err),
             };

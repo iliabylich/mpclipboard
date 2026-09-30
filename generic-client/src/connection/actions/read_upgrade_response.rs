@@ -1,7 +1,5 @@
 use crate::connection::maybe_tls_stream::MaybeTlsStream;
-use mpclipboard_shared::{
-    Message, MessageReader, UpgradeResponseReader, enable_tcp_keep_alive, prelude::*,
-};
+use mpclipboard_shared::{MessageReader, UpgradeResponseReader, enable_tcp_keep_alive, prelude::*};
 use std::os::fd::AsFd;
 
 pub fn read_upgrade_response(
@@ -19,10 +17,10 @@ pub fn read_upgrade_response(
         Failed(err) => return Failed(err),
     };
 
-    let (leftover, leftover_len) = match reader.received(buf, len) {
-        Done((leftover, leftover_len)) => {
+    let leftover = match reader.received(buf, len) {
+        Done(leftover) => {
             log::trace!("Handshake response matches");
-            (leftover, leftover_len)
+            leftover
         }
         Pending(()) => {
             log::trace!("handshake response still pending: {reader:?}");
@@ -38,11 +36,5 @@ pub fn read_upgrade_response(
         return Failed(err);
     }
 
-    let mut buf = [0; Message::BYTESIZE];
-    const {
-        assert!(UpgradeResponseReader::BUFFER_SIZE < Message::BYTESIZE);
-    }
-    buf[..UpgradeResponseReader::BUFFER_SIZE].copy_from_slice(&leftover);
-    let reader = MessageReader::new(buf, leftover_len);
-    Done(reader)
+    Done(MessageReader::new(leftover))
 }
