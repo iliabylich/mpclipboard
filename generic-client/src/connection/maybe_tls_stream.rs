@@ -1,6 +1,6 @@
 use crate::tls::TLS;
 use anyhow::{Context, Result, anyhow};
-use mpclipboard_shared::{Url, Wants, prelude::*};
+use mpclipboard_shared::{Buffer, Url, Wants, prelude::*};
 use rustls::{ClientConnection, pki_types::ServerName};
 use std::{
     io::{ErrorKind, Read, Write},
@@ -79,13 +79,12 @@ impl MaybeTlsStream {
         }
     }
 
-    pub(crate) fn read_bytes(
+    pub(crate) fn read_bytes<const N: usize>(
         &mut self,
         fd: &impl AsFd,
-        buf: &mut [u8],
-    ) -> Completion<NonZeroUsize, anyhow::Error, ()> {
+    ) -> Completion<Buffer<N>, anyhow::Error, ()> {
         match self {
-            Self::Plain => mpclipboard_shared::io::read(fd, buf)
+            Self::Plain => mpclipboard_shared::io::read(fd)
                 .map_err(|err| err.context("failed to read_bytes() on plain stream")),
             Self::Tls(conn) => {
                 match conn.complete_io(&mut StdReadWriteFd(fd)) {
@@ -96,8 +95,14 @@ impl MaybeTlsStream {
                     }
                 }
 
-                match conn.reader().read(buf).map(NonZeroUsize::new) {
-                    Ok(Some(len)) => Done(len),
+                let mut buf = [0; N];
+                match conn.reader().read(&mut buf).map(NonZeroUsize::new) {
+                    Ok(Some(len)) => {
+                        let Some(buf) = buf.get(..len.get()).and_then(Buffer::from_slice) else {
+                            unreachable!("read() can't return more than N bytes");
+                        };
+                        Done(buf)
+                    }
                     Ok(None) => Failed(anyhow!("failed to read_bytes() on TLS stream: EOF")),
                     Err(err) if err.kind() == ErrorKind::WouldBlock => Pending(()),
                     Err(err) => Failed(anyhow!("failed to read_bytes() on TLS stream: {err:?}")),

@@ -48,14 +48,13 @@ impl PreSource {
     fn read(&mut self, now: u64) -> Completion<UpgradeRequest, anyhow::Error, ()> {
         self.last_activity_at = now;
 
-        let mut buf = [0; UpgradeRequestReader::BUFFER_SIZE];
-        let len = match mpclipboard_shared::io::read(&self.fd, &mut buf) {
-            Done(len) => len,
+        let buf = match mpclipboard_shared::io::read(&self.fd) {
+            Done(buf) => buf,
             Failed(err) => return Failed(err),
             Pending(()) => return Pending(()),
         };
 
-        self.reader.received(buf, len)
+        self.reader.received(buf)
     }
 }
 

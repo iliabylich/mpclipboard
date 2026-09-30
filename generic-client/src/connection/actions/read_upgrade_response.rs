@@ -7,9 +7,8 @@ pub fn read_upgrade_response(
     stream: &mut MaybeTlsStream,
     reader: &mut UpgradeResponseReader,
 ) -> Completion<MessageReader, anyhow::Error, ()> {
-    let mut buf = [0; UpgradeResponseReader::BUFFER_SIZE];
-    let len = match stream.read_bytes(&fd, &mut buf) {
-        Done(len) => len,
+    let buf = match stream.read_bytes(&fd) {
+        Done(buf) => buf,
         Pending(()) => {
             log::trace!("handshake response still pending: {reader:?}");
             return Pending(());
@@ -17,7 +16,7 @@ pub fn read_upgrade_response(
         Failed(err) => return Failed(err),
     };
 
-    let leftover = match reader.received(buf, len) {
+    let leftover = match reader.received(buf) {
         Done(leftover) => {
             log::trace!("Handshake response matches");
             leftover

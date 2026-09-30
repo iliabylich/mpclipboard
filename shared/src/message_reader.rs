@@ -1,6 +1,5 @@
 use crate::{Buffer, Message, prelude::*};
 use anyhow::anyhow;
-use core::num::NonZeroUsize;
 
 #[must_use]
 #[derive(Debug, Clone, Copy)]
@@ -22,15 +21,11 @@ impl MessageReader {
 
     pub fn received(
         &mut self,
-        bytes: [u8; Message::BYTESIZE],
-        len: NonZeroUsize,
+        bytes: Buffer<{ Message::BYTESIZE }>,
     ) -> Completion<Message, anyhow::Error, ()> {
         let mut message = None;
-        let Some(bytes) = bytes.get(..len.get()) else {
-            return Failed(anyhow!("malformed buffer"));
-        };
 
-        for &byte in bytes {
+        for &byte in bytes.as_slice() {
             if !self.buf.push(byte) {
                 return Failed(anyhow!("malformed internal state"));
             }
@@ -63,9 +58,8 @@ impl Default for MessageReader {
 #[cfg(test)]
 mod tests {
     use super::MessageReader;
-    use crate::{Message, NonEmptyInlineString, test_helpers::non_zero_usize};
-    use anyhow::{Context, Result};
-    use core::num::NonZeroUsize;
+    use crate::{Message, NonEmptyInlineString, test_helpers::buffer};
+    use anyhow::Result;
 
     #[test]
     fn test_receive_full() -> Result<()> {
@@ -73,19 +67,11 @@ mod tests {
 
         let bytes = Message::new(NonEmptyInlineString::new("BOO")?)?.encode();
         let output = reader
-            .received(bytes, non_zero_usize(Message::BYTESIZE)?)
+            .received(buffer(&bytes)?)
             .expect_done("we've written a full message");
         assert_eq!(output.text_as_str(), "BOO");
 
         Ok(())
-    }
-
-    fn chunk(bytes: &[u8]) -> Result<([u8; Message::BYTESIZE], NonZeroUsize)> {
-        let mut buf = [0; Message::BYTESIZE];
-        buf.get_mut(..bytes.len())
-            .context("chunk is longer than a message")?
-            .copy_from_slice(bytes);
-        Ok((buf, non_zero_usize(bytes.len())?))
     }
 
     #[test]
@@ -99,20 +85,17 @@ mod tests {
 
         let mut reader = MessageReader::empty();
 
-        let (buf, len) = chunk(first)?;
         reader
-            .received(buf, len)
+            .received(buffer(first)?)
             .expect_pending("only a part of the 1st message has been received");
 
-        let (buf, len) = chunk(second)?;
         let message = reader
-            .received(buf, len)
+            .received(buffer(second)?)
             .expect_done("the rest of the 1st message has been received");
         assert_eq!(message, one);
 
-        let (buf, len) = chunk(third)?;
         let message = reader
-            .received(buf, len)
+            .received(buffer(third)?)
             .expect_done("the rest of the 2nd message has been received");
         assert_eq!(message, two);
 

@@ -69,14 +69,13 @@ impl Client {
     }
 
     fn read(&mut self) -> Completion<Message, anyhow::Error, ()> {
-        let mut buf = [0; Message::BYTESIZE];
-        let len = match mpclipboard_shared::io::read(&self.fd, &mut buf) {
-            Done(len) => len,
+        let buf = match mpclipboard_shared::io::read(&self.fd) {
+            Done(buf) => buf,
             Pending(()) => return Pending(()),
             Failed(err) => return Failed(err),
         };
 
-        self.reader.received(buf, len)
+        self.reader.received(buf)
     }
 
     pub(crate) const fn id(&self) -> ID {

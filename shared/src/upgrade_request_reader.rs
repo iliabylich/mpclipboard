@@ -1,10 +1,9 @@
 use crate::{
-    CONNECTION_UPGRADE_HEADER, HOST_PREFIX, HostPort, ID, ID_PREFIX, Message, START_LINE,
+    Buffer, CONNECTION_UPGRADE_HEADER, HOST_PREFIX, HostPort, ID, ID_PREFIX, Message, START_LINE,
     TOKEN_PREFIX, Token, UPGRADE_MPCLIPBOARD_RAW_HEADER, UpgradeRequest, VERSION_PREFIX, Version,
     line_reader::LineReader, prelude::*, strip_prefix_ignore_ascii_case,
 };
 use anyhow::{Context, Result, anyhow};
-use core::num::NonZeroUsize;
 
 #[expect(clippy::struct_excessive_bools)]
 #[must_use]
@@ -46,12 +45,9 @@ impl UpgradeRequestReader {
 
     pub fn received(
         &mut self,
-        buf: [u8; Self::BUFFER_SIZE],
-        len: NonZeroUsize,
+        buf: Buffer<{ Self::BUFFER_SIZE }>,
     ) -> Completion<UpgradeRequest, anyhow::Error, ()> {
-        let Some(buf) = buf.get(..len.get()) else {
-            return Failed(anyhow!("malformed buffer"));
-        };
+        let buf = buf.as_slice();
 
         for (pos, &byte) in buf.iter().enumerate() {
             let line = match self.lines.push(byte) {
@@ -171,7 +167,7 @@ mod tests {
     use super::UpgradeRequestReader;
     use crate::{
         Completion, HostPort, ID, Token, UpgradeRequest, UpgradeRequestWriter, Version,
-        test_helpers::{as_chunks_with_guaranteed_trailer, non_zero_usize},
+        test_helpers::{as_chunks_with_guaranteed_trailer, buffer},
     };
     use anyhow::{Context, Result};
 
@@ -191,20 +187,16 @@ mod tests {
 
         let mut reader = UpgradeRequestReader::new();
 
-        for (buf, len) in chunks {
+        for buf in chunks {
             reader
-                .received(buf, len)
+                .received(buf)
                 .expect_pending("trailer hasn't been written yet");
         }
 
-        let (mut buf, mut len) = trailer;
-        buf.get_mut(len.get()..len.get().checked_add(3).context("bug")?)
-            .context("bug")?
-            .copy_from_slice(b"abc");
-        len = non_zero_usize(len.get() + 3)?;
+        let trailer = buffer(&[trailer.as_slice(), b"abc"].concat())?;
 
         let err = reader
-            .received(buf, len)
+            .received(trailer)
             .expect_failed("there's 'abc' leftover");
         assert_eq!(err.to_string(), "got leftover in UpgradeRequestReader");
 
@@ -220,15 +212,14 @@ mod tests {
 
         let mut reader = UpgradeRequestReader::new();
 
-        for (buf, len) in chunks {
+        for buf in chunks {
             reader
-                .received(buf, len)
+                .received(buf)
                 .expect_pending("trailer hasn't been written yet");
         }
 
-        let (buf, len) = trailer;
         let req = reader
-            .received(buf, len)
+            .received(trailer)
             .expect_done("we've written the trailer");
 
         assert_eq!(req, new_reqwest()?);
@@ -240,16 +231,9 @@ mod tests {
     fn test_err() -> Result<()> {
         let mut reader = UpgradeRequestReader::new();
 
-        let mut buf = [0; _];
-        let malformed = b"boo\r\n\r\n";
-        buf.get_mut(..malformed.len())
-            .context("bug")?
-            .copy_from_slice(malformed);
-        let len = non_zero_usize(malformed.len())?;
+        let buf = buffer(b"boo\r\n\r\n")?;
 
-        let err = reader
-            .received(buf, len)
-            .expect_failed("incomplete request");
+        let err = reader.received(buf).expect_failed("incomplete request");
 
         assert_eq!(err.to_string(), "got EOS but no complete UpgradeRequest");
 
@@ -269,13 +253,12 @@ mod tests {
             as_chunks_with_guaranteed_trailer::<{ UpgradeRequestReader::BUFFER_SIZE }>(bytes);
 
         let mut reader = UpgradeRequestReader::new();
-        for (buf, len) in chunks {
+        for buf in chunks {
             reader
-                .received(buf, len)
+                .received(buf)
                 .expect_pending("trailer hasn't been written yet");
         }
-        let (buf, len) = trailer;
-        reader.received(buf, len)
+        reader.received(trailer)
     }
 
     #[test]

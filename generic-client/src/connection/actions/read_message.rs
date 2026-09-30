@@ -7,17 +7,16 @@ pub fn read_message(
     stream: &mut MaybeTlsStream,
     fd: &impl AsFd,
 ) -> Completion<Message, anyhow::Error, ()> {
-    let mut buf = [0; Message::BYTESIZE];
     let mut message = None;
 
     loop {
-        let len = match stream.read_bytes(fd, &mut buf) {
-            Done(len) => len,
+        let buf = match stream.read_bytes(fd) {
+            Done(buf) => buf,
             Failed(err) => return Failed(err),
             Pending(()) => break,
         };
 
-        match reader.received(buf, len) {
+        match reader.received(buf) {
             Done(m) => message = Some(m),
             Failed(err) => return Failed(err),
             Pending(()) => {}

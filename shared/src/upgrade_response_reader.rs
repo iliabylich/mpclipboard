@@ -3,7 +3,6 @@ use crate::{
     message::Message, prelude::*, strip_prefix_ignore_ascii_case,
 };
 use anyhow::{Context, Result, anyhow};
-use core::num::NonZeroUsize;
 
 #[expect(clippy::struct_excessive_bools)]
 #[must_use]
@@ -33,12 +32,9 @@ impl UpgradeResponseReader {
 
     pub fn received(
         &mut self,
-        buf: [u8; Self::BUFFER_SIZE],
-        len: NonZeroUsize,
+        buf: Buffer<{ Self::BUFFER_SIZE }>,
     ) -> Completion<Buffer<{ Self::BUFFER_SIZE }>, anyhow::Error, ()> {
-        let Some(buf) = buf.get(..len.get()) else {
-            return Failed(anyhow!("given buffer is malformed"));
-        };
+        let buf = buf.as_slice();
 
         let mut leftover = Buffer::new();
 
@@ -132,7 +128,7 @@ impl HttpLine {
 mod tests {
     use super::UpgradeResponseReader;
     use crate::{
-        test_helpers::{as_chunks_with_guaranteed_trailer, non_zero_usize},
+        test_helpers::{as_chunks_with_guaranteed_trailer, buffer},
         upgrade_response::UpgradeResponse,
     };
     use anyhow::{Context, Result};
@@ -145,20 +141,16 @@ mod tests {
 
         let mut reader = UpgradeResponseReader::new();
 
-        for (buf, len) in chunks {
+        for buf in chunks {
             reader
-                .received(buf, len)
+                .received(buf)
                 .expect_pending("trailer hasn't been written yet");
         }
 
-        let (mut buf, mut len) = trailer;
-        buf.get_mut(len.get()..len.get().checked_add(3).context("bug")?)
-            .context("bug")?
-            .copy_from_slice(b"abc");
-        len = non_zero_usize(len.get() + 3)?;
+        let trailer = buffer(&[trailer.as_slice(), b"abc"].concat())?;
 
         let leftover = reader
-            .received(buf, len)
+            .received(trailer)
             .expect_done("trailer has been written");
 
         assert_eq!(leftover.as_slice(), b"abc");
@@ -174,15 +166,14 @@ mod tests {
 
         let mut reader = UpgradeResponseReader::new();
 
-        for (buf, len) in chunks {
+        for buf in chunks {
             reader
-                .received(buf, len)
+                .received(buf)
                 .expect_pending("trailer hasn't been written yet");
         }
 
-        let (buf, len) = trailer;
         let leftover = reader
-            .received(buf, len)
+            .received(trailer)
             .expect_done("trailer has been written");
 
         assert_eq!(leftover.as_slice(), b"");
@@ -192,16 +183,9 @@ mod tests {
     fn test_err() -> Result<()> {
         let mut reader = UpgradeResponseReader::new();
 
-        let mut buf = [0; _];
-        let malformed = b"boo\r\n\r\n";
-        buf.get_mut(..malformed.len())
-            .context("bug")?
-            .copy_from_slice(malformed);
-        let len = non_zero_usize(malformed.len())?;
+        let buf = buffer(b"boo\r\n\r\n")?;
 
-        let err = reader
-            .received(buf, len)
-            .expect_failed("incomplete request");
+        let err = reader.received(buf).expect_failed("incomplete request");
         assert_eq!(err.to_string(), "got EOS but UpgradeResponse is incomplete");
 
         Ok(())
@@ -219,15 +203,14 @@ mod tests {
         >(bytes.as_bytes());
 
         let mut reader = UpgradeResponseReader::new();
-        for (buf, len) in chunks {
+        for buf in chunks {
             reader
-                .received(buf, len)
+                .received(buf)
                 .expect_pending("trailer hasn't been written yet");
         }
 
-        let (buf, len) = trailer;
         let leftover = reader
-            .received(buf, len)
+            .received(trailer)
             .expect_done("long unknown header is skipped");
         assert_eq!(leftover.as_slice(), b"");
 

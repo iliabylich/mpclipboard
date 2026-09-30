@@ -1,11 +1,10 @@
+use crate::Buffer;
 use anyhow::{Context, Result};
 use core::num::NonZeroUsize;
 
-type Chunk<const BUFSIZE: usize> = ([u8; BUFSIZE], NonZeroUsize);
-
 pub(crate) fn as_chunks_with_guaranteed_trailer<const BUFSIZE: usize>(
     buf: &[u8],
-) -> (impl Iterator<Item = Chunk<BUFSIZE>>, Chunk<BUFSIZE>) {
+) -> (impl Iterator<Item = Buffer<BUFSIZE>>, Buffer<BUFSIZE>) {
     const CHUNK_SIZE: usize = 20;
 
     let (head, tail) = buf.split_at(
@@ -14,21 +13,17 @@ pub(crate) fn as_chunks_with_guaranteed_trailer<const BUFSIZE: usize>(
             .unwrap_or_else(|| unreachable!("bug")),
     );
 
-    let chunks = head.chunks(CHUNK_SIZE).filter_map(|chunk| {
-        let len = NonZeroUsize::new(chunk.len())?;
-        let mut buf = [0; BUFSIZE];
-        buf[..chunk.len()].copy_from_slice(chunk);
-        Some((buf, len))
+    let chunks = head.chunks(CHUNK_SIZE).map(|chunk| {
+        Buffer::from_slice(chunk).unwrap_or_else(|| unreachable!("chunk fits into a buffer"))
     });
-
-    let mut trailer = [0; BUFSIZE];
-    trailer[..tail.len()].copy_from_slice(tail);
-    let trailer = (
-        trailer,
-        NonZeroUsize::new(CHUNK_SIZE).unwrap_or_else(|| unreachable!("constant > 0")),
-    );
+    let trailer =
+        Buffer::from_slice(tail).unwrap_or_else(|| unreachable!("trailer fits into a buffer"));
 
     (chunks, trailer)
+}
+
+pub(crate) fn buffer<const N: usize>(bytes: &[u8]) -> Result<Buffer<N>> {
+    Buffer::from_slice(bytes).context("bytes don't fit into a buffer")
 }
 
 pub(crate) fn non_zero_usize(n: usize) -> Result<NonZeroUsize> {
