@@ -199,15 +199,14 @@ impl Connection {
                 state: active,
             } => match active {
                 State::Connecting { .. } => {
-                    match (finish_connecting(fd, config), stream.is_tls()) {
-                        (Done(_writer), true) => *active = State::TlsHandshake(now),
-                        (Done(writer), false) => {
-                            *active = State::WritingUpgradeRequest(now, writer);
-                        }
-                        (Failed(err), _) => {
-                            log::error!("failed to finish connecting: {err:?}");
-                            *self = Self::Disconnected(now);
-                        }
+                    if let Err(err) = finish_connecting(fd) {
+                        log::error!("failed to finish connecting: {err:?}");
+                        *self = Self::Disconnected(now);
+                    } else if stream.is_tls() {
+                        *active = State::TlsHandshake(now);
+                    } else {
+                        let writer = UpgradeRequestWriter::new(config.update_request());
+                        *active = State::WritingUpgradeRequest(now, writer);
                     }
                 }
 

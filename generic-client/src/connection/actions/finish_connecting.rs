@@ -1,19 +1,11 @@
-use crate::config::Config;
-use anyhow::anyhow;
-use core::convert::Infallible;
-use mpclipboard_shared::{UpgradeRequestWriter, prelude::*};
+use anyhow::{Result, bail};
 use std::os::fd::AsFd;
 
-pub fn finish_connecting(
-    fd: impl AsFd,
-    config: &Config,
-) -> Completion<UpgradeRequestWriter, anyhow::Error, Infallible> {
+pub fn finish_connecting(fd: impl AsFd) -> Result<()> {
     match rustix::net::sockopt::socket_error(fd) {
-        Ok(Ok(())) => {}
+        Ok(Ok(())) => Ok(()),
         Ok(Err(err)) | Err(err) => {
-            return Failed(anyhow!("socket_error() returned error: {err:?}"));
+            bail!("socket_error() returned error: {err:?}");
         }
     }
-
-    Done(UpgradeRequestWriter::new(config.update_request()))
 }
