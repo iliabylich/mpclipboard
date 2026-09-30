@@ -1,4 +1,4 @@
-use super::{Diff, EventLoopResult, FdState};
+use super::{Diff, Epoch, EventLoopResult, FdState};
 use crate::Wants;
 use anyhow::{Context, Result, bail};
 use core::{ptr, time::Duration};
@@ -29,7 +29,7 @@ impl EventLoop {
         Ok(this)
     }
 
-    pub fn sync(&mut self, wants: Option<(BorrowedFd<'_>, Wants)>) -> Result<()> {
+    pub fn sync(&mut self, wants: Option<(BorrowedFd<'_>, Epoch, Wants)>) -> Result<()> {
         match self.fd.transition(wants) {
             Diff::Add { fd, wants } => {
                 self.add(fd, wants)?;

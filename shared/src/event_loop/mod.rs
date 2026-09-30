@@ -1,6 +1,9 @@
 use crate::Wants;
 use std::os::fd::{AsRawFd, BorrowedFd, RawFd};
 
+mod epoch;
+pub use epoch::Epoch;
+
 #[cfg(any(target_os = "linux", target_os = "android"))]
 mod epoll;
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -21,7 +24,7 @@ pub struct EventLoopResult {
 #[derive(Debug, Clone, Copy)]
 enum FdState {
     None,
-    Some(RawFd, Wants),
+    Some(RawFd, Epoch, Wants),
 }
 
 impl FdState {
@@ -29,36 +32,37 @@ impl FdState {
         Self::None
     }
 
-    fn transition(&mut self, next: Option<(BorrowedFd<'_>, Wants)>) -> Diff {
+    fn transition(&mut self, next: Option<(BorrowedFd<'_>, Epoch, Wants)>) -> Diff {
         match (*self, next) {
             (Self::None, None) => Diff::Empty,
-            (Self::None, Some((fd, wants))) => {
-                *self = Self::Some(fd.as_raw_fd(), wants);
+            (Self::None, Some((fd, epoch, wants))) => {
+                *self = Self::Some(fd.as_raw_fd(), epoch, wants);
                 Diff::Add {
                     fd: fd.as_raw_fd(),
                     wants,
                 }
             }
-            (Self::Some(prevfd, _), None) => {
+            (Self::Some(prevfd, _, _), None) => {
                 *self = Self::None;
                 Diff::Delete { fd: prevfd }
             }
-            (Self::Some(prevfd, prevwants), Some((fd, wants))) => {
-                if fd.as_raw_fd() != prevfd {
-                    *self = Self::Some(fd.as_raw_fd(), wants);
+            (Self::Some(prevfd, prevepoch, prevwants), Some((fd, nextepoch, wants))) => {
+                if nextepoch == prevepoch {
+                    assert_eq!(fd.as_raw_fd(), prevfd, "fd changed without an epoch bump");
+
+                    if wants == prevwants {
+                        Diff::Empty
+                    } else {
+                        *self = Self::Some(prevfd, nextepoch, wants);
+                        Diff::Modify { fd: prevfd, wants }
+                    }
+                } else {
+                    *self = Self::Some(fd.as_raw_fd(), nextepoch, wants);
                     Diff::Replace {
                         prevfd,
                         newfd: fd.as_raw_fd(),
                         wants,
                     }
-                } else if wants != prevwants {
-                    *self = Self::Some(fd.as_raw_fd(), wants);
-                    Diff::Modify {
-                        fd: fd.as_raw_fd(),
-                        wants,
-                    }
-                } else {
-                    Diff::Empty
                 }
             }
         }

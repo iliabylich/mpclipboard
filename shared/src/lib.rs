@@ -78,7 +78,7 @@ mod wants;
 pub use wants::Wants;
 
 mod event_loop;
-pub use event_loop::{EventLoop, EventLoopResult};
+pub use event_loop::{Epoch, EventLoop, EventLoopResult};
 
 mod revents;
 pub use revents::REvents;

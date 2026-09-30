@@ -1,4 +1,4 @@
-use super::{Diff, EventLoopResult, FdState};
+use super::{Diff, Epoch, EventLoopResult, FdState};
 use crate::{Timerfd, Wants};
 use anyhow::{Result, bail};
 use core::mem::MaybeUninit;
@@ -31,7 +31,7 @@ impl EventLoop {
         Ok(this)
     }
 
-    pub fn sync(&mut self, wants: Option<(BorrowedFd<'_>, Wants)>) -> Result<()> {
+    pub fn sync(&mut self, wants: Option<(BorrowedFd<'_>, Epoch, Wants)>) -> Result<()> {
         match self.fd.transition(wants) {
             Diff::Add { fd, wants } => {
                 self.add(unsafe { BorrowedFd::borrow_raw(fd) }, Self::FD_ID, wants)?;

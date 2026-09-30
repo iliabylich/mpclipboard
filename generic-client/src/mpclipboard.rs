@@ -2,7 +2,7 @@ use crate::{
     Connectivity, Output, config::Config, connection::Connection, logger::Logger, tls::TLS,
 };
 use anyhow::{Context, Result, bail};
-use mpclipboard_shared::{EventLoop, EventLoopResult, Message, NonEmptyInlineString, Store};
+use mpclipboard_shared::{Epoch, EventLoop, EventLoopResult, Message, NonEmptyInlineString, Store};
 use std::{
     os::fd::{AsFd, AsRawFd, BorrowedFd},
     sync::OnceLock,
@@ -12,6 +12,7 @@ pub struct MPClipboard {
     event_loop: EventLoop,
     now: u64,
     conn: Connection,
+    epoch: Epoch,
     store: Store,
     config: Config,
 }
@@ -34,24 +35,29 @@ impl MPClipboard {
 
     fn new(config: Config) -> Result<Self> {
         log::info!("Running with config {config:?}");
-        let mut event_loop = EventLoop::new().context("event loop has crashed")?;
+        let event_loop = EventLoop::new().context("event loop has crashed")?;
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_else(|_| unreachable!("time goes backwards"))
             .as_secs();
-        let conn = Connection::new();
 
-        event_loop
-            .sync(conn.wants())
-            .context("failed to update connection fd in event loop")?;
-
-        Ok(Self {
+        let mut this = Self {
             event_loop,
             now,
-            conn,
+            conn: Connection::new(),
+            epoch: Epoch::new(),
             store: Store::empty(),
             config,
-        })
+        };
+        this.sync_event_loop()?;
+        Ok(this)
+    }
+
+    fn sync_event_loop(&mut self) -> Result<()> {
+        let wants = self.conn.wants().map(|(fd, wants)| (fd, self.epoch, wants));
+        self.event_loop
+            .sync(wants)
+            .context("failed to update connection fd in event loop")
     }
 
     pub fn new_inline(url: &str, token: &str, id: &str) -> Result<Self> {
@@ -96,9 +102,7 @@ impl MPClipboard {
         let next_connectivity = Connectivity::new(&self.conn);
 
         log::trace!("Connection wants: {:?}", self.conn.wants());
-        self.event_loop
-            .sync(self.conn.wants())
-            .context("failed to update connection fd in event loop")?;
+        self.sync_event_loop()?;
 
         let connectivity = if prev_connectivity == next_connectivity {
             None
@@ -120,7 +124,11 @@ impl MPClipboard {
         if let Some(time) = polled.time {
             self.now = time;
             log::trace!("tick {}", self.now);
+            let was_disconnected = self.conn.is_disconnected();
             self.conn.tick(self.now, &self.config);
+            if was_disconnected && !self.conn.is_disconnected() {
+                self.epoch.bump();
+            }
         }
 
         if let Some((readable, writable, has_error)) = polled.fd {
@@ -155,10 +163,7 @@ impl MPClipboard {
         }
 
         let pushed = self.conn.push(message);
-
-        self.event_loop
-            .sync(self.conn.wants())
-            .context("failed to update connection fd in event loop")?;
+        self.sync_event_loop()?;
 
         Ok(pushed)
     }
