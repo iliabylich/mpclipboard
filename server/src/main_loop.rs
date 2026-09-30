@@ -160,7 +160,7 @@ impl MainLoop {
                         }
                         self.clients.insert(client);
                     }
-                    Err(err) => log::error!("[{id}] {err:?}"),
+                    Err(err) => log::error!("[{id}] {err}"),
                 }
             }
         }

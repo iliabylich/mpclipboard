@@ -1,4 +1,5 @@
 use crate::as_poll_fd::AsPollFd;
+use anyhow::anyhow;
 use mpclipboard_shared::{ID, Message, MessageReader, MessageWriter, REvents, prelude::*};
 use rustix::event::{PollFd, PollFlags};
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd};
@@ -30,7 +31,9 @@ impl Client {
     ) -> Completion<(Message, Self), anyhow::Error, Self> {
         let revents = match REvents::new(revents) {
             Ok(revents) => revents,
-            Err(err) => return Failed(err.context(format!("[{self}] polling returned an error"))),
+            Err(err) => {
+                return Failed(anyhow!(err).context(format!("[{self}] polling returned an error")));
+            }
         };
 
         if revents.writable {
@@ -60,11 +63,11 @@ impl Client {
         let len = match mpclipboard_shared::io::write(&self.fd, buf) {
             Done(len) => len,
             Pending(()) => return Pending(()),
-            Failed(err) => return Failed(err),
+            Failed(err) => return Failed(err.into()),
         };
         match self.writer.written(len) {
             Ok(()) => Done(()),
-            Err(err) => Failed(err),
+            Err(err) => Failed(anyhow!(err)),
         }
     }
 
@@ -72,10 +75,10 @@ impl Client {
         let buf = match mpclipboard_shared::io::read(&self.fd) {
             Done(buf) => buf,
             Pending(()) => return Pending(()),
-            Failed(err) => return Failed(err),
+            Failed(err) => return Failed(err.into()),
         };
 
-        self.reader.received(buf)
+        self.reader.received(buf).map_err(|err| anyhow!(err))
     }
 
     pub(crate) const fn id(&self) -> ID {

@@ -1,5 +1,4 @@
 use crate::{Buffer, prelude::*};
-use anyhow::anyhow;
 
 #[must_use]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -15,7 +14,7 @@ impl<const N: usize> LineReader<N> {
         Self::LineWaitingForSlashR(Buffer::new())
     }
 
-    pub(crate) fn push(&mut self, byte: u8) -> Completion<Buffer<N>, anyhow::Error, ()> {
+    pub(crate) fn push(&mut self, byte: u8) -> Completion<Buffer<N>, LineReaderError, ()> {
         match self {
             Self::LineWaitingForSlashR(buf) => match byte {
                 b'\r' => {
@@ -23,7 +22,7 @@ impl<const N: usize> LineReader<N> {
                     Pending(())
                 }
 
-                b'\n' => Failed(anyhow!("bare LF in HTTP line")),
+                b'\n' => Failed(LineReaderError::BareLF),
 
                 byte => {
                     if !buf.push(byte) {
@@ -39,7 +38,7 @@ impl<const N: usize> LineReader<N> {
                     *self = Self::new();
                     Done(line)
                 }
-                _ => Failed(anyhow!("bare CR in HTTP line")),
+                _ => Failed(LineReaderError::BareCR),
             },
 
             Self::SkipWaitingForSlashR => match byte {
@@ -47,7 +46,7 @@ impl<const N: usize> LineReader<N> {
                     *self = Self::SkipWaitingForSlashN;
                     Pending(())
                 }
-                b'\n' => Failed(anyhow!("bare LF in HTTP line")),
+                b'\n' => Failed(LineReaderError::BareLF),
                 _ => Pending(()),
             },
 
@@ -56,19 +55,35 @@ impl<const N: usize> LineReader<N> {
                     *self = Self::new();
                     Pending(())
                 }
-                _ => Failed(anyhow!("bare CR in HTTP line")),
+                _ => Failed(LineReaderError::BareCR),
             },
         }
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LineReaderError {
+    BareCR,
+    BareLF,
+}
+
+impl core::fmt::Display for LineReaderError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::BareCR => write!(f, "bare CR in HTTP line"),
+            Self::BareLF => write!(f, "bare LF in HTTP line"),
+        }
+    }
+}
+
+impl core::error::Error for LineReaderError {}
+
 #[cfg(test)]
 mod tests {
-    use super::LineReader;
+    use super::{LineReader, LineReaderError};
     use crate::prelude::*;
-    use anyhow::Result;
 
-    fn lines(input: &[u8]) -> Result<Vec<String>> {
+    fn lines(input: &[u8]) -> Result<Vec<String>, LineReaderError> {
         let mut reader = LineReader::<5>::new();
         let mut out = vec![];
         for &byte in input {
@@ -84,60 +99,38 @@ mod tests {
     }
 
     #[test]
-    fn test_lines() -> Result<()> {
+    fn test_lines() {
         assert_eq!(
-            lines(b"foo\r\nbar\r\n\r\n")?,
-            vec!["foo".to_string(), "bar".to_string(), String::new()]
+            lines(b"foo\r\nbar\r\n\r\n"),
+            Ok(vec!["foo".to_string(), "bar".to_string(), String::new()])
         );
-        Ok(())
     }
 
     #[test]
-    fn test_incomplete() -> Result<()> {
-        assert_eq!(lines(b"foo\r\nbar\r")?, vec!["foo".to_string()]);
-        Ok(())
+    fn test_incomplete() {
+        assert_eq!(lines(b"foo\r\nbar\r"), Ok(vec!["foo".to_string()]));
     }
 
     #[test]
-    fn test_max_len() -> Result<()> {
-        assert_eq!(lines(b"abcde\r\n")?, vec!["abcde".to_string()]);
-        Ok(())
+    fn test_max_len() {
+        assert_eq!(lines(b"abcde\r\n"), Ok(vec!["abcde".to_string()]));
     }
 
     #[test]
-    fn test_skip_long() -> Result<()> {
-        assert_eq!(lines(b"abcdef\r\nfoo\r\n")?, vec!["foo".to_string()]);
-        Ok(())
+    fn test_skip_long() {
+        assert_eq!(lines(b"abcdef\r\nfoo\r\n"), Ok(vec!["foo".to_string()]));
     }
 
     #[test]
     fn test_bare_cr() {
-        assert_eq!(
-            lines(b"a\rb\r\n").map_err(|err| err.to_string()),
-            Err("bare CR in HTTP line".to_string())
-        );
-
-        assert_eq!(
-            lines(b"a\r\r\n").map_err(|err| err.to_string()),
-            Err("bare CR in HTTP line".to_string())
-        );
-
-        assert_eq!(
-            lines(b"abcdef\rb\r\n").map_err(|err| err.to_string()),
-            Err("bare CR in HTTP line".to_string())
-        );
+        assert_eq!(lines(b"a\rb\r\n"), Err(LineReaderError::BareCR));
+        assert_eq!(lines(b"a\r\r\n"), Err(LineReaderError::BareCR));
+        assert_eq!(lines(b"abcdef\rb\r\n"), Err(LineReaderError::BareCR));
     }
 
     #[test]
     fn test_bare_lf() {
-        assert_eq!(
-            lines(b"a\nb\r\n").map_err(|err| err.to_string()),
-            Err("bare LF in HTTP line".to_string())
-        );
-
-        assert_eq!(
-            lines(b"abcdef\nb\r\n").map_err(|err| err.to_string()),
-            Err("bare LF in HTTP line".to_string())
-        );
+        assert_eq!(lines(b"a\nb\r\n"), Err(LineReaderError::BareLF));
+        assert_eq!(lines(b"abcdef\nb\r\n"), Err(LineReaderError::BareLF));
     }
 }

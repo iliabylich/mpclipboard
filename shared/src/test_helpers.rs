@@ -1,5 +1,4 @@
 use crate::Buffer;
-use anyhow::{Context, Result};
 use core::num::NonZeroUsize;
 
 pub(crate) fn as_chunks_with_guaranteed_trailer<const BUFSIZE: usize>(
@@ -22,10 +21,10 @@ pub(crate) fn as_chunks_with_guaranteed_trailer<const BUFSIZE: usize>(
     (chunks, trailer)
 }
 
-pub(crate) fn buffer<const N: usize>(bytes: &[u8]) -> Result<Buffer<N>> {
-    Buffer::from_slice(bytes).context("bytes don't fit into a buffer")
+pub(crate) fn buffer<const N: usize>(bytes: &[u8]) -> Buffer<N> {
+    Buffer::from_slice(bytes).unwrap_or_else(|| panic!("bytes don't fit into a buffer"))
 }
 
-pub(crate) fn non_zero_usize(n: usize) -> Result<NonZeroUsize> {
-    NonZeroUsize::new(n).context("must be non-zero")
+pub(crate) fn non_zero_usize(n: usize) -> NonZeroUsize {
+    NonZeroUsize::new(n).unwrap_or_else(|| panic!("must be non-zero"))
 }

@@ -1,4 +1,5 @@
 use crate::{as_poll_fd::AsPollFd, reaper::CanBeReaped};
+use anyhow::anyhow;
 use mpclipboard_shared::{REvents, UpgradeRequest, UpgradeRequestReader, prelude::*};
 use rustix::event::{PollFd, PollFlags};
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd};
@@ -25,7 +26,9 @@ impl PreSource {
     ) -> Completion<(UpgradeRequest, OwnedFd), anyhow::Error, Self> {
         let revents = match REvents::new(revents) {
             Ok(revents) => revents,
-            Err(err) => return Failed(err.context(format!("[{self}] polling returned an error"))),
+            Err(err) => {
+                return Failed(anyhow!(err).context(format!("[{self}] polling returned an error")));
+            }
         };
 
         if revents.writable {
@@ -50,11 +53,11 @@ impl PreSource {
 
         let buf = match mpclipboard_shared::io::read(&self.fd) {
             Done(buf) => buf,
-            Failed(err) => return Failed(err),
+            Failed(err) => return Failed(err.into()),
             Pending(()) => return Pending(()),
         };
 
-        self.reader.received(buf)
+        self.reader.received(buf).map_err(|err| anyhow!(err))
     }
 }
 

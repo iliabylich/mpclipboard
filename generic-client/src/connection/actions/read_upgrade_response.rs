@@ -1,4 +1,5 @@
 use crate::connection::maybe_tls_stream::MaybeTlsStream;
+use anyhow::anyhow;
 use mpclipboard_shared::{MessageReader, UpgradeResponseReader, enable_tcp_keep_alive, prelude::*};
 use std::os::fd::AsFd;
 
@@ -26,13 +27,13 @@ pub fn read_upgrade_response(
             return Pending(());
         }
         Failed(err) => {
-            return Failed(err);
+            return Failed(anyhow!(err));
         }
     };
 
     log::trace!("Configuring TCP keepalive");
     if let Err(err) = enable_tcp_keep_alive(&fd) {
-        return Failed(err);
+        return Failed(anyhow!(err));
     }
 
     Done(MessageReader::new(leftover))

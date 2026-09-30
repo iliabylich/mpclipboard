@@ -85,7 +85,7 @@ impl MaybeTlsStream {
     ) -> Completion<Buffer<N>, anyhow::Error, ()> {
         match self {
             Self::Plain => mpclipboard_shared::io::read(fd)
-                .map_err(|err| err.context("failed to read_bytes() on plain stream")),
+                .map_err(|err| anyhow!(err).context("failed to read_bytes() on plain stream")),
             Self::Tls(conn) => {
                 match conn.complete_io(&mut StdReadWriteFd(fd)) {
                     Ok(_) => {}
@@ -116,15 +116,14 @@ impl MaybeTlsStream {
         fd: &impl AsFd,
         buf: &[u8],
     ) -> Completion<NonZeroUsize, anyhow::Error, ()> {
+        assert!(!buf.is_empty(), "can't write an empty buffer");
+
         match self {
             Self::Plain => mpclipboard_shared::io::write(fd, buf)
-                .map_err(|err| err.context("failed to write_bytes() on plain stream")),
+                .map_err(|err| anyhow!(err).context("failed to write_bytes() on plain stream")),
             Self::Tls(conn) => {
                 let len = match conn.writer().write(buf).map(NonZeroUsize::new) {
-                    Ok(Some(len)) => len,
-                    Ok(None) => {
-                        return Failed(anyhow!("failed to write_bytes() on TLS stream: EOF"));
-                    }
+                    Ok(len) => len,
                     Err(err) if err.kind() == ErrorKind::WouldBlock => {
                         return Pending(());
                     }
@@ -134,9 +133,16 @@ impl MaybeTlsStream {
                 };
 
                 match conn.complete_io(&mut StdReadWriteFd(fd)) {
-                    Ok(_) => Done(len),
-                    Err(err) if err.kind() == ErrorKind::WouldBlock => Done(len),
-                    Err(err) => Failed(anyhow!("failed to complete_io() on TLS stream: {err:?}")),
+                    Ok(_) => {}
+                    Err(err) if err.kind() == ErrorKind::WouldBlock => {}
+                    Err(err) => {
+                        return Failed(anyhow!("failed to complete_io() on TLS stream: {err:?}"));
+                    }
+                }
+
+                match len {
+                    Some(len) => Done(len),
+                    None => Pending(()),
                 }
             }
         }

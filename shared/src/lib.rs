@@ -18,30 +18,37 @@
 #![doc = include_str!("../README.md")]
 
 mod config;
-pub use config::ConfigParser;
+pub use config::{ConfigParser, ConfigParserError};
 
 mod array_writer;
 mod line_reader;
+pub use line_reader::LineReaderError;
 
 mod upgrade_request;
 mod upgrade_request_reader;
 mod upgrade_request_writer;
 pub use self::{
-    upgrade_request::UpgradeRequest, upgrade_request_reader::UpgradeRequestReader,
-    upgrade_request_writer::UpgradeRequestWriter,
+    upgrade_request::UpgradeRequest,
+    upgrade_request_reader::{UpgradeRequestReader, UpgradeRequestReaderError},
+    upgrade_request_writer::{UpgradeRequestWriter, UpgradeRequestWriterError},
 };
 
 mod upgrade_response;
 mod upgrade_response_reader;
 mod upgrade_response_writer;
 pub use self::{
-    upgrade_response_reader::UpgradeResponseReader, upgrade_response_writer::UpgradeResponseWriter,
+    upgrade_response_reader::{UpgradeResponseReader, UpgradeResponseReaderError},
+    upgrade_response_writer::{UpgradeResponseWriter, UpgradeResponseWriterError},
 };
 
 mod message;
 mod message_reader;
 mod message_writer;
-pub use self::{message::Message, message_reader::MessageReader, message_writer::MessageWriter};
+pub use self::{
+    message::{Message, MessageError},
+    message_reader::MessageReader,
+    message_writer::{MessageWriter, MessageWriterError},
+};
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 mod timerfd;
@@ -73,7 +80,7 @@ pub(crate) const CONNECTION_UPGRADE_HEADER: &str = "Connection: Upgrade";
 pub(crate) const UPGRADE_MPCLIPBOARD_RAW_HEADER: &str = "Upgrade: mpclipboard-raw";
 
 mod non_empty_inline_string;
-pub use non_empty_inline_string::NonEmptyInlineString;
+pub use non_empty_inline_string::{NonEmptyInlineString, NonEmptyInlineStringError};
 
 mod buffer;
 pub use buffer::Buffer;
@@ -82,19 +89,19 @@ mod wants;
 pub use wants::Wants;
 
 mod event_loop;
-pub use event_loop::{Epoch, EventLoop, EventLoopResult};
+pub use event_loop::{Epoch, EventLoop, EventLoopError, EventLoopResult};
 
 mod revents;
-pub use revents::REvents;
+pub use revents::{REvents, REventsError};
 
 mod store;
 pub use store::Store;
 
 mod tcp_keep_alive;
-pub use tcp_keep_alive::enable_tcp_keep_alive;
+pub use tcp_keep_alive::{TcpKeepAliveError, enable_tcp_keep_alive};
 
 mod url;
-pub use url::Url;
+pub use url::{Url, UrlParseError, UrlResolveError};
 
 pub(crate) fn strip_prefix_ignore_ascii_case<'a>(line: &'a str, prefix: &str) -> Option<&'a str> {
     let (pre, post) = line.split_at_checked(prefix.len())?;

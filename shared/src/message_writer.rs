@@ -1,5 +1,4 @@
 use crate::{Wants, message::Message};
-use anyhow::{Context, Result, bail};
 use core::{cmp::Ordering, num::NonZeroUsize};
 
 #[must_use]
@@ -27,9 +26,9 @@ impl MessageWriter {
         }
     }
 
-    pub fn written(&mut self, n: NonZeroUsize) -> Result<()> {
+    pub fn written(&mut self, n: NonZeroUsize) -> Result<(), MessageWriterError> {
         match self {
-            Self::Empty => bail!("empty buffer never wants to write"),
+            Self::Empty => return Err(MessageWriterError::Empty),
 
             Self::Some { current, next } => {
                 if current.written(n)? {
@@ -95,20 +94,25 @@ impl<const N: usize> Writebuf<N> {
         &self.buf[self.pos..]
     }
 
-    pub(crate) fn written(&mut self, n: NonZeroUsize) -> Result<bool> {
-        self.pos = self
+    pub(crate) fn written(&mut self, n: NonZeroUsize) -> Result<bool, MessageWriterError> {
+        match self
             .pos
             .checked_add(n.get())
-            .context("overflow: n is too large")?;
-
-        match (self.pos).cmp(&N) {
-            Ordering::Less => Ok(false),
-            Ordering::Equal => {
+            .map(|newpos| (newpos, newpos.cmp(&N)))
+        {
+            Some((newpos, Ordering::Less)) => {
+                self.pos = newpos;
+                Ok(false)
+            }
+            Some((_, Ordering::Equal)) => {
                 self.pos = 0;
                 self.buf = [0; _];
                 Ok(true)
             }
-            Ordering::Greater => bail!("buffer overflow"),
+            None | Some((_, Ordering::Greater)) => Err(MessageWriterError::WrittenTooMuch {
+                written: n.get(),
+                remaining: self.remainder().len(),
+            }),
         }
     }
 }
@@ -122,47 +126,85 @@ impl<const N: usize> core::fmt::Debug for Writebuf<N> {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MessageWriterError {
+    Empty,
+    WrittenTooMuch { written: usize, remaining: usize },
+}
+
+impl core::fmt::Display for MessageWriterError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::Empty => write!(f, "written() called on an empty MessageWriter"),
+            Self::WrittenTooMuch { written, remaining } => write!(
+                f,
+                "written() reported {written} bytes, but only {remaining} bytes remained"
+            ),
+        }
+    }
+}
+
+impl core::error::Error for MessageWriterError {}
+
 #[cfg(test)]
 mod tests {
-    use super::MessageWriter;
+    use super::{MessageWriter, MessageWriterError};
     use crate::{Message, NonEmptyInlineString, test_helpers::non_zero_usize};
-    use anyhow::{Context, Result};
-
-    fn rem(writer: &MessageWriter) -> Result<&[u8]> {
-        writer.remainder().context("empty remainder")
-    }
 
     #[test]
-    fn test_single() -> Result<()> {
+    fn test_single() {
         let mut writer = MessageWriter::new();
         assert_eq!(writer.remainder(), None);
 
-        let msg = Message::new(NonEmptyInlineString::new("FOO")?)?;
+        let msg = Message::new(NonEmptyInlineString::const_new("FOO"));
+        let encoded = msg.encode();
         writer.push(&msg);
-        assert_eq!(rem(&writer)?, &msg.encode());
-        writer.written(non_zero_usize(100)?)?;
-        assert_eq!(rem(&writer)?, &msg.encode()[100..]);
-        writer.written(non_zero_usize(Message::BYTESIZE - 100)?)?;
+        assert_eq!(writer.remainder(), Some(encoded.as_slice()));
+        assert_eq!(writer.written(non_zero_usize(100)), Ok(()));
+        assert_eq!(writer.remainder(), encoded.get(100..));
+        assert_eq!(
+            writer.written(non_zero_usize(Message::BYTESIZE - 100)),
+            Ok(())
+        );
         assert_eq!(writer.remainder(), None);
-
-        Ok(())
     }
 
     #[test]
-    fn test_fixed_size_queue_like_with_tail_replacement() -> Result<()> {
+    fn test_fixed_size_queue_like_with_tail_replacement() {
         let mut writer = MessageWriter::new();
 
-        let msg1 = Message::new(NonEmptyInlineString::new("msg1")?)?;
+        let msg1 = Message::new(NonEmptyInlineString::const_new("msg1"));
         writer.push(&msg1);
-        let msg2 = Message::new(NonEmptyInlineString::new("msg2")?)?;
+        let msg2 = Message::new(NonEmptyInlineString::const_new("msg2"));
         writer.push(&msg2);
-        let msg3 = Message::new(NonEmptyInlineString::new("msg3")?)?;
+        let msg3 = Message::new(NonEmptyInlineString::const_new("msg3"));
         writer.push(&msg3);
 
-        assert_eq!(rem(&writer)?, &msg1.encode());
-        writer.written(non_zero_usize(Message::BYTESIZE)?)?;
-        assert_eq!(rem(&writer)?, &msg3.encode());
+        assert_eq!(writer.remainder(), Some(msg1.encode().as_slice()));
+        assert_eq!(writer.written(non_zero_usize(Message::BYTESIZE)), Ok(()));
+        assert_eq!(writer.remainder(), Some(msg3.encode().as_slice()));
+    }
 
-        Ok(())
+    #[test]
+    fn test_errors() {
+        let mut writer = MessageWriter::new();
+        assert_eq!(
+            writer.written(non_zero_usize(1)),
+            Err(MessageWriterError::Empty)
+        );
+
+        writer.push(&Message::new(NonEmptyInlineString::const_new("FOO")));
+        assert_eq!(writer.written(non_zero_usize(100)), Ok(()));
+        assert_eq!(
+            writer.written(non_zero_usize(Message::BYTESIZE)),
+            Err(MessageWriterError::WrittenTooMuch {
+                written: Message::BYTESIZE,
+                remaining: Message::BYTESIZE - 100,
+            })
+        );
+        assert_eq!(
+            writer.remainder().map(<[u8]>::len),
+            Some(Message::BYTESIZE - 100)
+        );
     }
 }

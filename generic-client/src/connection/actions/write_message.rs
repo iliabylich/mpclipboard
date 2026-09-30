@@ -1,4 +1,5 @@
 use crate::connection::maybe_tls_stream::MaybeTlsStream;
+use anyhow::anyhow;
 use mpclipboard_shared::{MessageWriter, prelude::*};
 use std::os::fd::AsFd;
 
@@ -25,6 +26,6 @@ pub fn write_message(
 
     match writer.written(len) {
         Ok(()) => Done(()),
-        Err(err) => Failed(err),
+        Err(err) => Failed(anyhow!(err)),
     }
 }

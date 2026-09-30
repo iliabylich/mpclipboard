@@ -1,8 +1,7 @@
-use super::{Diff, Epoch, EventLoopResult, FdState};
+use super::{Diff, Epoch, EventLoopError, EventLoopResult, FdState};
 use crate::Wants;
-use anyhow::{Context, Result, bail};
 use core::{ptr, time::Duration};
-use rustix::event::kqueue as kq;
+use rustix::{event::kqueue as kq, io::Errno};
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd, RawFd};
 
 pub struct EventLoop {
@@ -16,29 +15,32 @@ impl EventLoop {
     const FD_ID: usize = 2;
     const INITIAL_TIMER_ID: isize = 3;
 
-    pub fn new() -> Result<Self> {
-        let kqueue_fd = kq::kqueue()?;
+    pub fn new() -> Result<Self, EventLoopError> {
+        let kqueue_fd = kq::kqueue().map_err(EventLoopError::Create)?;
 
         let this = Self {
             kqueue_fd,
             time: Self::now()?,
             fd: FdState::new(),
         };
-        this.add_timer()?;
+        this.add_timer().map_err(EventLoopError::AddTimer)?;
 
         Ok(this)
     }
 
-    pub fn sync(&mut self, wants: Option<(BorrowedFd<'_>, Epoch, Wants)>) -> Result<()> {
+    pub fn sync(
+        &mut self,
+        wants: Option<(BorrowedFd<'_>, Epoch, Wants)>,
+    ) -> Result<(), EventLoopError> {
         match self.fd.transition(wants) {
             Diff::Add { fd, wants } => {
-                self.add(fd, wants)?;
+                self.add(fd, wants).map_err(EventLoopError::Sync)?;
             }
             Diff::Delete { fd } => {
                 self.delete(fd);
             }
             Diff::Modify { fd, wants } => {
-                self.modify(fd, wants)?;
+                self.modify(fd, wants).map_err(EventLoopError::Sync)?;
             }
             Diff::Replace {
                 prevfd,
@@ -46,7 +48,7 @@ impl EventLoop {
                 wants,
             } => {
                 self.delete(prevfd);
-                self.add(newfd, wants)?;
+                self.add(newfd, wants).map_err(EventLoopError::Sync)?;
             }
             Diff::Empty => {}
         }
@@ -54,9 +56,10 @@ impl EventLoop {
         Ok(())
     }
 
-    pub fn drain_events_without_waiting(&mut self) -> Result<EventLoopResult> {
+    pub fn drain_events_without_waiting(&mut self) -> Result<EventLoopResult, EventLoopError> {
         let mut events = [Self::empty_event(); 4];
-        let len = unsafe { kq::kevent(&self.kqueue_fd, &[], &mut events, Some(Duration::ZERO))? };
+        let len = unsafe { kq::kevent(&self.kqueue_fd, &[], &mut events, Some(Duration::ZERO)) }
+            .map_err(EventLoopError::Wait)?;
 
         let mut out = EventLoopResult {
             time: None,
@@ -66,7 +69,7 @@ impl EventLoop {
         for event in events.iter().take(len) {
             match (event.filter(), event.udata() as usize) {
                 (kq::EventFilter::Timer { ident, .. }, _) if ident == Self::TIMER_ID => {
-                    out.time = Some(self.drain_timer(event)?);
+                    out.time = Some(self.drain_timer(event));
                 }
                 (kq::EventFilter::Timer { ident, .. }, _) if ident == Self::INITIAL_TIMER_ID => {
                     out.time = Some(self.time);
@@ -85,9 +88,7 @@ impl EventLoop {
 
                     out.fd = Some((readable, writable, has_error));
                 }
-                _ => {
-                    bail!("unknown event")
-                }
+                _ => unreachable!("only timer and fd events are ever registered"),
             }
         }
 
@@ -105,7 +106,7 @@ impl EventLoop {
         )
     }
 
-    fn add(&self, fd: RawFd, wants: Wants) -> Result<()> {
+    fn add(&self, fd: RawFd, wants: Wants) -> Result<(), Errno> {
         self.update_fd(fd, wants, kq::EventFlags::ADD | kq::EventFlags::ENABLE)
     }
 
@@ -114,12 +115,12 @@ impl EventLoop {
         self.delete_filter(kq::EventFilter::Write(fd));
     }
 
-    fn modify(&self, fd: RawFd, wants: Wants) -> Result<()> {
+    fn modify(&self, fd: RawFd, wants: Wants) -> Result<(), Errno> {
         self.delete(fd);
         self.add(fd, wants)
     }
 
-    fn update_fd(&self, fd: RawFd, wants: Wants, flags: kq::EventFlags) -> Result<()> {
+    fn update_fd(&self, fd: RawFd, wants: Wants, flags: kq::EventFlags) -> Result<(), Errno> {
         let read = Self::event(kq::EventFilter::Read(fd), flags);
         let write = Self::event(kq::EventFilter::Write(fd), flags);
 
@@ -139,13 +140,13 @@ impl EventLoop {
         kq::Event::new(filter, flags, Self::FD_ID as *mut _)
     }
 
-    fn kevent(&self, events: &[kq::Event]) -> Result<()> {
+    fn kevent(&self, events: &[kq::Event]) -> Result<(), Errno> {
         let mut out: [kq::Event; 0] = [];
         unsafe { kq::kevent(&self.kqueue_fd, events, &mut out, Some(Duration::ZERO))? };
         Ok(())
     }
 
-    fn add_timer(&self) -> Result<()> {
+    fn add_timer(&self) -> Result<(), Errno> {
         let periodic = kq::Event::new(
             kq::EventFilter::Timer {
                 ident: Self::TIMER_ID,
@@ -165,17 +166,19 @@ impl EventLoop {
         self.kevent(&[periodic, initial])
     }
 
-    fn drain_timer(&mut self, event: &kq::Event) -> Result<u64> {
+    fn drain_timer(&mut self, event: &kq::Event) -> u64 {
         let count = u64::try_from(event.data()).unwrap_or(1).max(1);
-        self.time = self.time.checked_add(count).context("timer overflow")?;
-
-        Ok(self.time)
+        let Some(time) = self.time.checked_add(count) else {
+            unreachable!("seconds since 1970 never overflow u64");
+        };
+        self.time = time;
+        self.time
     }
 
-    fn now() -> Result<u64> {
+    fn now() -> Result<u64, EventLoopError> {
         Ok(std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .context("time goes backwards")?
+            .map_err(|_| EventLoopError::ClockBeforeUnixEpoch)?
             .as_secs())
     }
 }

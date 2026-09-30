@@ -156,7 +156,7 @@ impl MPClipboard {
         }
 
         let text = NonEmptyInlineString::truncate(text)?;
-        let message = Message::new(text)?;
+        let message = Message::new(text);
 
         if !self.store.add(message) {
             return Ok(false);

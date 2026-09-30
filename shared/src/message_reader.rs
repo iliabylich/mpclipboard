@@ -1,5 +1,4 @@
-use crate::{Buffer, Message, prelude::*};
-use anyhow::anyhow;
+use crate::{Buffer, Message, MessageError, prelude::*};
 
 #[must_use]
 #[derive(Debug, Clone, Copy)]
@@ -22,20 +21,18 @@ impl MessageReader {
     pub fn received(
         &mut self,
         bytes: Buffer<{ Message::BYTESIZE }>,
-    ) -> Completion<Message, anyhow::Error, ()> {
+    ) -> Completion<Message, MessageError, ()> {
         let mut message = None;
 
         for &byte in bytes.as_slice() {
             if !self.buf.push(byte) {
-                return Failed(anyhow!("malformed internal state"));
+                unreachable!("buf is cleared as soon as it's full");
             }
 
             if let Some(full) = self.buf.as_full_array() {
                 match Message::decode(full) {
                     Ok(m) => message = Some(m),
-                    Err(err) => {
-                        return Failed(err.context("failed to decode message in MessageReader"));
-                    }
+                    Err(err) => return Failed(err),
                 }
                 self.buf.clear();
             }
@@ -58,26 +55,20 @@ impl Default for MessageReader {
 #[cfg(test)]
 mod tests {
     use super::MessageReader;
-    use crate::{Message, NonEmptyInlineString, test_helpers::buffer};
-    use anyhow::Result;
+    use crate::{Message, MessageError, NonEmptyInlineString, prelude::*, test_helpers::buffer};
 
     #[test]
-    fn test_receive_full() -> Result<()> {
+    fn test_receive_full() {
         let mut reader = MessageReader::empty();
 
-        let bytes = Message::new(NonEmptyInlineString::new("BOO")?)?.encode();
-        let output = reader
-            .received(buffer(&bytes)?)
-            .expect_done("we've written a full message");
-        assert_eq!(output.text_as_str(), "BOO");
-
-        Ok(())
+        let message = Message::new(NonEmptyInlineString::const_new("BOO"));
+        assert_eq!(reader.received(buffer(&message.encode())), Done(message));
     }
 
     #[test]
-    fn test_receive_step_by_step() -> Result<()> {
-        let one = Message::new(NonEmptyInlineString::new("one")?)?;
-        let two = Message::new(NonEmptyInlineString::new("twotwo")?)?;
+    fn test_receive_step_by_step() {
+        let one = Message::new(NonEmptyInlineString::const_new("one"));
+        let two = Message::new(NonEmptyInlineString::const_new("twotwo"));
         let stream = [one.encode(), two.encode()].concat();
 
         let (first, rest) = stream.split_at(100);
@@ -85,20 +76,18 @@ mod tests {
 
         let mut reader = MessageReader::empty();
 
-        reader
-            .received(buffer(first)?)
-            .expect_pending("only a part of the 1st message has been received");
+        assert_eq!(reader.received(buffer(first)), Pending(()));
+        assert_eq!(reader.received(buffer(second)), Done(one));
+        assert_eq!(reader.received(buffer(third)), Done(two));
+    }
 
-        let message = reader
-            .received(buffer(second)?)
-            .expect_done("the rest of the 1st message has been received");
-        assert_eq!(message, one);
+    #[test]
+    fn test_receive_invalid() {
+        let mut reader = MessageReader::empty();
 
-        let message = reader
-            .received(buffer(third)?)
-            .expect_done("the rest of the 2nd message has been received");
-        assert_eq!(message, two);
-
-        Ok(())
+        assert_eq!(
+            reader.received(buffer(&[0; Message::BYTESIZE])),
+            Failed(MessageError::Empty)
+        );
     }
 }

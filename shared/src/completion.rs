@@ -1,5 +1,3 @@
-use core::fmt::Debug;
-
 #[must_use]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Completion<S, E, P> {
@@ -9,45 +7,6 @@ pub enum Completion<S, E, P> {
 }
 
 impl<S, E, P> Completion<S, E, P> {
-    #[cfg(test)]
-    pub(crate) fn expect_done(self, s: &str) -> S
-    where
-        P: Debug,
-        E: Debug,
-    {
-        match self {
-            Self::Done(v) => v,
-            Self::Failed(err) => panic!("expected Ok, got Err({err:?}): {s}"),
-            Self::Pending(p) => panic!("expected Ok, got Pending({p:?}): {s}"),
-        }
-    }
-
-    #[cfg(test)]
-    pub(crate) fn expect_pending(self, s: &str) -> P
-    where
-        S: Debug,
-        E: Debug,
-    {
-        match self {
-            Self::Done(v) => panic!("expected Pending, got Done({v:?}: {s}"),
-            Self::Failed(err) => panic!("expected Pending, got Err({err:?}): {s}"),
-            Self::Pending(p) => p,
-        }
-    }
-
-    #[cfg(test)]
-    pub(crate) fn expect_failed(self, s: &str) -> E
-    where
-        S: Debug,
-        P: Debug,
-    {
-        match self {
-            Self::Done(v) => panic!("expected Err, got Done({v:?}: {s}"),
-            Self::Failed(err) => err,
-            Self::Pending(p) => panic!("expected Err, got Pending({p:?}): {s}"),
-        }
-    }
-
     pub fn and_then<T, F>(self, f: F) -> Completion<T, E, P>
     where
         F: FnOnce(S) -> Completion<T, E, P>,

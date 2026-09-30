@@ -2,130 +2,158 @@ use crate::{
     Buffer, CONNECTION_UPGRADE_HEADER, HOST_PREFIX, ID_PREFIX, START_LINE, TOKEN_PREFIX,
     UPGRADE_MPCLIPBOARD_RAW_HEADER, UpgradeRequest, VERSION_PREFIX, prelude::*,
 };
-use anyhow::{Context, Result, anyhow, ensure};
-use core::num::NonZeroUsize;
+use core::{cmp::Ordering, num::NonZeroUsize};
 
 #[must_use]
 #[derive(Debug, Clone, Copy)]
 pub struct UpgradeRequestWriter {
-    buf: Buffer<1_024>,
+    buf: Buffer<{ UpgradeRequest::MAX_LENGTH }>,
     pos: usize,
 }
 
 impl UpgradeRequestWriter {
-    pub fn new(req: UpgradeRequest) -> Result<Self> {
+    pub fn new(req: UpgradeRequest) -> Self {
         let mut buf = Buffer::new();
 
         let mut append = |s: &str| {
             for &byte in s.as_bytes() {
-                ensure!(buf.push(byte), "must fit into 1kb");
+                if !buf.push(byte) {
+                    unreachable!("UpgradeRequest is never longer than UpgradeRequest::MAX_LENGTH");
+                }
             }
-            Ok::<(), anyhow::Error>(())
         };
 
-        append(START_LINE)?;
-        append("\r\n")?;
+        append(START_LINE);
+        append("\r\n");
 
-        append(HOST_PREFIX)?;
-        append(req.host.as_str())?;
-        append("\r\n")?;
+        append(HOST_PREFIX);
+        append(req.host.as_str());
+        append("\r\n");
 
-        append(TOKEN_PREFIX)?;
-        append(req.token.as_str())?;
-        append("\r\n")?;
+        append(TOKEN_PREFIX);
+        append(req.token.as_str());
+        append("\r\n");
 
-        append(ID_PREFIX)?;
-        append(req.id.as_str())?;
-        append("\r\n")?;
+        append(ID_PREFIX);
+        append(req.id.as_str());
+        append("\r\n");
 
-        append(VERSION_PREFIX)?;
-        append(req.version.as_str())?;
-        append("\r\n")?;
+        append(VERSION_PREFIX);
+        append(req.version.as_str());
+        append("\r\n");
 
-        append(CONNECTION_UPGRADE_HEADER)?;
-        append("\r\n")?;
+        append(CONNECTION_UPGRADE_HEADER);
+        append("\r\n");
 
-        append(UPGRADE_MPCLIPBOARD_RAW_HEADER)?;
-        append("\r\n")?;
+        append(UPGRADE_MPCLIPBOARD_RAW_HEADER);
+        append("\r\n");
 
-        append("\r\n")?;
+        append("\r\n");
 
-        Ok(Self { buf, pos: 0 })
+        Self { buf, pos: 0 }
     }
 
-    pub fn remainder(&self) -> Result<&[u8]> {
-        self.buf
-            .as_slice()
-            .get(self.pos..)
-            .context("malformed internal state")
-    }
-
-    pub fn written(&mut self, n: NonZeroUsize) -> Completion<(), anyhow::Error, ()> {
-        let Some(nextpos) = self.pos.checked_add(n.get()) else {
-            return Failed(anyhow!("pos overflow"));
+    #[must_use]
+    pub fn remainder(&self) -> &[u8] {
+        let Some(remainder) = self.buf.as_slice().get(self.pos..) else {
+            unreachable!("pos never exceeds the length of the request");
         };
-        self.pos = nextpos;
+        remainder
+    }
 
-        match self.pos.cmp(&self.buf.as_slice().len()) {
-            core::cmp::Ordering::Less => Pending(()),
-            core::cmp::Ordering::Equal => Done(()),
-            core::cmp::Ordering::Greater => Failed(anyhow!("buffer overflow")),
+    pub fn written(&mut self, n: NonZeroUsize) -> Completion<(), UpgradeRequestWriterError, ()> {
+        match self
+            .pos
+            .checked_add(n.get())
+            .map(|newpos| (newpos, newpos.cmp(&self.buf.as_slice().len())))
+        {
+            Some((newpos, Ordering::Less)) => {
+                self.pos = newpos;
+                Pending(())
+            }
+            Some((newpos, Ordering::Equal)) => {
+                self.pos = newpos;
+                Done(())
+            }
+            None | Some((_, Ordering::Greater)) => Failed(UpgradeRequestWriterError {
+                written: n.get(),
+                remaining: self.remainder().len(),
+            }),
         }
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct UpgradeRequestWriterError {
+    pub written: usize,
+    pub remaining: usize,
+}
+
+impl core::fmt::Display for UpgradeRequestWriterError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(
+            f,
+            "written() reported {} bytes, but only {} bytes remained",
+            self.written, self.remaining
+        )
+    }
+}
+
+impl core::error::Error for UpgradeRequestWriterError {}
+
 #[cfg(test)]
 mod tests {
-    use super::UpgradeRequestWriter;
-    use crate::{HostPort, ID, Token, UpgradeRequest, Version, test_helpers::non_zero_usize};
-    use anyhow::Result;
+    use super::{UpgradeRequestWriter, UpgradeRequestWriterError};
+    use crate::{
+        HostPort, ID, Token, UpgradeRequest, Version, prelude::*, test_helpers::non_zero_usize,
+    };
 
-    fn req() -> Result<UpgradeRequest> {
-        Ok(UpgradeRequest {
-            host: HostPort::new("localhost:3000")?,
-            token: Token::new("sekret")?,
-            id: ID::new("test-client")?,
-            version: Version::new("0.100.10")?,
-        })
+    const REQ: UpgradeRequest = UpgradeRequest {
+        host: HostPort::const_new("localhost:3000"),
+        token: Token::const_new("sekret"),
+        id: ID::const_new("test-client"),
+        version: Version::const_new("0.100.10"),
+    };
+
+    #[test]
+    fn test_encode() {
+        let writer = UpgradeRequestWriter::new(REQ);
+        assert_eq!(
+            core::str::from_utf8(writer.buf.as_slice()),
+            Ok(
+                "GET / HTTP/1.1\r\nHost: localhost:3000\r\nToken: sekret\r\nID: test-client\r\nVersion: 0.100.10\r\nConnection: Upgrade\r\nUpgrade: mpclipboard-raw\r\n\r\n"
+            )
+        );
     }
 
     #[test]
-    fn test_encode() -> Result<()> {
-        let writer = UpgradeRequestWriter::new(req()?)?;
+    fn test_write() {
+        let mut writer = UpgradeRequestWriter::new(REQ);
         assert_eq!(
-            core::str::from_utf8(writer.buf.as_slice())?,
-            "GET / HTTP/1.1\r\nHost: localhost:3000\r\nToken: sekret\r\nID: test-client\r\nVersion: 0.100.10\r\nConnection: Upgrade\r\nUpgrade: mpclipboard-raw\r\n\r\n"
+            core::str::from_utf8(writer.remainder()),
+            Ok(
+                "GET / HTTP/1.1\r\nHost: localhost:3000\r\nToken: sekret\r\nID: test-client\r\nVersion: 0.100.10\r\nConnection: Upgrade\r\nUpgrade: mpclipboard-raw\r\n\r\n"
+            )
         );
 
-        Ok(())
-    }
-
-    #[test]
-    fn test_write() -> Result<()> {
-        let mut writer = UpgradeRequestWriter::new(req()?)?;
+        assert_eq!(writer.written(non_zero_usize(119)), Pending(()));
         assert_eq!(
-            core::str::from_utf8(writer.remainder()?)?,
-            "GET / HTTP/1.1\r\nHost: localhost:3000\r\nToken: sekret\r\nID: test-client\r\nVersion: 0.100.10\r\nConnection: Upgrade\r\nUpgrade: mpclipboard-raw\r\n\r\n"
+            core::str::from_utf8(writer.remainder()),
+            Ok("mpclipboard-raw\r\n\r\n")
         );
 
-        writer
-            .written(non_zero_usize(119)?)
-            .expect_pending("we've written only 100 bytes");
         assert_eq!(
-            core::str::from_utf8(writer.remainder()?)?,
-            "mpclipboard-raw\r\n\r\n"
+            writer.written(non_zero_usize(writer.remainder().len())),
+            Done(())
         );
+        assert_eq!(core::str::from_utf8(writer.remainder()), Ok(""));
 
-        writer
-            .written(non_zero_usize(writer.remainder()?.len())?)
-            .expect_done("we've written a full request");
-        assert_eq!(writer.remainder()?, b"");
-
-        let err = writer
-            .written(non_zero_usize(1)?)
-            .expect_failed("trying to go past buffer end");
-        assert_eq!(err.to_string(), "buffer overflow");
-
-        Ok(())
+        assert_eq!(
+            writer.written(non_zero_usize(1)),
+            Failed(UpgradeRequestWriterError {
+                written: 1,
+                remaining: 0,
+            })
+        );
     }
 }

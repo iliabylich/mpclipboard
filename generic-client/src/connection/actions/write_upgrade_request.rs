@@ -1,4 +1,5 @@
 use crate::connection::maybe_tls_stream::MaybeTlsStream;
+use anyhow::anyhow;
 use mpclipboard_shared::{UpgradeRequestWriter, prelude::*};
 use std::os::fd::AsFd;
 
@@ -7,10 +8,7 @@ pub fn write_upgrade_request(
     stream: &mut MaybeTlsStream,
     writer: &mut UpgradeRequestWriter,
 ) -> Completion<(), anyhow::Error, ()> {
-    let buf = match writer.remainder() {
-        Ok(buf) => buf,
-        Err(err) => return Failed(err),
-    };
+    let buf = writer.remainder();
 
     let len = match stream.write_bytes(&fd, buf) {
         Done(len) => len,
@@ -18,5 +16,5 @@ pub fn write_upgrade_request(
         Pending(()) => return Pending(()),
     };
 
-    writer.written(len)
+    writer.written(len).map_err(|err| anyhow!(err))
 }

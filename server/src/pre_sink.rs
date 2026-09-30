@@ -1,4 +1,5 @@
 use crate::{as_poll_fd::AsPollFd, reaper::CanBeReaped};
+use anyhow::anyhow;
 use mpclipboard_shared::{ID, REvents, UpgradeResponseWriter, prelude::*};
 use rustix::event::{PollFd, PollFlags};
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd};
@@ -27,7 +28,9 @@ impl PreSink {
     ) -> Completion<(ID, OwnedFd), anyhow::Error, Self> {
         let revents = match REvents::new(revents) {
             Ok(revents) => revents,
-            Err(err) => return Failed(err.context(format!("[{self}] polling returned an error"))),
+            Err(err) => {
+                return Failed(anyhow!(err).context(format!("[{self}] polling returned an error")));
+            }
         };
 
         if revents.readable {
@@ -50,20 +53,17 @@ impl PreSink {
     fn write(&mut self, now: u64) -> Completion<(), anyhow::Error, ()> {
         self.last_activity_at = now;
 
-        let buf = match self.writer.remainder() {
-            Ok(buf) => buf,
-            Err(err) => return Failed(err),
-        };
+        let buf = self.writer.remainder();
 
         let len = match mpclipboard_shared::io::write(&self.fd, buf) {
             Done(len) => len,
-            Failed(err) => return Failed(err),
+            Failed(err) => return Failed(err.into()),
             Pending(()) => return Pending(()),
         };
 
-        self.writer
-            .written(len)
-            .map_err(|err| err.context(format!("{self} failed to call UpgradeResponseWriter")))
+        self.writer.written(len).map_err(|err| {
+            anyhow!(err).context(format!("{self} failed to call UpgradeResponseWriter"))
+        })
     }
 }
 

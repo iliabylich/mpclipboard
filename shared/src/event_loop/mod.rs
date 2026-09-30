@@ -1,4 +1,5 @@
 use crate::Wants;
+use rustix::io::Errno;
 use std::os::fd::{AsRawFd, BorrowedFd, RawFd};
 
 mod epoch;
@@ -90,3 +91,30 @@ enum Diff {
     },
     Empty,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EventLoopError {
+    Create(Errno),
+    CreateTimer(Errno),
+    AddTimer(Errno),
+    ReadTimer(Errno),
+    Sync(Errno),
+    Wait(Errno),
+    ClockBeforeUnixEpoch,
+}
+
+impl core::fmt::Display for EventLoopError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::Create(errno) => write!(f, "failed to create event loop: {errno:?}"),
+            Self::CreateTimer(errno) => write!(f, "failed to create timer: {errno:?}"),
+            Self::AddTimer(errno) => write!(f, "failed to register timer: {errno:?}"),
+            Self::ReadTimer(errno) => write!(f, "failed to read timer: {errno:?}"),
+            Self::Sync(errno) => write!(f, "failed to register connection fd: {errno:?}"),
+            Self::Wait(errno) => write!(f, "failed to wait for events: {errno:?}"),
+            Self::ClockBeforeUnixEpoch => write!(f, "system clock is set before 1970"),
+        }
+    }
+}
+
+impl core::error::Error for EventLoopError {}

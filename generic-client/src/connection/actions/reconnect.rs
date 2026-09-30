@@ -2,6 +2,7 @@ use crate::{
     config::Config,
     connection::{actions::connect, maybe_tls_stream::MaybeTlsStream},
 };
+use anyhow::anyhow;
 use mpclipboard_shared::{UpgradeRequestWriter, prelude::*};
 use std::os::fd::OwnedFd;
 
@@ -15,7 +16,7 @@ pub fn reconnect(
     let addr = match config.url.resolve() {
         Ok(addr) => addr,
         Err(err) => {
-            return Failed(err.context("failed to resolve URL"));
+            return Failed(anyhow!(err).context("failed to resolve URL"));
         }
     };
 
@@ -26,10 +27,7 @@ pub fn reconnect(
         }
     };
 
-    let upgrade_request_writer = match UpgradeRequestWriter::new(config.update_request()) {
-        Ok(writer) => writer,
-        Err(err) => return Failed(err.context("failed to construct UpgradeRequestWriter")),
-    };
+    let upgrade_request_writer = UpgradeRequestWriter::new(config.update_request());
 
     match connect(addr) {
         Done(fd) => Done((fd, stream, upgrade_request_writer)),

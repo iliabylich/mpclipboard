@@ -13,10 +13,5 @@ pub fn finish_tls_handshake(
         Pending(()) => return Pending(()),
     }
 
-    let writer = match UpgradeRequestWriter::new(config.update_request()) {
-        Ok(writer) => writer,
-        Err(err) => return Failed(err),
-    };
-
-    Done(writer)
+    Done(UpgradeRequestWriter::new(config.update_request()))
 }

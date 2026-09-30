@@ -1,4 +1,5 @@
 use crate::connection::maybe_tls_stream::MaybeTlsStream;
+use anyhow::anyhow;
 use mpclipboard_shared::{Message, MessageReader, prelude::*};
 use std::os::fd::AsFd;
 
@@ -18,7 +19,7 @@ pub fn read_message(
 
         match reader.received(buf) {
             Done(m) => message = Some(m),
-            Failed(err) => return Failed(err),
+            Failed(err) => return Failed(anyhow!(err)),
             Pending(()) => {}
         }
     }

@@ -15,10 +15,5 @@ pub fn finish_connecting(
         }
     }
 
-    let upgrade_request_writer = match UpgradeRequestWriter::new(config.update_request()) {
-        Ok(writer) => writer,
-        Err(err) => return Failed(err),
-    };
-
-    Done(upgrade_request_writer)
+    Done(UpgradeRequestWriter::new(config.update_request()))
 }
