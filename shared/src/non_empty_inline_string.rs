@@ -24,9 +24,8 @@ impl<const MAXLEN: usize> NonEmptyInlineString<MAXLEN> {
             .ok_or(NonEmptyInlineStringError::TooLong)?
             .copy_from_slice(s.as_bytes());
 
-        let Ok(len) = u8::try_from(s.len()) else {
-            unreachable!("s.len() <= MAXLEN <= u8::MAX");
-        };
+        let len =
+            u8::try_from(s.len()).unwrap_or_else(|_| unreachable!("s.len() <= MAXLEN <= u8::MAX"));
         let len = NonZeroU8::new(len).ok_or(NonEmptyInlineStringError::Empty)?;
 
         Ok(Self { len, bytes })

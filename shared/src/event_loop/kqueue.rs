@@ -168,9 +168,10 @@ impl EventLoop {
 
     fn drain_timer(&mut self, event: &kq::Event) -> u64 {
         let count = u64::try_from(event.data()).unwrap_or(1).max(1);
-        let Some(time) = self.time.checked_add(count) else {
-            unreachable!("seconds since 1970 never overflow u64");
-        };
+        let time = self
+            .time
+            .checked_add(count)
+            .unwrap_or_else(|| unreachable!("seconds since 1970 never overflow u64"));
         self.time = time;
         self.time
     }

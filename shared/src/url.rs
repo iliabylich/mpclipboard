@@ -34,17 +34,17 @@ impl Url {
 
         let mut buf = [0; MAX_HOST_PORT_LENGTH];
         let mut writer = ArrayWriter::new(&mut buf);
-        if write!(writer, "{}:{port}", host.as_str()).is_err() {
+        write!(writer, "{}:{port}", host.as_str()).unwrap_or_else(|_| {
             unreachable!(
                 "host (<= MAX_HOST_LENGTH) + ':' + port (<= 5 digits) fits into MAX_HOST_PORT_LENGTH"
-            );
-        }
-        let Ok(header) = core::str::from_utf8(writer.as_bytes()) else {
-            unreachable!("concatenation of valid utf8 strings is a valid utf8 string");
-        };
-        let Ok(header) = NonEmptyInlineString::new(header) else {
-            unreachable!("header is non-empty and fits into MAX_HOST_PORT_LENGTH");
-        };
+            )
+        });
+        let header = core::str::from_utf8(writer.as_bytes()).unwrap_or_else(|_| {
+            unreachable!("concatenation of valid utf8 strings is a valid utf8 string")
+        });
+        let header = NonEmptyInlineString::new(header).unwrap_or_else(|_| {
+            unreachable!("header is non-empty and fits into MAX_HOST_PORT_LENGTH")
+        });
 
         Ok(Self {
             tls,

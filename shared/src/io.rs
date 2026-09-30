@@ -7,9 +7,10 @@ pub fn read<const N: usize>(fd: impl AsFd) -> Completion<Buffer<N>, ReadError, (
     let mut buf = [0; N];
     match rustix::io::read(fd, &mut buf).map(NonZeroUsize::new) {
         Ok(Some(len)) => {
-            let Some(buf) = buf.get(..len.get()).and_then(Buffer::from_slice) else {
-                unreachable!("read() can't return more than N bytes");
-            };
+            let buf = buf
+                .get(..len.get())
+                .and_then(Buffer::from_slice)
+                .unwrap_or_else(|| unreachable!("read() can't return more than N bytes"));
             Done(buf)
         }
         Err(Errno::AGAIN) => Pending(()),
@@ -26,9 +27,8 @@ pub fn write(fd: impl AsFd, buf: &[u8]) -> Completion<NonZeroUsize, WriteError, 
 
     match rustix::io::write(fd, buf) {
         Ok(len) => {
-            let Some(len) = NonZeroUsize::new(len) else {
-                unreachable!("write() of a non-empty buffer never returns 0");
-            };
+            let len = NonZeroUsize::new(len)
+                .unwrap_or_else(|| unreachable!("write() of a non-empty buffer never returns 0"));
             Done(len)
         }
         Err(Errno::AGAIN) => Pending(()),

@@ -39,10 +39,9 @@ impl<const MAXLEN: usize> Buffer<MAXLEN> {
 
     #[must_use]
     pub fn as_slice(&self) -> &[u8] {
-        let Some(bytes) = self.buf.get(..self.len) else {
-            unreachable!("Buffer always has valid len");
-        };
-        bytes
+        self.buf
+            .get(..self.len)
+            .unwrap_or_else(|| unreachable!("Buffer always has valid len"))
     }
 
     #[must_use]

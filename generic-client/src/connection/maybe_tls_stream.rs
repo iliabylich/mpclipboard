@@ -98,9 +98,12 @@ impl MaybeTlsStream {
                 let mut buf = [0; N];
                 match conn.reader().read(&mut buf).map(NonZeroUsize::new) {
                     Ok(Some(len)) => {
-                        let Some(buf) = buf.get(..len.get()).and_then(Buffer::from_slice) else {
-                            unreachable!("read() can't return more than N bytes");
-                        };
+                        let buf = buf
+                            .get(..len.get())
+                            .and_then(Buffer::from_slice)
+                            .unwrap_or_else(|| {
+                                unreachable!("read() can't return more than N bytes")
+                            });
                         Done(buf)
                     }
                     Ok(None) => Failed(anyhow!("failed to read_bytes() on TLS stream: EOF")),

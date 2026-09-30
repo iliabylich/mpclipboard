@@ -45,13 +45,12 @@ impl Message {
         let [len, text @ ..] = buf;
 
         let len = NonZeroUsize::new(usize::from(*len)).ok_or(MessageError::Empty)?;
-        let Some(text) = text.get(..len.get()) else {
-            unreachable!("len is a u8, so it never exceeds MAX_TEXT_LEN");
-        };
+        let text = text
+            .get(..len.get())
+            .unwrap_or_else(|| unreachable!("len is a u8, so it never exceeds MAX_TEXT_LEN"));
         let text = core::str::from_utf8(text).map_err(MessageError::NonUtf8)?;
-        let Ok(string) = NonEmptyInlineString::new(text) else {
-            unreachable!("text is non-empty and never exceeds MAX_TEXT_LEN");
-        };
+        let string = NonEmptyInlineString::new(text)
+            .unwrap_or_else(|_| unreachable!("text is non-empty and never exceeds MAX_TEXT_LEN"));
 
         Ok(Self { string })
     }

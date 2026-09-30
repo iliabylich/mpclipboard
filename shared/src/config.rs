@@ -35,9 +35,9 @@ fn read_toml<'a>(path: &[u8], buffer: &'a mut [u8]) -> Result<Toml<'a>, ConfigPa
     let fd =
         rustix::fs::open(path, OFlags::RDONLY, Mode::empty()).map_err(ConfigParserError::Open)?;
     let len = rustix::io::read(&fd, &mut *buffer).map_err(ConfigParserError::Read)?;
-    let Some(bytes) = buffer.get(..len) else {
-        unreachable!("read() can't return more than buffer.len() bytes");
-    };
+    let bytes = buffer
+        .get(..len)
+        .unwrap_or_else(|| unreachable!("read() can't return more than buffer.len() bytes"));
     let text = core::str::from_utf8(bytes).map_err(ConfigParserError::NonUtf8)?;
 
     boml::parse(text).map_err(|err| ConfigParserError::MalformedToml(err.kind, err.src.start))

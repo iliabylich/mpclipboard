@@ -60,12 +60,13 @@ impl UpgradeResponseReader {
                 HttpLine::EndOfResponse => {
                     self.seen_eos = true;
 
-                    let Some(rest) = pos.checked_add(1).and_then(|start| buf.get(start..)) else {
-                        unreachable!("pos is an index into buf");
-                    };
-                    let Some(rest) = Buffer::from_slice(rest) else {
-                        unreachable!("rest is a part of a buffer of the same size");
-                    };
+                    let rest = pos
+                        .checked_add(1)
+                        .and_then(|start| buf.get(start..))
+                        .unwrap_or_else(|| unreachable!("pos is an index into buf"));
+                    let rest = Buffer::from_slice(rest).unwrap_or_else(|| {
+                        unreachable!("rest is a part of a buffer of the same size")
+                    });
                     leftover = rest;
                     break;
                 }

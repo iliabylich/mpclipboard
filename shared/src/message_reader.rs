@@ -12,9 +12,8 @@ impl MessageReader {
     }
 
     pub fn new(partial: Buffer<{ Message::BYTESIZE - 1 }>) -> Self {
-        let Some(buf) = Buffer::from_slice(partial.as_slice()) else {
-            unreachable!("partial message is always shorter than a message");
-        };
+        let buf = Buffer::from_slice(partial.as_slice())
+            .unwrap_or_else(|| unreachable!("partial message is always shorter than a message"));
         Self { buf }
     }
 

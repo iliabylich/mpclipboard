@@ -57,9 +57,10 @@ impl Client {
     }
 
     fn write(&mut self) -> Completion<(), anyhow::Error, ()> {
-        let Some(buf) = self.writer.remainder() else {
-            unreachable!("can't write on empty writer")
-        };
+        let buf = self
+            .writer
+            .remainder()
+            .unwrap_or_else(|| unreachable!("can't write on empty writer"));
         let len = match mpclipboard_shared::io::write(&self.fd, buf) {
             Done(len) => len,
             Pending(()) => return Pending(()),

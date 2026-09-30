@@ -14,10 +14,9 @@ impl UpgradeResponseWriter {
 
     #[must_use]
     pub fn remainder(&self) -> &[u8] {
-        let Some(remainder) = UpgradeResponse::BYTES.get(self.pos..) else {
-            unreachable!("pos never exceeds UpgradeResponse::BYTES.len()");
-        };
-        remainder
+        UpgradeResponse::BYTES
+            .get(self.pos..)
+            .unwrap_or_else(|| unreachable!("pos never exceeds UpgradeResponse::BYTES.len()"))
     }
 
     pub fn written(&mut self, len: NonZeroUsize) -> Completion<(), UpgradeResponseWriterError, ()> {

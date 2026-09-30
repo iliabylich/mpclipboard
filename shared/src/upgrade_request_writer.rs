@@ -55,10 +55,10 @@ impl UpgradeRequestWriter {
 
     #[must_use]
     pub fn remainder(&self) -> &[u8] {
-        let Some(remainder) = self.buf.as_slice().get(self.pos..) else {
-            unreachable!("pos never exceeds the length of the request");
-        };
-        remainder
+        self.buf
+            .as_slice()
+            .get(self.pos..)
+            .unwrap_or_else(|| unreachable!("pos never exceeds the length of the request"))
     }
 
     pub fn written(&mut self, n: NonZeroUsize) -> Completion<(), UpgradeRequestWriterError, ()> {
