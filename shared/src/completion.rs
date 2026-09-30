@@ -10,7 +10,7 @@ pub enum Completion<S, E, P> {
 
 impl<S, E, P> Completion<S, E, P> {
     #[cfg(test)]
-    pub fn expect_done(self, s: &str) -> S
+    pub(crate) fn expect_done(self, s: &str) -> S
     where
         P: Debug,
         E: Debug,
@@ -23,7 +23,7 @@ impl<S, E, P> Completion<S, E, P> {
     }
 
     #[cfg(test)]
-    pub fn expect_pending(self, s: &str) -> P
+    pub(crate) fn expect_pending(self, s: &str) -> P
     where
         S: Debug,
         E: Debug,
@@ -36,7 +36,7 @@ impl<S, E, P> Completion<S, E, P> {
     }
 
     #[cfg(test)]
-    pub fn expect_failed(self, s: &str) -> E
+    pub(crate) fn expect_failed(self, s: &str) -> E
     where
         S: Debug,
         P: Debug,

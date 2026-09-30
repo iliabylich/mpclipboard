@@ -8,7 +8,11 @@ pub(crate) fn as_chunks_with_guaranteed_trailer<const BUFSIZE: usize>(
 ) -> (impl Iterator<Item = Chunk<BUFSIZE>>, Chunk<BUFSIZE>) {
     const CHUNK_SIZE: usize = 20;
 
-    let (head, tail) = buf.split_at(buf.len() - CHUNK_SIZE);
+    let (head, tail) = buf.split_at(
+        buf.len()
+            .checked_sub(CHUNK_SIZE)
+            .unwrap_or_else(|| unreachable!("bug")),
+    );
 
     let chunks = head.chunks(CHUNK_SIZE).filter_map(|chunk| {
         let len = NonZeroUsize::new(chunk.len())?;
@@ -21,7 +25,7 @@ pub(crate) fn as_chunks_with_guaranteed_trailer<const BUFSIZE: usize>(
     trailer[..tail.len()].copy_from_slice(tail);
     let trailer = (
         trailer,
-        NonZeroUsize::new(CHUNK_SIZE).expect("constant > 0"),
+        NonZeroUsize::new(CHUNK_SIZE).unwrap_or_else(|| unreachable!("constant > 0")),
     );
 
     (chunks, trailer)

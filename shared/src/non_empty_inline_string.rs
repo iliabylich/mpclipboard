@@ -111,20 +111,22 @@ mod tess {
     use super::*;
 
     #[test]
-    fn test_short() {
+    fn test_short() -> Result<()> {
         assert_eq!(
             NonEmptyInlineString::<5>::truncate("abcde")
-                .expect("must be valid")
+                .context("must be valid")?
                 .as_str(),
             "abcde"
         );
+
+        Ok(())
     }
 
     #[test]
-    fn test_long() {
+    fn test_long() -> Result<()> {
         assert_eq!(
             NonEmptyInlineString::<5>::truncate("abcdef")
-                .expect("must be valid")
+                .context("must be valid")?
                 .as_str(),
             "abcde"
         );
@@ -132,7 +134,7 @@ mod tess {
         assert_eq!('Ⴀ'.len_utf8(), 3);
         assert_eq!(
             NonEmptyInlineString::<10>::truncate("ႠႠႠႠ")
-                .expect("must be valid")
+                .context("must be valid")?
                 .as_str(),
             "ႠႠႠ"
         );
@@ -140,19 +142,19 @@ mod tess {
         assert_eq!('🦴'.len_utf8(), 4);
         assert_eq!(
             NonEmptyInlineString::<10>::truncate("🦴🦴🦴")
-                .expect("must be valid")
+                .context("must be valid")?
                 .as_str(),
             "🦴🦴"
         );
+
+        Ok(())
     }
 
     #[test]
     fn test_err() {
         assert_eq!(
-            NonEmptyInlineString::<100>::truncate("")
-                .expect_err("empty")
-                .to_string(),
-            "string is empty"
+            NonEmptyInlineString::<100>::truncate("").map_err(|err| err.to_string()),
+            Err("string is empty".to_string())
         );
     }
 
@@ -161,9 +163,9 @@ mod tess {
         type Ten = NonEmptyInlineString<10>;
 
         const S1: Ten = Ten::const_new("foobarbaz0");
-        assert_eq!(S1.as_str(), "foobarbaz0");
-
         const S2: Ten = Ten::const_new("abc");
+
+        assert_eq!(S1.as_str(), "foobarbaz0");
         assert_eq!(S2.as_str(), "abc");
     }
 }

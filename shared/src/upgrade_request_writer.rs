@@ -86,7 +86,7 @@ impl UpgradeRequestWriter {
 mod tests {
     use super::UpgradeRequestWriter;
     use crate::{HostPort, ID, Token, UpgradeRequest, Version, test_helpers::non_zero_usize};
-    use anyhow::Result;
+    use anyhow::{Context, Result};
 
     fn req() -> Result<UpgradeRequest> {
         Ok(UpgradeRequest {
@@ -101,7 +101,7 @@ mod tests {
     fn test_encode() -> Result<()> {
         let writer = UpgradeRequestWriter::new(req()?)?;
         assert_eq!(
-            core::str::from_utf8(&writer.buf[..writer.len])?,
+            core::str::from_utf8(writer.buf.get(..writer.len).context("bug")?)?,
             "GET / HTTP/1.1\r\nHost: localhost:3000\r\nToken: sekret\r\nID: test-client\r\nVersion: 0.100.10\r\nConnection: Upgrade\r\nUpgrade: mpclipboard-raw\r\n\r\n"
         );
 

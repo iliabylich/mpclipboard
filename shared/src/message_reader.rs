@@ -107,7 +107,10 @@ mod tests {
         let mut buf1 = [0; Message::BYTESIZE];
         buf1[..100].copy_from_slice(&one[..100]);
         reader
-            .received(buf1, NonZeroUsize::new(100).expect("literal argument"))
+            .received(
+                buf1,
+                NonZeroUsize::new(100).unwrap_or_else(|| unreachable!("literal argument")),
+            )
             .expect_pending("only 'a' has been written so far");
 
         // write "bc"
@@ -117,7 +120,8 @@ mod tests {
         let message1 = reader
             .received(
                 buf2,
-                NonZeroUsize::new(Message::BYTESIZE).expect("literal argument"),
+                NonZeroUsize::new(Message::BYTESIZE)
+                    .unwrap_or_else(|| unreachable!("literal argument")),
             )
             .expect_done("we've written 'a' -> 'bc', so the first message is there");
         assert_eq!(message1.text_as_str(), "one");
@@ -128,7 +132,8 @@ mod tests {
         let message2 = reader
             .received(
                 buf3,
-                NonZeroUsize::new(Message::BYTESIZE - 100).expect("literal argument"),
+                NonZeroUsize::new(Message::BYTESIZE - 100)
+                    .unwrap_or_else(|| unreachable!("literal argument")),
             )
             .expect_done("we've finished writing 'cd', so the 2nd message is also there now");
         assert_eq!(message2.text_as_str(), "twotwo");

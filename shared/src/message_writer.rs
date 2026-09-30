@@ -139,9 +139,9 @@ mod tests {
 
         let msg = Message::new(NonEmptyInlineString::new("FOO")?)?;
         writer.push(&msg);
-        assert_eq!(rem(&mut writer)?, &msg.encode());
+        assert_eq!(rem(&writer)?, &msg.encode());
         writer.written(non_zero_usize(100)?)?;
-        assert_eq!(rem(&mut writer)?, &msg.encode()[100..]);
+        assert_eq!(rem(&writer)?, &msg.encode()[100..]);
         writer.written(non_zero_usize(Message::BYTESIZE - 100)?)?;
         assert_eq!(writer.remainder(), None);
 
@@ -159,9 +159,9 @@ mod tests {
         let msg3 = Message::new(NonEmptyInlineString::new("msg3")?)?;
         writer.push(&msg3);
 
-        assert_eq!(rem(&mut writer)?, &msg1.encode());
+        assert_eq!(rem(&writer)?, &msg1.encode());
         writer.written(non_zero_usize(Message::BYTESIZE)?)?;
-        assert_eq!(rem(&mut writer)?, &msg3.encode());
+        assert_eq!(rem(&writer)?, &msg3.encode());
 
         Ok(())
     }

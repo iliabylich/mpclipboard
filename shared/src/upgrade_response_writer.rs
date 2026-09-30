@@ -43,7 +43,7 @@ impl Default for UpgradeResponseWriter {
 mod tests {
     use super::UpgradeResponseWriter;
     use crate::{test_helpers::non_zero_usize, upgrade_response::UpgradeResponse};
-    use anyhow::Result;
+    use anyhow::{Context, Result};
 
     #[test]
     fn test_write() -> Result<()> {
@@ -52,7 +52,10 @@ mod tests {
 
         w.written(non_zero_usize(50)?)
             .expect_pending("only 50 bytes have been written");
-        assert_eq!(w.remainder()?, &UpgradeResponse::BYTES[50..]);
+        assert_eq!(
+            w.remainder()?,
+            UpgradeResponse::BYTES.get(50..).context("bug")?
+        );
 
         w.written(non_zero_usize(UpgradeResponse::BYTES.len() - 50)?)
             .expect_done("full response have been written");

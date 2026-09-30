@@ -1,6 +1,6 @@
 use crate::{
-    CONNECTION_UPGRADE_HEADER, UPGRADE_MPCLIPBOARD_RAW_HEADER, message::Message, prelude::*,
-    strip_prefix_ignore_ascii_case,
+    CONNECTION_UPGRADE_HEADER, UPGRADE_MPCLIPBOARD_RAW_HEADER, line_reader::LineReader,
+    message::Message, prelude::*, strip_prefix_ignore_ascii_case,
 };
 use anyhow::{Context, Result, anyhow};
 use core::num::NonZeroUsize;
@@ -9,8 +9,7 @@ use core::num::NonZeroUsize;
 #[must_use]
 #[derive(Debug, Clone, Copy)]
 pub struct UpgradeResponseReader {
-    buf: [u8; Self::BUFFER_SIZE],
-    pos: usize,
+    lines: LineReader<{ Self::BUFFER_SIZE }>,
 
     seen_start_line: bool,
     seen_connection_upgrade: bool,
@@ -23,8 +22,7 @@ impl UpgradeResponseReader {
 
     pub const fn new() -> Self {
         Self {
-            buf: [0; _],
-            pos: 0,
+            lines: LineReader::new(),
 
             seen_start_line: false,
             seen_connection_upgrade: false,
@@ -42,24 +40,21 @@ impl UpgradeResponseReader {
             return Failed(anyhow!("given buffer is malformed"));
         };
 
+        let mut leftover = [0; Self::BUFFER_SIZE];
+        let mut leftover_len = 0;
+
         for (pos, &byte) in buf.iter().enumerate() {
-            let Some(slot) = self.buf.get_mut(self.pos) else {
-                return Failed(anyhow!("internal buffer overflow"));
+            let (line, len) = match self.lines.push(byte) {
+                Done(line) => line,
+                Pending(()) => continue,
+                Failed(err) => return Failed(err),
             };
-            *slot = byte;
-
-            let Some(nextpos) = self.pos.checked_add(1) else {
-                return Failed(anyhow!("length overflow"));
-            };
-            self.pos = nextpos;
-
-            let Some(filled) = self.buf.get(..self.pos) else {
-                return Failed(anyhow!("internal buffer overflow"));
+            let Some(line) = line.get(..len) else {
+                return Failed(anyhow!("malformed line"));
             };
 
-            let line = match HttpLine::parse(filled) {
-                Ok(Some(line)) => line,
-                Ok(None) => continue,
+            let line = match HttpLine::parse(line) {
+                Ok(line) => line,
                 Err(err) => return Failed(err),
             };
 
@@ -73,27 +68,22 @@ impl UpgradeResponseReader {
                     let Some(start) = pos.checked_add(1) else {
                         return Failed(anyhow!("buffer size is constant so it can't overflow"));
                     };
-                    let Some(leftover) = buf.get(start..) else {
+                    let Some(rest) = buf.get(start..) else {
                         return Failed(anyhow!("worst case is leftover is empty"));
                     };
-
-                    self.buf = [0; _];
-                    let Some(leftover_spot) = self.buf.get_mut(..leftover.len()) else {
-                        return Failed(anyhow!("leftover can't be longer than internal buffer"));
+                    let Some(dst) = leftover.get_mut(..rest.len()) else {
+                        return Failed(anyhow!("leftover can't be longer than given buffer"));
                     };
-                    leftover_spot.copy_from_slice(leftover);
-
-                    self.pos = leftover.len();
+                    dst.copy_from_slice(rest);
+                    leftover_len = rest.len();
                     break;
                 }
                 HttpLine::Other => {}
             }
-            self.buf = [0; _];
-            self.pos = 0;
         }
 
         if self.try_finish() {
-            Done((self.buf, self.pos))
+            Done((leftover, leftover_len))
         } else if self.seen_eos {
             Failed(anyhow!("got EOS but UpgradeResponse is incomplete"))
         } else {
@@ -126,25 +116,19 @@ enum HttpLine {
 }
 
 impl HttpLine {
-    fn parse(buf: &[u8]) -> Result<Option<Self>> {
-        if !buf.ends_with(b"\r\n") {
-            return Ok(None);
-        }
+    fn parse(line: &[u8]) -> Result<Self> {
+        let line = core::str::from_utf8(line).context("non-utf8 header")?;
 
-        let end = buf.len().checked_sub(2).context("len is >= 2")?;
-        let buf = buf.get(..end).context("buf contains at least two bytes")?;
-        let buf = core::str::from_utf8(buf).context("non-utf8 header")?;
-
-        if buf == "HTTP/1.1 101 Switching Protocols" {
-            Ok(Some(Self::StartLine))
-        } else if strip_prefix_ignore_ascii_case(buf, CONNECTION_UPGRADE_HEADER) == Some("") {
-            Ok(Some(Self::ConnectionUpgrade))
-        } else if strip_prefix_ignore_ascii_case(buf, UPGRADE_MPCLIPBOARD_RAW_HEADER) == Some("") {
-            Ok(Some(Self::UpgradeMPClipboardRaw))
-        } else if buf.is_empty() {
-            Ok(Some(Self::EndOfResponse))
+        if line == "HTTP/1.1 101 Switching Protocols" {
+            Ok(Self::StartLine)
+        } else if strip_prefix_ignore_ascii_case(line, CONNECTION_UPGRADE_HEADER) == Some("") {
+            Ok(Self::ConnectionUpgrade)
+        } else if strip_prefix_ignore_ascii_case(line, UPGRADE_MPCLIPBOARD_RAW_HEADER) == Some("") {
+            Ok(Self::UpgradeMPClipboardRaw)
+        } else if line.is_empty() {
+            Ok(Self::EndOfResponse)
         } else {
-            Ok(Some(Self::Other))
+            Ok(Self::Other)
         }
     }
 }
@@ -156,7 +140,7 @@ mod tests {
         test_helpers::{as_chunks_with_guaranteed_trailer, non_zero_usize},
         upgrade_response::UpgradeResponse,
     };
-    use anyhow::Result;
+    use anyhow::{Context, Result};
 
     #[test]
     fn test_leftover() -> Result<()> {
@@ -173,7 +157,9 @@ mod tests {
         }
 
         let (mut buf, mut len) = trailer;
-        buf[len.get()..len.get() + 3].copy_from_slice(b"abc");
+        buf.get_mut(len.get()..len.get().checked_add(3).context("bug")?)
+            .context("bug")?
+            .copy_from_slice(b"abc");
         len = non_zero_usize(len.get() + 3)?;
 
         let levftover = reader
@@ -198,7 +184,7 @@ mod tests {
     }
 
     #[test]
-    fn test_no_leftover() -> Result<()> {
+    fn test_no_leftover() {
         let (chunks, trailer) = as_chunks_with_guaranteed_trailer::<
             { UpgradeResponseReader::BUFFER_SIZE },
         >(UpgradeResponse::BYTES);
@@ -217,8 +203,6 @@ mod tests {
             .expect_done("trailer has been written");
 
         assert_eq!(leftover, ([0; _], 0));
-
-        Ok(())
     }
 
     #[test]
@@ -227,13 +211,42 @@ mod tests {
 
         let mut buf = [0; _];
         let malformed = b"boo\r\n\r\n";
-        buf[..malformed.len()].copy_from_slice(malformed);
+        buf.get_mut(..malformed.len())
+            .context("bug")?
+            .copy_from_slice(malformed);
         let len = non_zero_usize(malformed.len())?;
 
         let err = reader
             .received(buf, len)
             .expect_failed("incomplete request");
         assert_eq!(err.to_string(), "got EOS but UpgradeResponse is incomplete");
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_long_unknown_header() -> Result<()> {
+        let head = core::str::from_utf8(UpgradeResponse::BYTES)?
+            .strip_suffix("\r\n")
+            .context("response must end with an empty line")?;
+        let bytes = format!("{head}Report-To: {}\r\n\r\n", "a".repeat(300));
+
+        let (chunks, trailer) = as_chunks_with_guaranteed_trailer::<
+            { UpgradeResponseReader::BUFFER_SIZE },
+        >(bytes.as_bytes());
+
+        let mut reader = UpgradeResponseReader::new();
+        for (buf, len) in chunks {
+            reader
+                .received(buf, len)
+                .expect_pending("trailer hasn't been written yet");
+        }
+
+        let (buf, len) = trailer;
+        let leftover = reader
+            .received(buf, len)
+            .expect_done("long unknown header is skipped");
+        assert_eq!(leftover, ([0; _], 0));
 
         Ok(())
     }

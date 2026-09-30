@@ -21,6 +21,7 @@ mod config;
 pub use config::ConfigParser;
 
 mod array_writer;
+mod line_reader;
 
 mod upgrade_request;
 mod upgrade_request_reader;
