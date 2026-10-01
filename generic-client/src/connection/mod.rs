@@ -14,6 +14,8 @@ use std::os::fd::{AsFd, BorrowedFd, OwnedFd};
 mod actions;
 use actions::reconnect;
 
+mod error;
+
 mod maybe_tls_stream;
 use maybe_tls_stream::MaybeTlsStream;
 
@@ -68,11 +70,12 @@ impl Connection {
 
     fn reconnect(now: u64, config: &Config) -> Self {
         match reconnect(config) {
-            Done((fd, stream, writer)) => Self::State {
+            Done((fd, stream)) => Self::State {
                 fd,
                 state: if stream.is_tls() {
                     State::TlsHandshake(now)
                 } else {
+                    let writer = UpgradeRequestWriter::new(config.update_request());
                     State::WritingUpgradeRequest(now, writer)
                 },
                 stream,
@@ -85,7 +88,7 @@ impl Connection {
             },
 
             Failed(err) => {
-                log::error!("failed to connect: {err:?}");
+                log::error!("failed to connect: {err}");
                 Self::Disconnected(Some(now))
             }
         }
@@ -149,16 +152,17 @@ impl Connection {
             }
 
             Self::State { fd, stream, state } => match state {
-                State::TlsHandshake(last_activity_at) => {
-                    match finish_tls_handshake(stream, fd, config) {
-                        Done(writer) => *state = State::WritingUpgradeRequest(now, writer),
-                        Pending(()) => *last_activity_at = now,
-                        Failed(err) => {
-                            log::error!("failed to finish TLS handshake: {err:?}");
-                            *self = Self::Disconnected(Some(now));
-                        }
+                State::TlsHandshake(last_activity_at) => match finish_tls_handshake(stream, fd) {
+                    Done(()) => {
+                        let writer = UpgradeRequestWriter::new(config.update_request());
+                        *state = State::WritingUpgradeRequest(now, writer);
                     }
-                }
+                    Pending(()) => *last_activity_at = now,
+                    Failed(err) => {
+                        log::error!("{err}");
+                        *self = Self::Disconnected(Some(now));
+                    }
+                },
 
                 State::ReadingUpgradeResponse(last_activity_at, reader) => {
                     match read_upgrade_response(fd, stream, reader) {
@@ -167,7 +171,7 @@ impl Connection {
                         }
                         Pending(()) => *last_activity_at = now,
                         Failed(err) => {
-                            log::error!("failed to read upgrade response: {err:?}");
+                            log::error!("failed to read upgrade response: {err}");
                             *self = Self::Disconnected(Some(now));
                         }
                     }
@@ -176,7 +180,7 @@ impl Connection {
                 State::Connected(reader, _writer) => match read_message(reader, stream, fd) {
                     Done(message) => return Some(message),
                     Failed(err) => {
-                        log::error!("failed to read message: {err:?}");
+                        log::error!("failed to read message: {err}");
                         *self = Self::Disconnected(Some(now));
                     }
                     Pending(()) => {}
@@ -216,16 +220,17 @@ impl Connection {
                     }
                 }
 
-                State::TlsHandshake(last_activity_at) => {
-                    match finish_tls_handshake(stream, fd, config) {
-                        Done(writer) => *active = State::WritingUpgradeRequest(now, writer),
-                        Pending(()) => *last_activity_at = now,
-                        Failed(err) => {
-                            log::error!("failed to finish TLS handshake {err:?}");
-                            *self = Self::Disconnected(Some(now));
-                        }
+                State::TlsHandshake(last_activity_at) => match finish_tls_handshake(stream, fd) {
+                    Done(()) => {
+                        let writer = UpgradeRequestWriter::new(config.update_request());
+                        *active = State::WritingUpgradeRequest(now, writer);
                     }
-                }
+                    Pending(()) => *last_activity_at = now,
+                    Failed(err) => {
+                        log::error!("{err}");
+                        *self = Self::Disconnected(Some(now));
+                    }
+                },
 
                 State::WritingUpgradeRequest(last_activity_at, writer) => {
                     match write_upgrade_request(fd, stream, writer) {
@@ -235,24 +240,26 @@ impl Connection {
                         }
                         Pending(()) => *last_activity_at = now,
                         Failed(err) => {
-                            log::error!("failed to write upgrade request: {err:?}");
+                            log::error!("failed to write upgrade request: {err}");
                             *self = Self::Disconnected(Some(now));
                         }
                     }
                 }
 
-                State::ReadingUpgradeResponse(last_activity_at, _) => match stream.flush(fd) {
-                    Ok(()) => *last_activity_at = now,
-                    Err(err) => {
-                        log::error!("failed to flush TLS data: {err:?}");
-                        *self = Self::Disconnected(Some(now));
+                State::ReadingUpgradeResponse(last_activity_at, _reader) => {
+                    match stream.flush(fd) {
+                        Ok(()) => *last_activity_at = now,
+                        Err(err) => {
+                            log::error!("failed to flush TLS data: {err:?}");
+                            *self = Self::Disconnected(Some(now));
+                        }
                     }
-                },
+                }
 
                 State::Connected(_reader, writer) => match write_message(writer, stream, fd) {
                     Done(()) | Pending(()) => {}
                     Failed(err) => {
-                        log::error!("failed to write message: {err:?}");
+                        log::error!("failed to write message: {err}");
                         *self = Self::Disconnected(Some(now));
                     }
                 },

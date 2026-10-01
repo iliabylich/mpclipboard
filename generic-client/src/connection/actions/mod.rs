@@ -1,6 +1,3 @@
-mod connect;
-pub use connect::connect;
-
 mod finish_connecting;
 pub use finish_connecting::finish_connecting;
 

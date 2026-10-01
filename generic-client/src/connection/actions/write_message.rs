@@ -1,5 +1,4 @@
-use crate::connection::maybe_tls_stream::MaybeTlsStream;
-use anyhow::anyhow;
+use crate::connection::{error::ConnectionError, maybe_tls_stream::MaybeTlsStream};
 use mpclipboard_shared::{MessageWriter, prelude::*};
 use std::os::fd::AsFd;
 
@@ -7,11 +6,11 @@ pub fn write_message(
     writer: &mut MessageWriter,
     stream: &mut MaybeTlsStream,
     fd: &impl AsFd,
-) -> Completion<(), anyhow::Error, ()> {
+) -> Completion<(), ConnectionError, ()> {
     if writer.is_empty()
         && let Err(err) = stream.flush(fd)
     {
-        return Failed(anyhow!(err).context("failed to flush TLS data"));
+        return Failed(ConnectionError::FailedToFlushTls(err));
     }
 
     let Some(buf) = writer.remainder() else {
@@ -20,12 +19,12 @@ pub fn write_message(
 
     let len = match stream.write_bytes(fd, buf) {
         Done(len) => len,
-        Failed(err) => return Failed(err.into()),
+        Failed(err) => return Failed(ConnectionError::FailedToWrite(err)),
         Pending(()) => return Pending(()),
     };
 
     match writer.written(len) {
         Ok(()) => Done(()),
-        Err(err) => Failed(anyhow!(err)),
+        Err(err) => Failed(ConnectionError::MessageWriterError(err)),
     }
 }
