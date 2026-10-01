@@ -1,4 +1,3 @@
-use anyhow::Result;
 use mpclipboard_generic_client::{MPClipboard, Output};
 use mpclipboard_shared::REvents;
 use rustix::event::{PollFd, PollFlags};
@@ -16,14 +15,14 @@ fn print_help_and_exit() -> ! {
     std::process::exit(1);
 }
 
-fn main() -> Result<()> {
+fn main() {
     let [_, id] = std::env::args()
         .collect::<Vec<_>>()
         .try_into()
         .unwrap_or_else(|_| print_help_and_exit());
 
-    let mut mpclipboard = MPClipboard::new_with_local_config_and_id_override(&id)?;
-    // let mut mpclipboard = MPClipboard::new_with_xdg_config()?;
+    let mut mpclipboard = MPClipboard::new_with_local_config_and_id_override(&id).unwrap();
+    // let mut mpclipboard = MPClipboard::new_with_xdg_config().unwrap();
     let mut stdin = std::io::stdin().lock();
 
     loop {
@@ -31,13 +30,13 @@ fn main() -> Result<()> {
             PollFd::new(&mpclipboard, PollFlags::IN),
             PollFd::new(&stdin, PollFlags::IN),
         ];
-        rustix::event::poll(&mut fds, None)?;
-        let mpclipboard_revents = REvents::new(fds[0].revents())?;
-        let stdin_revents = REvents::new(fds[1].revents())?;
+        rustix::event::poll(&mut fds, None).unwrap();
+        let mpclipboard_revents = REvents::new(fds[0].revents()).unwrap();
+        let stdin_revents = REvents::new(fds[1].revents()).unwrap();
 
         assert!(!mpclipboard_revents.writable);
         if mpclipboard_revents.readable {
-            let Output { connectivity, text } = mpclipboard.read()?;
+            let Output { connectivity, text } = mpclipboard.read().unwrap();
             if let Some(connectivity) = connectivity {
                 println!("[c] {connectivity:?}");
             }
@@ -49,10 +48,10 @@ fn main() -> Result<()> {
         assert!(!stdin_revents.writable);
         if stdin_revents.readable {
             let mut line = String::new();
-            stdin.read_line(&mut line)?;
+            stdin.read_line(&mut line).unwrap();
             let line = line.trim();
             if !line.is_empty() {
-                mpclipboard.push_text(line)?;
+                mpclipboard.push_text(line).unwrap();
             }
         }
     }
