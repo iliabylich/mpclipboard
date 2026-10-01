@@ -11,7 +11,7 @@ pub fn write_message(
     if writer.is_empty()
         && let Err(err) = stream.flush(fd)
     {
-        return Failed(err.context("failed to flush TLS data"));
+        return Failed(anyhow!(err).context("failed to flush TLS data"));
     }
 
     let Some(buf) = writer.remainder() else {
@@ -20,7 +20,7 @@ pub fn write_message(
 
     let len = match stream.write_bytes(fd, buf) {
         Done(len) => len,
-        Failed(err) => return Failed(err),
+        Failed(err) => return Failed(err.into()),
         Pending(()) => return Pending(()),
     };
 

@@ -14,7 +14,7 @@ pub fn read_upgrade_response(
             log::trace!("handshake response still pending: {reader:?}");
             return Pending(());
         }
-        Failed(err) => return Failed(err),
+        Failed(err) => return Failed(err.into()),
     };
 
     let leftover = match reader.received(buf) {

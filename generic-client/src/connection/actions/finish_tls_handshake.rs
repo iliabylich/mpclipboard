@@ -9,7 +9,7 @@ pub fn finish_tls_handshake(
 ) -> Completion<UpgradeRequestWriter, anyhow::Error, ()> {
     match stream.finish_tls_handshake(fd) {
         Done(()) => {}
-        Failed(err) => return Failed(err),
+        Failed(err) => return Failed(err.into()),
         Pending(()) => return Pending(()),
     }
 

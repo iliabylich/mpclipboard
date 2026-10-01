@@ -13,7 +13,7 @@ pub fn read_message(
     loop {
         let buf = match stream.read_bytes(fd) {
             Done(buf) => buf,
-            Failed(err) => return Failed(err),
+            Failed(err) => return Failed(err.into()),
             Pending(()) => break,
         };
 

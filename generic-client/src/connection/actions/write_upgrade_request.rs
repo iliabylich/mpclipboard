@@ -12,7 +12,7 @@ pub fn write_upgrade_request(
 
     let len = match stream.write_bytes(&fd, buf) {
         Done(len) => len,
-        Failed(err) => return Failed(err),
+        Failed(err) => return Failed(err.into()),
         Pending(()) => return Pending(()),
     };
 

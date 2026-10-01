@@ -23,7 +23,7 @@ pub fn reconnect(
     let stream = match MaybeTlsStream::new(&config.url) {
         Ok(stream) => stream,
         Err(err) => {
-            return Failed(err.context("failed to create MaybeTlsStream"));
+            return Failed(anyhow!(err).context("failed to create MaybeTlsStream"));
         }
     };
 
