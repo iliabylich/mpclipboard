@@ -1,7 +1,9 @@
+use anyhow::Result;
+
 pub struct Logger;
 
 impl Logger {
-    pub(crate) fn init() {
+    pub(crate) fn init() -> Result<()> {
         #[cfg(target_os = "android")]
         {
             use android_logger::Config;
@@ -16,9 +18,10 @@ impl Logger {
         }
 
         #[cfg(any(target_os = "linux", target_os = "macos"))]
-        env_logger::init();
+        env_logger::try_init()?;
 
         log::info!("info example");
         log::error!("error example");
+        Ok(())
     }
 }

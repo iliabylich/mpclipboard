@@ -22,7 +22,7 @@ impl MPClipboard {
         static INIT: OnceLock<Result<()>> = OnceLock::new();
 
         let result = INIT.get_or_init(|| {
-            Logger::init();
+            Logger::init()?;
             TLS::init()?;
             Ok(())
         });
