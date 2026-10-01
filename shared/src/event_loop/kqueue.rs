@@ -34,21 +34,12 @@ impl EventLoop {
     ) -> Result<(), EventLoopError> {
         match self.fd.transition(wants) {
             Diff::Add { fd, wants } => {
-                self.add(fd, wants).map_err(EventLoopError::Sync)?;
-            }
-            Diff::Delete { fd } => {
-                self.delete(fd);
+                self.add(fd.as_raw_fd(), wants)
+                    .map_err(EventLoopError::Sync)?;
             }
             Diff::Modify { fd, wants } => {
-                self.modify(fd, wants).map_err(EventLoopError::Sync)?;
-            }
-            Diff::Replace {
-                prevfd,
-                newfd,
-                wants,
-            } => {
-                self.delete(prevfd);
-                self.add(newfd, wants).map_err(EventLoopError::Sync)?;
+                self.modify(fd.as_raw_fd(), wants)
+                    .map_err(EventLoopError::Sync)?;
             }
             Diff::Empty => {}
         }
@@ -58,7 +49,8 @@ impl EventLoop {
 
     pub fn drain_events_without_waiting(&mut self) -> Result<EventLoopResult, EventLoopError> {
         let mut events = [Self::empty_event(); 4];
-        let len = unsafe { kq::kevent(&self.kqueue_fd, &[], &mut events, Some(Duration::ZERO)) }
+        let len = self
+            .kevent(&[], &mut events)
             .map_err(EventLoopError::Wait)?;
 
         let mut out = EventLoopResult {
@@ -125,25 +117,29 @@ impl EventLoop {
         let write = Self::event(kq::EventFilter::Write(fd), flags);
 
         match wants {
-            Wants::ReadWrite => self.kevent(&[read, write]),
-            Wants::Read => self.kevent(&[read]),
-            Wants::Write => self.kevent(&[write]),
+            Wants::ReadWrite => self.apply(&[read, write]),
+            Wants::Read => self.apply(&[read]),
+            Wants::Write => self.apply(&[write]),
         }
     }
 
     fn delete_filter(&self, filter: kq::EventFilter) {
         let event = Self::event(filter, kq::EventFlags::DELETE);
-        let _ = self.kevent(&[event]);
+        let _ = self.apply(&[event]);
     }
 
     fn event(filter: kq::EventFilter, flags: kq::EventFlags) -> kq::Event {
         kq::Event::new(filter, flags, Self::FD_ID as *mut _)
     }
 
-    fn kevent(&self, events: &[kq::Event]) -> Result<(), Errno> {
+    fn apply(&self, changes: &[kq::Event]) -> Result<(), Errno> {
         let mut out: [kq::Event; 0] = [];
-        unsafe { kq::kevent(&self.kqueue_fd, events, &mut out, Some(Duration::ZERO))? };
+        self.kevent(changes, &mut out)?;
         Ok(())
+    }
+
+    fn kevent(&self, changes: &[kq::Event], out: &mut [kq::Event]) -> Result<usize, Errno> {
+        unsafe { kq::kevent(&self.kqueue_fd, changes, out, Some(Duration::ZERO)) }
     }
 
     fn add_timer(&self) -> Result<(), Errno> {
@@ -163,7 +159,7 @@ impl EventLoop {
             kq::EventFlags::ADD | kq::EventFlags::ENABLE | kq::EventFlags::ONESHOT,
             ptr::null_mut(),
         );
-        self.kevent(&[periodic, initial])
+        self.apply(&[periodic, initial])
     }
 
     fn drain_timer(&mut self, event: &kq::Event) -> u64 {

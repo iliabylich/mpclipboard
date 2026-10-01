@@ -33,19 +33,16 @@ impl FdState {
         Self::None
     }
 
-    fn transition(&mut self, next: Option<(BorrowedFd<'_>, Epoch, Wants)>) -> Diff {
+    fn transition<'fd>(&mut self, next: Option<(BorrowedFd<'fd>, Epoch, Wants)>) -> Diff<'fd> {
         match (*self, next) {
             (Self::None, None) => Diff::Empty,
             (Self::None, Some((fd, epoch, wants))) => {
                 *self = Self::Some(fd.as_raw_fd(), epoch, wants);
-                Diff::Add {
-                    fd: fd.as_raw_fd(),
-                    wants,
-                }
+                Diff::Add { fd, wants }
             }
-            (Self::Some(prevfd, _, _), None) => {
+            (Self::Some(..), None) => {
                 *self = Self::None;
-                Diff::Delete { fd: prevfd }
+                Diff::Empty
             }
             (Self::Some(prevfd, prevepoch, prevwants), Some((fd, nextepoch, wants))) => {
                 if nextepoch == prevepoch {
@@ -55,15 +52,11 @@ impl FdState {
                         Diff::Empty
                     } else {
                         *self = Self::Some(prevfd, nextepoch, wants);
-                        Diff::Modify { fd: prevfd, wants }
+                        Diff::Modify { fd, wants }
                     }
                 } else {
                     *self = Self::Some(fd.as_raw_fd(), nextepoch, wants);
-                    Diff::Replace {
-                        prevfd,
-                        newfd: fd.as_raw_fd(),
-                        wants,
-                    }
+                    Diff::Add { fd, wants }
                 }
             }
         }
@@ -72,23 +65,9 @@ impl FdState {
 
 #[must_use]
 #[derive(Debug)]
-enum Diff {
-    Add {
-        fd: RawFd,
-        wants: Wants,
-    },
-    Delete {
-        fd: RawFd,
-    },
-    Modify {
-        fd: RawFd,
-        wants: Wants,
-    },
-    Replace {
-        prevfd: RawFd,
-        newfd: RawFd,
-        wants: Wants,
-    },
+enum Diff<'fd> {
+    Add { fd: BorrowedFd<'fd>, wants: Wants },
+    Modify { fd: BorrowedFd<'fd>, wants: Wants },
     Empty,
 }
 

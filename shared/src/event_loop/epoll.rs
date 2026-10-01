@@ -38,23 +38,11 @@ impl EventLoop {
     ) -> Result<(), EventLoopError> {
         match self.fd.transition(wants) {
             Diff::Add { fd, wants } => {
-                self.add(unsafe { BorrowedFd::borrow_raw(fd) }, Self::FD_ID, wants)
+                self.add(fd, Self::FD_ID, wants)
                     .map_err(EventLoopError::Sync)?;
-            }
-            Diff::Delete { fd } => {
-                self.delete(unsafe { BorrowedFd::borrow_raw(fd) });
             }
             Diff::Modify { fd, wants } => {
-                self.modify(unsafe { BorrowedFd::borrow_raw(fd) }, Self::FD_ID, wants)
-                    .map_err(EventLoopError::Sync)?;
-            }
-            Diff::Replace {
-                prevfd,
-                newfd,
-                wants,
-            } => {
-                self.delete(unsafe { BorrowedFd::borrow_raw(prevfd) });
-                self.add(unsafe { BorrowedFd::borrow_raw(newfd) }, Self::FD_ID, wants)
+                self.modify(fd, Self::FD_ID, wants)
                     .map_err(EventLoopError::Sync)?;
             }
             Diff::Empty => {}
@@ -112,10 +100,6 @@ impl EventLoop {
             Self::event_flags(wants),
         )?;
         Ok(())
-    }
-
-    fn delete(&self, fd: BorrowedFd<'_>) {
-        let _ = epoll::delete(&self.epoll_fd, fd);
     }
 
     fn modify(&self, fd: BorrowedFd<'_>, id: u64, wants: Wants) -> Result<(), Errno> {
