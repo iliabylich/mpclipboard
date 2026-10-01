@@ -17,6 +17,8 @@ use actions::reconnect;
 mod maybe_tls_stream;
 use maybe_tls_stream::MaybeTlsStream;
 
+mod std_read_write_fd;
+
 #[derive(Debug)]
 pub enum State {
     Connecting(u64),
