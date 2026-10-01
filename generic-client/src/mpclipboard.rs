@@ -81,14 +81,14 @@ impl MPClipboard {
         Self::new(config)
     }
 
-    pub fn read(&mut self) -> Result<Option<Output>> {
+    pub fn read(&mut self) -> Result<Output> {
         let polled = self
             .event_loop
             .drain_events_without_waiting()
             .context("failed to drain event loop")?;
 
         let prev_connectivity = Connectivity::new(&self.conn);
-        let message = if let Some(message) = self.drain(&polled)
+        let text = if let Some(message) = self.drain(&polled)
             && self.store.add(message)
         {
             Some(message.text_as_str().to_string())
@@ -106,12 +106,7 @@ impl MPClipboard {
             Some(next_connectivity)
         };
 
-        Ok(match (connectivity, message) {
-            (Some(connectivity), Some(text)) => Some(Output::Both { connectivity, text }),
-            (Some(connectivity), None) => Some(Output::ConnectivityChanged { connectivity }),
-            (None, Some(text)) => Some(Output::NewText { text }),
-            (None, None) => None,
-        })
+        Ok(Output { connectivity, text })
     }
 
     fn drain(&mut self, polled: &EventLoopResult) -> Option<Message> {

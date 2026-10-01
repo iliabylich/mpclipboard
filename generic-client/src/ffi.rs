@@ -97,15 +97,14 @@ pub enum COutput {
 }
 impl From<Output> for COutput {
     fn from(output: Output) -> Self {
-        match output {
-            Output::ConnectivityChanged { connectivity } => {
-                Self::ConnectivityChanged { connectivity }
-            }
-            Output::NewText { text } => Self::NewText { text: text.into() },
-            Output::Both { connectivity, text } => Self::Both {
+        match (output.connectivity, output.text) {
+            (Some(connectivity), None) => Self::ConnectivityChanged { connectivity },
+            (None, Some(text)) => Self::NewText { text: text.into() },
+            (Some(connectivity), Some(text)) => Self::Both {
                 connectivity,
                 text: text.into(),
             },
+            (None, None) => Self::Ignore,
         }
     }
 }
@@ -113,8 +112,7 @@ impl From<Output> for COutput {
 #[unsafe(no_mangle)]
 pub extern "C" fn mpclipboard_read(mpclipboard: &mut MPClipboard) -> COutput {
     match mpclipboard.read() {
-        Ok(Some(output)) => output.into(),
-        Ok(None) => COutput::Ignore,
+        Ok(output) => output.into(),
         Err(err) => {
             log::error!("error at FFI boundary: {err:?}");
             COutput::Error

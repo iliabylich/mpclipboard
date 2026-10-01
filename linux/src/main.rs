@@ -57,24 +57,18 @@ fn main() -> Result<()> {
             tray.handle(message, &mut queue)?;
         }
 
-        if ready.mpclipboard.readable
-            && let Some(output) = mpclipboard.read()?
-        {
+        if ready.mpclipboard.readable {
+            let output = mpclipboard.read()?;
             log::trace!("{output:?}");
-            match output {
-                Output::ConnectivityChanged { connectivity } => {
-                    tray.set_connectivity(connectivity, &mut queue)?;
-                }
-                Output::NewText { text } => {
-                    tray.push(format!("R {text}"), &mut queue)?;
-                    clipboard.offer_text(text)?;
-                }
-                Output::Both { connectivity, text } => {
-                    tray.set_connectivity(connectivity, &mut queue)?;
+            let Output { connectivity, text } = output;
 
-                    tray.push(format!("R {text}"), &mut queue)?;
-                    clipboard.offer_text(text)?;
-                }
+            if let Some(connectivity) = connectivity {
+                tray.set_connectivity(connectivity, &mut queue)?;
+            }
+
+            if let Some(text) = text {
+                tray.push(format!("R {text}"), &mut queue)?;
+                clipboard.offer_text(text)?;
             }
         }
 

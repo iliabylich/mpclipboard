@@ -36,18 +36,13 @@ fn main() -> Result<()> {
         let stdin_revents = REvents::new(fds[1].revents())?;
 
         assert!(!mpclipboard_revents.writable);
-        if mpclipboard_revents.readable
-            && let Some(output) = mpclipboard.read()?
-        {
-            match output {
-                Output::ConnectivityChanged { connectivity } => {
-                    println!("[c] {connectivity:?}")
-                }
-                Output::NewText { text } => println!("[{text}]"),
-                Output::Both { connectivity, text } => {
-                    println!("[c] {connectivity:?}");
-                    println!("[{text}]");
-                }
+        if mpclipboard_revents.readable {
+            let Output { connectivity, text } = mpclipboard.read()?;
+            if let Some(connectivity) = connectivity {
+                println!("[c] {connectivity:?}");
+            }
+            if let Some(text) = text {
+                println!("[{text}]");
             }
         }
 
