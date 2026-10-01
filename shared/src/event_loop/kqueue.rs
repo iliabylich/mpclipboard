@@ -1,25 +1,29 @@
 use super::{Diff, Epoch, EventLoopError, EventLoopResult, FdState};
 use crate::Wants;
-use core::{ptr, time::Duration};
-use rustix::{event::kqueue as kq, io::Errno};
-use std::os::fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd, RawFd};
+use nix::sys::{
+    event::{EvFlags, EventFilter, FilterFlag, KEvent, Kqueue},
+    time::TimeSpec,
+};
+use rustix::io::Errno;
+use std::os::fd::{AsFd, AsRawFd, BorrowedFd, RawFd};
 
 pub struct EventLoop {
-    kqueue_fd: OwnedFd,
+    kqueue: Kqueue,
     time: u64,
     fd: FdState,
 }
 
 impl EventLoop {
-    const TIMER_ID: isize = 1;
-    const FD_ID: usize = 2;
-    const INITIAL_TIMER_ID: isize = 3;
+    const TIMER_ID: usize = 1;
+    const INITIAL_TIMER_ID: usize = 2;
 
     pub fn new() -> Result<Self, EventLoopError> {
-        let kqueue_fd = kq::kqueue().map_err(EventLoopError::Create)?;
+        let kqueue = Kqueue::new()
+            .map_err(errno)
+            .map_err(EventLoopError::Create)?;
 
         let this = Self {
-            kqueue_fd,
+            kqueue,
             time: 0,
             fd: FdState::new(),
         };
@@ -59,24 +63,22 @@ impl EventLoop {
         };
 
         for event in events.iter().take(len) {
-            match (event.filter(), event.udata() as usize) {
-                (kq::EventFilter::Timer { ident, .. }, _) if ident == Self::TIMER_ID => {
+            match (event.filter(), event.ident()) {
+                (Ok(EventFilter::EVFILT_TIMER), Self::TIMER_ID) => {
                     out.time = Some(self.drain_timer(event));
                 }
-                (kq::EventFilter::Timer { ident, .. }, _) if ident == Self::INITIAL_TIMER_ID => {
+                (Ok(EventFilter::EVFILT_TIMER), Self::INITIAL_TIMER_ID) => {
                     out.time = Some(self.time);
                 }
-                (kq::EventFilter::Read(_) | kq::EventFilter::Write(_), tag)
-                    if tag == Self::FD_ID =>
-                {
-                    let filter = event.filter();
-                    let flags = event.flags();
+                (Ok(filter @ (EventFilter::EVFILT_READ | EventFilter::EVFILT_WRITE)), _) => {
                     let (mut readable, mut writable, mut has_error) =
                         out.fd.unwrap_or((false, false, false));
 
-                    readable |= matches!(filter, kq::EventFilter::Read(_));
-                    writable |= matches!(filter, kq::EventFilter::Write(_));
-                    has_error |= flags.intersects(kq::EventFlags::ERROR | kq::EventFlags::EOF);
+                    readable |= filter == EventFilter::EVFILT_READ;
+                    writable |= filter == EventFilter::EVFILT_WRITE;
+                    has_error |= event
+                        .flags()
+                        .intersects(EvFlags::EV_ERROR | EvFlags::EV_EOF);
 
                     out.fd = Some((readable, writable, has_error));
                 }
@@ -87,24 +89,24 @@ impl EventLoop {
         Ok(out)
     }
 
-    fn empty_event() -> kq::Event {
-        kq::Event::new(
-            kq::EventFilter::Timer {
-                ident: 0,
-                timer: None,
-            },
-            kq::EventFlags::empty(),
-            ptr::null_mut(),
+    fn empty_event() -> KEvent {
+        KEvent::new(
+            0,
+            EventFilter::EVFILT_TIMER,
+            EvFlags::empty(),
+            FilterFlag::empty(),
+            0,
+            0,
         )
     }
 
     fn add(&self, fd: RawFd, wants: Wants) -> Result<(), Errno> {
-        self.update_fd(fd, wants, kq::EventFlags::ADD | kq::EventFlags::ENABLE)
+        self.update_fd(fd, wants, EvFlags::EV_ADD | EvFlags::EV_ENABLE)
     }
 
     fn delete(&self, fd: RawFd) {
-        self.delete_filter(kq::EventFilter::Read(fd));
-        self.delete_filter(kq::EventFilter::Write(fd));
+        self.delete_filter(fd, EventFilter::EVFILT_READ);
+        self.delete_filter(fd, EventFilter::EVFILT_WRITE);
     }
 
     fn modify(&self, fd: RawFd, wants: Wants) -> Result<(), Errno> {
@@ -112,9 +114,9 @@ impl EventLoop {
         self.add(fd, wants)
     }
 
-    fn update_fd(&self, fd: RawFd, wants: Wants, flags: kq::EventFlags) -> Result<(), Errno> {
-        let read = Self::event(kq::EventFilter::Read(fd), flags);
-        let write = Self::event(kq::EventFilter::Write(fd), flags);
+    fn update_fd(&self, fd: RawFd, wants: Wants, flags: EvFlags) -> Result<(), Errno> {
+        let read = Self::event(fd, EventFilter::EVFILT_READ, flags);
+        let write = Self::event(fd, EventFilter::EVFILT_WRITE, flags);
 
         match wants {
             Wants::ReadWrite => self.apply(&[read, write]),
@@ -123,46 +125,51 @@ impl EventLoop {
         }
     }
 
-    fn delete_filter(&self, filter: kq::EventFilter) {
-        let event = Self::event(filter, kq::EventFlags::DELETE);
+    fn delete_filter(&self, fd: RawFd, filter: EventFilter) {
+        let event = Self::event(fd, filter, EvFlags::EV_DELETE);
         let _ = self.apply(&[event]);
     }
 
-    fn event(filter: kq::EventFilter, flags: kq::EventFlags) -> kq::Event {
-        kq::Event::new(filter, flags, Self::FD_ID as *mut _)
+    fn event(fd: RawFd, filter: EventFilter, flags: EvFlags) -> KEvent {
+        let ident =
+            usize::try_from(fd).unwrap_or_else(|_| unreachable!("open fds are never negative"));
+        KEvent::new(ident, filter, flags, FilterFlag::empty(), 0, 0)
     }
 
-    fn apply(&self, changes: &[kq::Event]) -> Result<(), Errno> {
-        let mut out: [kq::Event; 0] = [];
+    fn apply(&self, changes: &[KEvent]) -> Result<(), Errno> {
+        let mut out: [KEvent; 0] = [];
         self.kevent(changes, &mut out)?;
         Ok(())
     }
 
-    fn kevent(&self, changes: &[kq::Event], out: &mut [kq::Event]) -> Result<usize, Errno> {
-        unsafe { kq::kevent(&self.kqueue_fd, changes, out, Some(Duration::ZERO)) }
+    fn kevent(&self, changes: &[KEvent], out: &mut [KEvent]) -> Result<usize, Errno> {
+        let timeout = *TimeSpec::new(0, 0).as_ref();
+        self.kqueue
+            .kevent(changes, out, Some(timeout))
+            .map_err(errno)
     }
 
     fn add_timer(&self) -> Result<(), Errno> {
-        let periodic = kq::Event::new(
-            kq::EventFilter::Timer {
-                ident: Self::TIMER_ID,
-                timer: Some(Duration::from_secs(1)),
-            },
-            kq::EventFlags::ADD | kq::EventFlags::ENABLE,
-            ptr::null_mut(),
+        let periodic = KEvent::new(
+            Self::TIMER_ID,
+            EventFilter::EVFILT_TIMER,
+            EvFlags::EV_ADD | EvFlags::EV_ENABLE,
+            FilterFlag::NOTE_SECONDS,
+            1,
+            0,
         );
-        let initial = kq::Event::new(
-            kq::EventFilter::Timer {
-                ident: Self::INITIAL_TIMER_ID,
-                timer: Some(Duration::from_nanos(1)),
-            },
-            kq::EventFlags::ADD | kq::EventFlags::ENABLE | kq::EventFlags::ONESHOT,
-            ptr::null_mut(),
+        let initial = KEvent::new(
+            Self::INITIAL_TIMER_ID,
+            EventFilter::EVFILT_TIMER,
+            EvFlags::EV_ADD | EvFlags::EV_ENABLE | EvFlags::EV_ONESHOT,
+            FilterFlag::NOTE_NSECONDS,
+            1,
+            0,
         );
         self.apply(&[periodic, initial])
     }
 
-    fn drain_timer(&mut self, event: &kq::Event) -> u64 {
+    fn drain_timer(&mut self, event: &KEvent) -> u64 {
         let count = u64::try_from(event.data()).unwrap_or(1).max(1);
         let time = self
             .time
@@ -173,14 +180,18 @@ impl EventLoop {
     }
 }
 
+const fn errno(errno: nix::errno::Errno) -> Errno {
+    Errno::from_raw_os_error(errno as i32)
+}
+
 impl AsFd for EventLoop {
     fn as_fd(&self) -> BorrowedFd<'_> {
-        self.kqueue_fd.as_fd()
+        self.kqueue.as_fd()
     }
 }
 
 impl AsRawFd for EventLoop {
     fn as_raw_fd(&self) -> RawFd {
-        self.kqueue_fd.as_raw_fd()
+        self.kqueue.as_fd().as_raw_fd()
     }
 }

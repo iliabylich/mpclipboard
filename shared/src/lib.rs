@@ -1,4 +1,5 @@
 // #![no_std]
+#![forbid(unsafe_code)]
 #![warn(trivial_casts)]
 #![warn(trivial_numeric_casts)]
 #![warn(unused_qualifications)]
