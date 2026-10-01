@@ -8,8 +8,5 @@ sys_includes = ["stdint.h", "stdbool.h", "stddef.h"]
 [enum]
 rename_variants = "QualifiedScreamingSnakeCase"
 
-[export.rename]
-"COutput" = "Output"
-
 [export]
 prefix = "mpclipboard_"

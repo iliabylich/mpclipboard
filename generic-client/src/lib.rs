@@ -20,8 +20,6 @@ pub use connectivity::Connectivity;
 pub use mpclipboard::MPClipboard;
 pub use output::Output;
 
-pub use ffi::COutput;
-
 mod config;
 mod connection;
 mod connectivity;

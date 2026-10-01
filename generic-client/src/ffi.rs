@@ -1,4 +1,4 @@
-use crate::{Connectivity, MPClipboard, Output};
+use crate::{Connectivity, MPClipboard};
 use anyhow::{Context, Result};
 use std::{ffi::c_char, os::fd::AsRawFd};
 
@@ -93,14 +93,14 @@ pub extern "C" fn mpclipboard_get_fd(mpclipboard: &MPClipboard) -> i32 {
 }
 
 #[repr(C)]
-pub struct COutput {
+pub struct Output {
     error: bool,
     has_connectivity: bool,
     connectivity: Connectivity,
     text: OwnedString,
 }
 
-impl COutput {
+impl Output {
     const fn error() -> Self {
         Self {
             error: true,
@@ -111,8 +111,8 @@ impl COutput {
     }
 }
 
-impl From<Output> for COutput {
-    fn from(output: Output) -> Self {
+impl From<crate::Output> for Output {
+    fn from(output: crate::Output) -> Self {
         let (has_connectivity, connectivity) = match output.connectivity {
             Some(connectivity) => (true, connectivity),
             None => (false, Connectivity::Disconnected),
@@ -132,12 +132,12 @@ impl From<Output> for COutput {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn mpclipboard_read(mpclipboard: &mut MPClipboard) -> COutput {
+pub extern "C" fn mpclipboard_read(mpclipboard: &mut MPClipboard) -> Output {
     match mpclipboard.read() {
         Ok(output) => output.into(),
         Err(err) => {
             log::error!("error at FFI boundary: {err:?}");
-            COutput::error()
+            Output::error()
         }
     }
 }
