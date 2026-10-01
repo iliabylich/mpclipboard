@@ -61,7 +61,7 @@ mpclipboard_MPClipboard *mpclipboard_new_with_local_config(void);
 
 mpclipboard_MPClipboard *mpclipboard_new_with_xdg_config(void);
 
-int32_t mpclipboard_get_fd(mpclipboard_MPClipboard *mpclipboard);
+int32_t mpclipboard_get_fd(const mpclipboard_MPClipboard *mpclipboard);
 
 mpclipboard_Output mpclipboard_read(mpclipboard_MPClipboard *mpclipboard);
 

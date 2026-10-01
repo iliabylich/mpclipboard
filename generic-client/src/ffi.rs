@@ -8,7 +8,7 @@ macro_rules! try_or_null {
             Ok(v) => v,
             Err(err) => {
                 log::error!("error at FFI boundary: {err:?}");
-                return core::ptr::null_mut();
+                return None;
             }
         }
     };
@@ -33,30 +33,29 @@ pub extern "C" fn mpclipboard_new_inline(
     token_len: usize,
     id_ptr: *const c_char,
     id_len: usize,
-) -> *mut MPClipboard {
+) -> Option<Box<MPClipboard>> {
     let url = try_or_null!(bytes_to_str(url_ptr, url_len));
     let token = try_or_null!(bytes_to_str(token_ptr, token_len));
     let id = try_or_null!(bytes_to_str(id_ptr, id_len));
 
     let mpclipboard = try_or_null!(MPClipboard::new_inline(url, token, id));
-    Box::leak(Box::new(mpclipboard))
+    Some(Box::new(mpclipboard))
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn mpclipboard_new_with_local_config() -> *mut MPClipboard {
+pub extern "C" fn mpclipboard_new_with_local_config() -> Option<Box<MPClipboard>> {
     let mpclipboard = try_or_null!(MPClipboard::new_with_local_config());
-    Box::leak(Box::new(mpclipboard))
+    Some(Box::new(mpclipboard))
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn mpclipboard_new_with_xdg_config() -> *mut MPClipboard {
+pub extern "C" fn mpclipboard_new_with_xdg_config() -> Option<Box<MPClipboard>> {
     let mpclipboard = try_or_null!(MPClipboard::new_with_xdg_config());
-    Box::leak(Box::new(mpclipboard))
+    Some(Box::new(mpclipboard))
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn mpclipboard_get_fd(mpclipboard: *mut MPClipboard) -> i32 {
-    let mpclipboard = unsafe { &*mpclipboard };
+pub extern "C" fn mpclipboard_get_fd(mpclipboard: &MPClipboard) -> i32 {
     mpclipboard.as_raw_fd()
 }
 
@@ -100,8 +99,7 @@ impl From<Output> for COutput {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn mpclipboard_read(mpclipboard: *mut MPClipboard) -> COutput {
-    let mpclipboard = unsafe { &mut *mpclipboard };
+pub extern "C" fn mpclipboard_read(mpclipboard: &mut MPClipboard) -> COutput {
     match mpclipboard.read() {
         Ok(Some(output)) => output.into(),
         Ok(None) => COutput::Ignore,
@@ -122,13 +120,17 @@ pub enum PushResult {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn mpclipboard_push_text(
-    mpclipboard: *mut MPClipboard,
+    mpclipboard: &mut MPClipboard,
     ptr: *const c_char,
     len: usize,
 ) -> PushResult {
-    let mpclipboard = unsafe { &mut *mpclipboard };
-    let bytes = unsafe { core::slice::from_raw_parts(ptr.cast::<u8>(), len) };
-    let text = unsafe { std::str::from_utf8_unchecked(bytes) };
+    let text = match bytes_to_str(ptr, len) {
+        Ok(text) => text,
+        Err(err) => {
+            log::error!("error at FFI boundary: {err:?}");
+            return PushResult::Error;
+        }
+    };
 
     match mpclipboard.push_text(text) {
         Ok(true) => PushResult::Pushed,
@@ -141,8 +143,8 @@ pub extern "C" fn mpclipboard_push_text(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn mpclipboard_drop(mpclipboard: *mut MPClipboard) {
-    unsafe { core::ptr::drop_in_place(mpclipboard) };
+pub extern "C" fn mpclipboard_drop(mpclipboard: Box<MPClipboard>) {
+    drop(mpclipboard);
 }
 
 #[unsafe(no_mangle)]
