@@ -18,21 +18,21 @@ pub struct Timerfd {
 impl Timerfd {
     pub fn new() -> Result<Self, Errno> {
         let fd = timerfd_create(
-            TimerfdClockId::Realtime,
+            TimerfdClockId::Monotonic,
             TimerfdFlags::CLOEXEC | TimerfdFlags::NONBLOCK,
         )?;
 
         timerfd_settime(
             &fd,
-            TimerfdTimerFlags::ABSTIME,
+            TimerfdTimerFlags::empty(),
             &Itimerspec {
                 it_interval: Timespec {
                     tv_sec: 1,
                     tv_nsec: 0,
                 },
                 it_value: Timespec {
-                    tv_sec: 1,
-                    tv_nsec: 0,
+                    tv_sec: 0,
+                    tv_nsec: 1,
                 },
             },
         )?;

@@ -20,7 +20,7 @@ impl EventLoop {
 
         let this = Self {
             kqueue_fd,
-            time: Self::now()?,
+            time: 0,
             fd: FdState::new(),
         };
         this.add_timer().map_err(EventLoopError::AddTimer)?;
@@ -171,16 +171,9 @@ impl EventLoop {
         let time = self
             .time
             .checked_add(count)
-            .unwrap_or_else(|| unreachable!("seconds since 1970 never overflow u64"));
+            .unwrap_or_else(|| unreachable!("seconds of uptime never overflow u64"));
         self.time = time;
         self.time
-    }
-
-    fn now() -> Result<u64, EventLoopError> {
-        Ok(std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_err(|_| EventLoopError::ClockBeforeUnixEpoch)?
-            .as_secs())
     }
 }
 

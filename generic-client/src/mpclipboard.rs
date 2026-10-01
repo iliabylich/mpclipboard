@@ -36,14 +36,10 @@ impl MPClipboard {
     fn new(config: Config) -> Result<Self> {
         log::info!("Running with config {config:?}");
         let event_loop = EventLoop::new().context("event loop has crashed")?;
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_else(|_| unreachable!("time goes backwards"))
-            .as_secs();
 
         let mut this = Self {
             event_loop,
-            now,
+            now: 0,
             conn: Connection::new(),
             epoch: Epoch::new(),
             store: Store::empty(),

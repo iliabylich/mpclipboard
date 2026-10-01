@@ -28,7 +28,7 @@ pub enum State {
 
 #[derive(Debug)]
 pub enum Connection {
-    Disconnected(u64),
+    Disconnected(Option<u64>),
     State {
         fd: OwnedFd,
         stream: MaybeTlsStream,
@@ -40,7 +40,7 @@ impl Connection {
     const FREEZE_TIME_IN_SECS: u64 = 3;
 
     pub(crate) const fn new() -> Self {
-        Self::Disconnected(0)
+        Self::Disconnected(None)
     }
 
     const fn name(&self) -> &'static str {
@@ -57,7 +57,7 @@ impl Connection {
     }
 
     pub(crate) fn force_disconnect(&mut self, now: u64) {
-        *self = Self::Disconnected(now);
+        *self = Self::Disconnected(Some(now));
     }
 
     pub(crate) const fn is_disconnected(&self) -> bool {
@@ -84,14 +84,18 @@ impl Connection {
 
             Failed(err) => {
                 log::error!("failed to connect: {err:?}");
-                Self::Disconnected(now)
+                Self::Disconnected(Some(now))
             }
         }
     }
 
     pub(crate) fn tick(&mut self, now: u64, config: &Config) {
         match self {
-            Self::Disconnected(disconnected_at) => {
+            Self::Disconnected(None) => {
+                *self = Self::reconnect(now, config);
+            }
+
+            Self::Disconnected(Some(disconnected_at)) => {
                 let seconds_passed = now
                     .checked_sub(*disconnected_at)
                     .unwrap_or_else(|| unreachable!("time goes backwards"));
@@ -117,7 +121,7 @@ impl Connection {
 
                 if seconds_passed > Self::FREEZE_TIME_IN_SECS {
                     log::error!("Stuck in {}, disconnecting...", self.name());
-                    *self = Self::Disconnected(now);
+                    *self = Self::Disconnected(Some(now));
                 }
             }
         }
@@ -149,7 +153,7 @@ impl Connection {
                         Pending(()) => *last_activity_at = now,
                         Failed(err) => {
                             log::error!("failed to finish TLS handshake: {err:?}");
-                            *self = Self::Disconnected(now);
+                            *self = Self::Disconnected(Some(now));
                         }
                     }
                 }
@@ -162,7 +166,7 @@ impl Connection {
                         Pending(()) => *last_activity_at = now,
                         Failed(err) => {
                             log::error!("failed to read upgrade response: {err:?}");
-                            *self = Self::Disconnected(now);
+                            *self = Self::Disconnected(Some(now));
                         }
                     }
                 }
@@ -171,7 +175,7 @@ impl Connection {
                     Done(message) => return Some(message),
                     Failed(err) => {
                         log::error!("failed to read message: {err:?}");
-                        *self = Self::Disconnected(now);
+                        *self = Self::Disconnected(Some(now));
                     }
                     Pending(()) => {}
                 },
@@ -201,7 +205,7 @@ impl Connection {
                 State::Connecting { .. } => {
                     if let Err(err) = finish_connecting(fd) {
                         log::error!("failed to finish connecting: {err:?}");
-                        *self = Self::Disconnected(now);
+                        *self = Self::Disconnected(Some(now));
                     } else if stream.is_tls() {
                         *active = State::TlsHandshake(now);
                     } else {
@@ -216,7 +220,7 @@ impl Connection {
                         Pending(()) => *last_activity_at = now,
                         Failed(err) => {
                             log::error!("failed to finish TLS handshake {err:?}");
-                            *self = Self::Disconnected(now);
+                            *self = Self::Disconnected(Some(now));
                         }
                     }
                 }
@@ -230,7 +234,7 @@ impl Connection {
                         Pending(()) => *last_activity_at = now,
                         Failed(err) => {
                             log::error!("failed to write upgrade request: {err:?}");
-                            *self = Self::Disconnected(now);
+                            *self = Self::Disconnected(Some(now));
                         }
                     }
                 }
@@ -239,7 +243,7 @@ impl Connection {
                     Ok(()) => *last_activity_at = now,
                     Err(err) => {
                         log::error!("failed to flush TLS data: {err:?}");
-                        *self = Self::Disconnected(now);
+                        *self = Self::Disconnected(Some(now));
                     }
                 },
 
@@ -247,7 +251,7 @@ impl Connection {
                     Done(()) | Pending(()) => {}
                     Failed(err) => {
                         log::error!("failed to write message: {err:?}");
-                        *self = Self::Disconnected(now);
+                        *self = Self::Disconnected(Some(now));
                     }
                 },
             },

@@ -100,7 +100,6 @@ pub enum EventLoopError {
     ReadTimer(Errno),
     Sync(Errno),
     Wait(Errno),
-    ClockBeforeUnixEpoch,
 }
 
 impl core::fmt::Display for EventLoopError {
@@ -112,7 +111,6 @@ impl core::fmt::Display for EventLoopError {
             Self::ReadTimer(errno) => write!(f, "failed to read timer: {errno:?}"),
             Self::Sync(errno) => write!(f, "failed to register connection fd: {errno:?}"),
             Self::Wait(errno) => write!(f, "failed to wait for events: {errno:?}"),
-            Self::ClockBeforeUnixEpoch => write!(f, "system clock is set before 1970"),
         }
     }
 }

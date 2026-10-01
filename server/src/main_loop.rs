@@ -2,7 +2,7 @@ use crate::{
     as_poll_fd::AsPollFd, client::Client, config::Config, fd_set::FdSet, pre_sink::PreSink,
     pre_source::PreSource, tcp_listener::TcpListener,
 };
-use anyhow::{Context, Result};
+use anyhow::Result;
 use mpclipboard_shared::{
     ID, Message, PROTOCOL_VERSION, REvents, Store, Timerfd, UpgradeRequest, enable_tcp_keep_alive,
     prelude::*,
@@ -30,11 +30,6 @@ impl MainLoop {
         let listener = TcpListener::new(config.url.resolve()?)?;
 
         let timer = Timerfd::new()?;
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .context("time goes backwards")?
-            .as_secs();
-        log::trace!("start time: {now}");
 
         let pre_sources = FdSet::<20, PreSource>::new();
         let pre_sinks = FdSet::<20, PreSink>::new();
@@ -43,7 +38,7 @@ impl MainLoop {
         Ok(Self {
             listener,
             timer,
-            now,
+            now: 0,
             config: *config,
             store: Store::empty(),
 
