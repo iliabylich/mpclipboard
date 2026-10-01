@@ -24,23 +24,17 @@ struct Output {
     let text: String?
 
     static func from(_ output: mpclipboard_Output) -> Self? {
-        switch output.tag {
-        case MPCLIPBOARD_OUTPUT_CONNECTIVITY_CHANGED:
-            return Output(connectivity: Connectivity.from(output.CONNECTIVITY_CHANGED.connectivity), text: nil)
-        case MPCLIPBOARD_OUTPUT_NEW_TEXT:
-            return Output(connectivity: nil, text: string(output.NEW_TEXT.text))
-        case MPCLIPBOARD_OUTPUT_BOTH:
-            return Output(
-                connectivity: Connectivity.from(output.BOTH.connectivity),
-                text: string(output.BOTH.text)
-            )
-        case MPCLIPBOARD_OUTPUT_IGNORE:
-            return nil
-        case MPCLIPBOARD_OUTPUT_ERROR:
+        if output.error {
             fatalError("MPClipboard return error from .read()")
-        default:
-            fatalError("unsupported Output")
         }
+
+        let connectivity = output.has_connectivity ? Connectivity.from(output.connectivity) : nil
+        let text = output.text.ptr != nil ? string(output.text) : nil
+
+        if connectivity == nil && text == nil {
+            return nil
+        }
+        return Output(connectivity: connectivity, text: text)
     }
 
     private static func string(_ text: mpclipboard_OwnedString) -> String {

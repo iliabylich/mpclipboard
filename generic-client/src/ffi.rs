@@ -33,6 +33,15 @@ pub struct OwnedString {
     len: usize,
 }
 
+impl OwnedString {
+    const fn null() -> Self {
+        Self {
+            ptr: core::ptr::null_mut(),
+            len: 0,
+        }
+    }
+}
+
 impl From<String> for OwnedString {
     fn from(s: String) -> Self {
         let s = s.into_boxed_str().into_boxed_bytes();
@@ -44,6 +53,9 @@ impl From<String> for OwnedString {
 
 impl Drop for OwnedString {
     fn drop(&mut self) {
+        if self.ptr.is_null() {
+            return;
+        }
         let bytes: *mut [u8] = core::ptr::slice_from_raw_parts_mut(self.ptr.cast(), self.len);
         drop(unsafe { Box::from_raw(bytes) });
     }
@@ -81,30 +93,40 @@ pub extern "C" fn mpclipboard_get_fd(mpclipboard: &MPClipboard) -> i32 {
 }
 
 #[repr(C)]
-pub enum COutput {
-    ConnectivityChanged {
-        connectivity: Connectivity,
-    },
-    NewText {
-        text: OwnedString,
-    },
-    Both {
-        connectivity: Connectivity,
-        text: OwnedString,
-    },
-    Ignore,
-    Error,
+pub struct COutput {
+    error: bool,
+    has_connectivity: bool,
+    connectivity: Connectivity,
+    text: OwnedString,
 }
+
+impl COutput {
+    const fn error() -> Self {
+        Self {
+            error: true,
+            has_connectivity: false,
+            connectivity: Connectivity::Disconnected,
+            text: OwnedString::null(),
+        }
+    }
+}
+
 impl From<Output> for COutput {
     fn from(output: Output) -> Self {
-        match (output.connectivity, output.text) {
-            (Some(connectivity), None) => Self::ConnectivityChanged { connectivity },
-            (None, Some(text)) => Self::NewText { text: text.into() },
-            (Some(connectivity), Some(text)) => Self::Both {
-                connectivity,
-                text: text.into(),
-            },
-            (None, None) => Self::Ignore,
+        let (has_connectivity, connectivity) = match output.connectivity {
+            Some(connectivity) => (true, connectivity),
+            None => (false, Connectivity::Disconnected),
+        };
+        let text = match output.text {
+            Some(text) => OwnedString::from(text),
+            None => OwnedString::null(),
+        };
+
+        Self {
+            error: false,
+            has_connectivity,
+            connectivity,
+            text,
         }
     }
 }
@@ -115,7 +137,7 @@ pub extern "C" fn mpclipboard_read(mpclipboard: &mut MPClipboard) -> COutput {
         Ok(output) => output.into(),
         Err(err) => {
             log::error!("error at FFI boundary: {err:?}");
-            COutput::Error
+            COutput::error()
         }
     }
 }

@@ -88,30 +88,17 @@ void print_connectivity(mpclipboard_Connectivity connectivity) {
 }
 
 void print_output(mpclipboard_Output output) {
-  switch (output.tag) {
-  case MPCLIPBOARD_OUTPUT_CONNECTIVITY_CHANGED: {
-    print_connectivity(output.CONNECTIVITY_CHANGED.connectivity);
-    break;
-  }
-  case MPCLIPBOARD_OUTPUT_NEW_TEXT: {
-    mpclipboard_OwnedString text = output.NEW_TEXT.text;
-    printf("%s%.*s%s\n", YELLOW, (int)text.len, text.ptr, NC);
-    mpclipboard_drop_str(text);
-    break;
-  }
-  case MPCLIPBOARD_OUTPUT_BOTH: {
-    print_connectivity(output.BOTH.connectivity);
-    mpclipboard_OwnedString text = output.BOTH.text;
-    printf("%s%.*s%s\n", YELLOW, (int)text.len, text.ptr, NC);
-    mpclipboard_drop_str(text);
-    break;
-  }
-  case MPCLIPBOARD_OUTPUT_IGNORE: {
-    break;
-  }
-  case MPCLIPBOARD_OUTPUT_ERROR: {
+  if (output.error) {
     fprintf(stderr, "mpclipboard_read() returned an error\n");
     abort();
   }
+
+  if (output.has_connectivity) {
+    print_connectivity(output.connectivity);
+  }
+
+  if (output.text.ptr != NULL) {
+    printf("%s%.*s%s\n", YELLOW, (int)output.text.len, output.text.ptr, NC);
+    mpclipboard_drop_str(output.text);
   }
 }

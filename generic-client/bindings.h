@@ -28,34 +28,11 @@ typedef struct {
   size_t len;
 } mpclipboard_OwnedString;
 
-typedef enum {
-  MPCLIPBOARD_OUTPUT_CONNECTIVITY_CHANGED,
-  MPCLIPBOARD_OUTPUT_NEW_TEXT,
-  MPCLIPBOARD_OUTPUT_BOTH,
-  MPCLIPBOARD_OUTPUT_IGNORE,
-  MPCLIPBOARD_OUTPUT_ERROR,
-} mpclipboard_Output_Tag;
-
 typedef struct {
-  mpclipboard_Connectivity connectivity;
-} mpclipboard_ConnectivityChanged_Body;
-
-typedef struct {
-  mpclipboard_OwnedString text;
-} mpclipboard_NewText_Body;
-
-typedef struct {
+  bool error;
+  bool has_connectivity;
   mpclipboard_Connectivity connectivity;
   mpclipboard_OwnedString text;
-} mpclipboard_Both_Body;
-
-typedef struct {
-  mpclipboard_Output_Tag tag;
-  union {
-    mpclipboard_ConnectivityChanged_Body CONNECTIVITY_CHANGED;
-    mpclipboard_NewText_Body NEW_TEXT;
-    mpclipboard_Both_Body BOTH;
-  };
 } mpclipboard_Output;
 
 mpclipboard_MPClipboard *mpclipboard_new_inline(mpclipboard_BorrowedString url,

@@ -127,28 +127,21 @@ JNIEXPORT jobject JNICALL Java_dev_ibylich_mpclipboard_Ffi_mpclipboard_1read(
       (mpclipboard_MPClipboard *)(intptr_t)mpclipboard_ptr;
   CHECK(mpclipboard != NULL, "mpclipboard pointer must not be null");
   mpclipboard_Output output = mpclipboard_read(mpclipboard);
+  CHECK(!output.error, "mpclipboard_read failed");
+
   jobject connectivity = NULL;
   jbyteArray text = NULL;
 
-  switch (output.tag) {
-  case MPCLIPBOARD_OUTPUT_CONNECTIVITY_CHANGED:
-    connectivity = box_int(env, (jint)output.CONNECTIVITY_CHANGED.connectivity);
-    break;
-  case MPCLIPBOARD_OUTPUT_NEW_TEXT:
-    text = new_jbytearray(env, output.NEW_TEXT.text);
-    break;
-  case MPCLIPBOARD_OUTPUT_BOTH:
-    connectivity = box_int(env, (jint)output.BOTH.connectivity);
-    text = new_jbytearray(env, output.BOTH.text);
-    break;
-  case MPCLIPBOARD_OUTPUT_IGNORE:
-    return NULL;
-  case MPCLIPBOARD_OUTPUT_ERROR:
-    FATAL("mpclipboard_read failed");
-  default:
-    FATAL("mpclipboard_read returned unknown output tag");
+  if (output.has_connectivity) {
+    connectivity = box_int(env, (jint)output.connectivity);
+  }
+  if (output.text.ptr != NULL) {
+    text = new_jbytearray(env, output.text);
   }
 
+  if (connectivity == NULL && text == NULL) {
+    return NULL;
+  }
   return new_pair(env, connectivity, text);
 }
 
