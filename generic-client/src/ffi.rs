@@ -7,7 +7,7 @@ macro_rules! try_or_null {
         match $v {
             Ok(v) => v,
             Err(err) => {
-                log::error!("error at FFI boundary: {err:?}");
+                log::error!("error at FFI boundary: {err}");
                 return None;
             }
         }
@@ -136,7 +136,7 @@ pub extern "C" fn mpclipboard_read(mpclipboard: &mut MPClipboard) -> Output {
     match mpclipboard.read() {
         Ok(output) => output.into(),
         Err(err) => {
-            log::error!("error at FFI boundary: {err:?}");
+            log::error!("error at FFI boundary: {err}");
             Output::error()
         }
     }
@@ -158,7 +158,7 @@ pub extern "C" fn mpclipboard_push_text(
     let text = match text.as_str() {
         Ok(text) => text,
         Err(err) => {
-            log::error!("error at FFI boundary: {err:?}");
+            log::error!("error at FFI boundary: {err}");
             return PushResult::Error;
         }
     };
@@ -167,7 +167,7 @@ pub extern "C" fn mpclipboard_push_text(
         Ok(true) => PushResult::Pushed,
         Ok(false) => PushResult::Dropped,
         Err(err) => {
-            log::error!("error at FFI boundary: {err:?}");
+            log::error!("error at FFI boundary: {err}");
             PushResult::Error
         }
     }

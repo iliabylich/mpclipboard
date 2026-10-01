@@ -1,8 +1,13 @@
 use crate::{
-    Connectivity, Output, config::Config, connection::Connection, logger::Logger, tls::TLS,
+    Connectivity, Output,
+    config::{Config, ConfigError},
+    connection::Connection,
+    logger::Logger,
+    tls::TLS,
 };
-use anyhow::{Context, Result};
-use mpclipboard_shared::{Epoch, EventLoop, EventLoopResult, Message, NonEmptyInlineString, Store};
+use mpclipboard_shared::{
+    Epoch, EventLoop, EventLoopError, EventLoopResult, Message, NonEmptyInlineString, Store,
+};
 use std::{
     os::fd::{AsFd, AsRawFd, BorrowedFd},
     sync::Once,
@@ -27,9 +32,9 @@ impl MPClipboard {
         });
     }
 
-    fn new(config: Config) -> Result<Self> {
+    fn new(config: Config) -> Result<Self, MPClipboardError> {
         log::info!("Running with config {config:?}");
-        let event_loop = EventLoop::new().context("event loop has crashed")?;
+        let event_loop = EventLoop::new().map_err(MPClipboardError::EventLoopError)?;
 
         let mut this = Self {
             event_loop,
@@ -43,43 +48,45 @@ impl MPClipboard {
         Ok(this)
     }
 
-    fn sync_event_loop(&mut self) -> Result<()> {
+    fn sync_event_loop(&mut self) -> Result<(), MPClipboardError> {
         let wants = self.conn.wants().map(|(fd, wants)| (fd, self.epoch, wants));
         self.event_loop
             .sync(wants)
-            .context("failed to update connection fd in event loop")
+            .map_err(MPClipboardError::EventLoopError)
     }
 
-    pub fn new_inline(url: &str, token: &str, id: &str) -> Result<Self> {
+    pub fn new_inline(url: &str, token: &str, id: &str) -> Result<Self, MPClipboardError> {
         Self::init_once();
-        let config = Config::new(url, token, id)?;
+        let config = Config::new(url, token, id).map_err(MPClipboardError::ConfigError)?;
         Self::new(config)
     }
 
-    pub fn new_with_local_config() -> Result<Self> {
+    pub fn new_with_local_config() -> Result<Self, MPClipboardError> {
         Self::init_once();
-        let config = Config::read_local_file()?;
+        let config = Config::read_local_file().map_err(MPClipboardError::ConfigError)?;
         Self::new(config)
     }
 
-    pub fn new_with_local_config_and_id_override(id: &str) -> Result<Self> {
+    pub fn new_with_local_config_and_id_override(id: &str) -> Result<Self, MPClipboardError> {
         Self::init_once();
-        let mut config = Config::read_local_file()?;
-        config.id = NonEmptyInlineString::new(id).context("malformed id override")?;
+        let mut config = Config::read_local_file().map_err(MPClipboardError::ConfigError)?;
+        config.id = NonEmptyInlineString::new(id)
+            .map_err(ConfigError::Id)
+            .map_err(MPClipboardError::ConfigError)?;
         Self::new(config)
     }
 
-    pub fn new_with_xdg_config() -> Result<Self> {
+    pub fn new_with_xdg_config() -> Result<Self, MPClipboardError> {
         Self::init_once();
-        let config = Config::read_in_xdg_config_dir()?;
+        let config = Config::read_in_xdg_config_dir().map_err(MPClipboardError::ConfigError)?;
         Self::new(config)
     }
 
-    pub fn read(&mut self) -> Result<Output> {
+    pub fn read(&mut self) -> Result<Output, MPClipboardError> {
         let polled = self
             .event_loop
             .drain_events_without_waiting()
-            .context("failed to drain event loop")?;
+            .map_err(MPClipboardError::EventLoopError)?;
 
         let prev_connectivity = Connectivity::new(&self.conn);
         let text = if let Some(message) = self.drain(&polled)
@@ -134,13 +141,14 @@ impl MPClipboard {
         out
     }
 
-    pub fn push_text(&mut self, text: &str) -> Result<bool> {
+    pub fn push_text(&mut self, text: &str) -> Result<bool, MPClipboardError> {
         if text.is_empty() {
             log::info!("Skipping empty text");
             return Ok(false);
         }
 
-        let text = NonEmptyInlineString::truncate(text)?;
+        let text = NonEmptyInlineString::truncate(text)
+            .unwrap_or_else(|_| unreachable!("non-empty text truncated to MAXLEN is always valid"));
         let message = Message::new(text);
 
         if !self.store.add(message) {
@@ -165,3 +173,20 @@ impl AsFd for MPClipboard {
         self.event_loop.as_fd()
     }
 }
+
+#[derive(Debug)]
+pub enum MPClipboardError {
+    ConfigError(ConfigError),
+    EventLoopError(EventLoopError),
+}
+
+impl core::fmt::Display for MPClipboardError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::ConfigError(err) => write!(f, "config error: {err}"),
+            Self::EventLoopError(err) => write!(f, "event loop error: {err}"),
+        }
+    }
+}
+
+impl core::error::Error for MPClipboardError {}

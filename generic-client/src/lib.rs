@@ -18,7 +18,8 @@
 
 pub use config::ConfigError;
 pub use connectivity::Connectivity;
-pub use mpclipboard::MPClipboard;
+pub use mpclipboard::{MPClipboard, MPClipboardError};
+pub use mpclipboard_shared::EventLoopError;
 pub use output::Output;
 
 mod config;

@@ -21,11 +21,13 @@ impl MPClipboard {
         PollFd::new(&self.mpclipboard, PollFlags::IN)
     }
 
-    pub(crate) fn read(&mut self) -> Result<Option<Output>> {
-        self.mpclipboard.read()
+    pub(crate) fn read(&mut self) -> Result<Output> {
+        let output = self.mpclipboard.read()?;
+        Ok(output)
     }
 
     pub(crate) fn push_text(&mut self, text: &str) -> Result<bool> {
-        self.mpclipboard.push_text(text)
+        let pushed = self.mpclipboard.push_text(text)?;
+        Ok(pushed)
     }
 }
