@@ -1,5 +1,5 @@
 use crate::{Connectivity, MPClipboard};
-use anyhow::{Context, Result};
+use core::str::Utf8Error;
 use std::{ffi::c_char, os::fd::AsRawFd};
 
 macro_rules! try_or_null {
@@ -21,9 +21,9 @@ pub struct BorrowedString {
 }
 
 impl BorrowedString {
-    fn as_str(&self) -> Result<&str> {
+    const fn as_str(&self) -> Result<&str, Utf8Error> {
         let bytes = unsafe { core::slice::from_raw_parts(self.ptr.cast::<u8>(), self.len) };
-        core::str::from_utf8(bytes).context("non-utf8 string")
+        core::str::from_utf8(bytes)
     }
 }
 

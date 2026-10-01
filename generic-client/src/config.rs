@@ -1,5 +1,7 @@
-use anyhow::{Context, Result};
-use mpclipboard_shared::{ConfigParser, ID, PROTOCOL_VERSION, Token, UpgradeRequest, Url};
+use mpclipboard_shared::{
+    ConfigParser, ConfigParserError, ID, NonEmptyInlineStringError, PROTOCOL_VERSION, Token,
+    UpgradeRequest, Url, UrlParseError,
+};
 use std::path::{Path, PathBuf};
 
 #[derive(Clone, Copy)]
@@ -20,39 +22,35 @@ impl std::fmt::Debug for Config {
 }
 
 impl Config {
-    pub(crate) fn new(url: &str, token: &str, id: &str) -> Result<Self> {
-        let url = Url::parse(url).context("malformed url")?;
-        let token = Token::new(token).context("token is too long")?;
-        let id = ID::new(id).context("id is too long")?;
+    pub(crate) fn new(url: &str, token: &str, id: &str) -> Result<Self, ConfigError> {
+        let url = Url::parse(url).map_err(ConfigError::Url)?;
+        let token = Token::new(token).map_err(ConfigError::Token)?;
+        let id = ID::new(id).map_err(ConfigError::Id)?;
 
         Ok(Self { url, token, id })
     }
 
-    fn read(path: impl AsRef<Path>) -> Result<Self> {
+    fn read(path: impl AsRef<Path>) -> Result<Self, ConfigError> {
         ConfigParser::parse(
             path.as_ref().as_os_str().as_encoded_bytes(),
             &mut [0; 1_024],
             ["url", "token", "id"],
             |[url, token, id]| Self::new(url, token, id),
         )
-        .context("failed to parse config")?
+        .map_err(ConfigError::Parse)?
     }
 
-    pub(crate) fn read_local_file() -> Result<Self> {
+    pub(crate) fn read_local_file() -> Result<Self, ConfigError> {
         Self::read("config.toml")
     }
 
-    pub(crate) fn read_in_xdg_config_dir() -> Result<Self> {
-        let xdg_config_home = std::env::var("XDG_CONFIG_HOME")
+    pub(crate) fn read_in_xdg_config_dir() -> Result<Self, ConfigError> {
+        let config_dir = std::env::var_os("XDG_CONFIG_HOME")
             .map(PathBuf::from)
-            .context("no $XDG_CONFIG_HOME is set")
-            .or_else(|_err| {
-                let home = std::env::var("HOME").context("no $HOME")?;
-                Result::<_, anyhow::Error>::Ok(PathBuf::from(home).join(".config"))
-            })
-            .context("neither $XDG_CONFIG_HOME nor $HOME is set")?;
+            .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".config")))
+            .ok_or(ConfigError::NoConfigDir)?;
 
-        let path = xdg_config_home.join("mpclipboard").join("config.toml");
+        let path = config_dir.join("mpclipboard").join("config.toml");
         Self::read(path)
     }
 
@@ -65,3 +63,26 @@ impl Config {
         }
     }
 }
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum ConfigError {
+    Url(UrlParseError),
+    Token(NonEmptyInlineStringError),
+    Id(NonEmptyInlineStringError),
+    Parse(ConfigParserError),
+    NoConfigDir,
+}
+
+impl core::fmt::Display for ConfigError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::Url(err) => write!(f, "malformed url: {err}"),
+            Self::Token(err) => write!(f, "malformed token: {err}"),
+            Self::Id(err) => write!(f, "malformed id: {err}"),
+            Self::Parse(err) => write!(f, "failed to parse config: {err}"),
+            Self::NoConfigDir => write!(f, "neither $XDG_CONFIG_HOME nor $HOME is set"),
+        }
+    }
+}
+
+impl core::error::Error for ConfigError {}

@@ -19,7 +19,7 @@ impl MaybeTlsStream {
         if url.is_tls() {
             let server_name = ServerName::try_from(url.host().to_owned())
                 .context("failed to build TLS server name")?;
-            let conn = ClientConnection::new(TLS::client_config()?, server_name)
+            let conn = ClientConnection::new(TLS::client_config(), server_name)
                 .context("failed to create TLS connection")?;
 
             Ok(Self::Tls(Box::new(conn)))

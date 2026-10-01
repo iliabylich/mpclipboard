@@ -1,4 +1,3 @@
-use anyhow::{Context, Result, bail};
 use rustls::ClientConfig;
 use std::sync::{Arc, OnceLock};
 
@@ -8,7 +7,7 @@ static CLIENT_CONFIG: OnceLock<Arc<ClientConfig>> = OnceLock::new();
 pub struct TLS;
 
 impl TLS {
-    pub(crate) fn init() -> Result<()> {
+    pub(crate) fn init() {
         let _ = rustls::crypto::ring::default_provider().install_default();
 
         let root_store =
@@ -19,17 +18,15 @@ impl TLS {
             .with_no_client_auth();
 
         if CLIENT_CONFIG.set(Arc::new(client_config)).is_err() {
-            bail!("TLS has been already initialized");
+            unreachable!("TLS::init() is only called once from MPClipboard::init_once()");
         }
         log::trace!("TLS has been configured");
-
-        Ok(())
     }
 
-    pub(crate) fn client_config() -> Result<Arc<ClientConfig>> {
-        CLIENT_CONFIG
+    pub(crate) fn client_config() -> Arc<ClientConfig> {
+        let client_config = CLIENT_CONFIG
             .get()
-            .map(Arc::clone)
-            .context("TLS::init() hasn't been called")
+            .unwrap_or_else(|| unreachable!("TLS::init() is always called before connecting"));
+        Arc::clone(client_config)
     }
 }

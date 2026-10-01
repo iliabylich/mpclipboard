@@ -16,6 +16,7 @@
 #![allow(clippy::option_if_let_else)]
 #![doc = include_str!("../README.md")]
 
+pub use config::ConfigError;
 pub use connectivity::Connectivity;
 pub use mpclipboard::MPClipboard;
 pub use output::Output;

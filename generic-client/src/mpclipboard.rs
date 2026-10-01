@@ -1,11 +1,11 @@
 use crate::{
     Connectivity, Output, config::Config, connection::Connection, logger::Logger, tls::TLS,
 };
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use mpclipboard_shared::{Epoch, EventLoop, EventLoopResult, Message, NonEmptyInlineString, Store};
 use std::{
     os::fd::{AsFd, AsRawFd, BorrowedFd},
-    sync::OnceLock,
+    sync::Once,
 };
 
 pub struct MPClipboard {
@@ -18,19 +18,13 @@ pub struct MPClipboard {
 }
 
 impl MPClipboard {
-    fn init_once() -> Result<()> {
-        static INIT: OnceLock<Result<()>> = OnceLock::new();
+    fn init_once() {
+        static INIT: Once = Once::new();
 
-        let result = INIT.get_or_init(|| {
-            Logger::init()?;
-            TLS::init()?;
-            Ok(())
+        INIT.call_once(|| {
+            Logger::init();
+            TLS::init();
         });
-
-        match result {
-            Ok(()) => Ok(()),
-            Err(err) => bail!("failed to init_once() MPClipboard: {err:?}"),
-        }
     }
 
     fn new(config: Config) -> Result<Self> {
@@ -57,26 +51,26 @@ impl MPClipboard {
     }
 
     pub fn new_inline(url: &str, token: &str, id: &str) -> Result<Self> {
-        Self::init_once()?;
+        Self::init_once();
         let config = Config::new(url, token, id)?;
         Self::new(config)
     }
 
     pub fn new_with_local_config() -> Result<Self> {
-        Self::init_once()?;
+        Self::init_once();
         let config = Config::read_local_file()?;
         Self::new(config)
     }
 
     pub fn new_with_local_config_and_id_override(id: &str) -> Result<Self> {
-        Self::init_once()?;
+        Self::init_once();
         let mut config = Config::read_local_file()?;
         config.id = NonEmptyInlineString::new(id).context("malformed id override")?;
         Self::new(config)
     }
 
     pub fn new_with_xdg_config() -> Result<Self> {
-        Self::init_once()?;
+        Self::init_once();
         let config = Config::read_in_xdg_config_dir()?;
         Self::new(config)
     }
