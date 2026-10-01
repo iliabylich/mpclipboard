@@ -14,29 +14,50 @@ macro_rules! try_or_null {
     };
 }
 
-fn bytes_to_str<'a>(ptr: *const c_char, len: usize) -> Result<&'a str> {
-    let bytes = unsafe { core::slice::from_raw_parts(ptr.cast::<u8>(), len) };
-    core::str::from_utf8(bytes).context("non-utf8 string")
+#[repr(C)]
+pub struct BorrowedString {
+    ptr: *const c_char,
+    len: usize,
 }
-fn string_to_c(s: String) -> (*mut c_char, usize) {
-    let s = s.into_boxed_str().into_boxed_bytes();
-    let len = s.len();
-    let ptr = Box::into_raw(s).cast::<c_char>();
-    (ptr, len)
+
+impl BorrowedString {
+    fn as_str(&self) -> Result<&str> {
+        let bytes = unsafe { core::slice::from_raw_parts(self.ptr.cast::<u8>(), self.len) };
+        core::str::from_utf8(bytes).context("non-utf8 string")
+    }
+}
+
+#[repr(C)]
+pub struct OwnedString {
+    ptr: *mut c_char,
+    len: usize,
+}
+
+impl From<String> for OwnedString {
+    fn from(s: String) -> Self {
+        let s = s.into_boxed_str().into_boxed_bytes();
+        let len = s.len();
+        let ptr = Box::into_raw(s).cast::<c_char>();
+        Self { ptr, len }
+    }
+}
+
+impl Drop for OwnedString {
+    fn drop(&mut self) {
+        let bytes: *mut [u8] = core::ptr::slice_from_raw_parts_mut(self.ptr.cast(), self.len);
+        drop(unsafe { Box::from_raw(bytes) });
+    }
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn mpclipboard_new_inline(
-    url_ptr: *const c_char,
-    url_len: usize,
-    token_ptr: *const c_char,
-    token_len: usize,
-    id_ptr: *const c_char,
-    id_len: usize,
+    url: BorrowedString,
+    token: BorrowedString,
+    id: BorrowedString,
 ) -> Option<Box<MPClipboard>> {
-    let url = try_or_null!(bytes_to_str(url_ptr, url_len));
-    let token = try_or_null!(bytes_to_str(token_ptr, token_len));
-    let id = try_or_null!(bytes_to_str(id_ptr, id_len));
+    let url = try_or_null!(url.as_str());
+    let token = try_or_null!(token.as_str());
+    let id = try_or_null!(id.as_str());
 
     let mpclipboard = try_or_null!(MPClipboard::new_inline(url, token, id));
     Some(Box::new(mpclipboard))
@@ -65,13 +86,11 @@ pub enum COutput {
         connectivity: Connectivity,
     },
     NewText {
-        ptr: *mut c_char,
-        len: usize,
+        text: OwnedString,
     },
     Both {
         connectivity: Connectivity,
-        ptr: *mut c_char,
-        len: usize,
+        text: OwnedString,
     },
     Ignore,
     Error,
@@ -82,18 +101,11 @@ impl From<Output> for COutput {
             Output::ConnectivityChanged { connectivity } => {
                 Self::ConnectivityChanged { connectivity }
             }
-            Output::NewText { text } => {
-                let (ptr, len) = string_to_c(text);
-                Self::NewText { ptr, len }
-            }
-            Output::Both { connectivity, text } => {
-                let (ptr, len) = string_to_c(text);
-                Self::Both {
-                    connectivity,
-                    ptr,
-                    len,
-                }
-            }
+            Output::NewText { text } => Self::NewText { text: text.into() },
+            Output::Both { connectivity, text } => Self::Both {
+                connectivity,
+                text: text.into(),
+            },
         }
     }
 }
@@ -121,10 +133,9 @@ pub enum PushResult {
 #[unsafe(no_mangle)]
 pub extern "C" fn mpclipboard_push_text(
     mpclipboard: &mut MPClipboard,
-    ptr: *const c_char,
-    len: usize,
+    text: BorrowedString,
 ) -> PushResult {
-    let text = match bytes_to_str(ptr, len) {
+    let text = match text.as_str() {
         Ok(text) => text,
         Err(err) => {
             log::error!("error at FFI boundary: {err:?}");
@@ -148,8 +159,6 @@ pub extern "C" fn mpclipboard_drop(mpclipboard: Box<MPClipboard>) {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn mpclipboard_drop_str(ptr: *mut c_char, len: usize) {
-    let bytes: *mut [u8] = std::ptr::slice_from_raw_parts_mut(ptr.cast(), len);
-    let boxed: Box<[u8]> = unsafe { Box::from_raw(bytes) };
-    drop(boxed);
+pub extern "C" fn mpclipboard_drop_str(text: OwnedString) {
+    drop(text);
 }

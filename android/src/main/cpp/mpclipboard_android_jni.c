@@ -19,8 +19,7 @@
 
 typedef struct {
   jbyteArray array;
-  const char *ptr;
-  size_t len;
+  mpclipboard_BorrowedString str;
 } bytes_t;
 
 static bytes_t bytes_acquire(JNIEnv *env, jbyteArray array) {
@@ -29,11 +28,13 @@ static bytes_t bytes_acquire(JNIEnv *env, jbyteArray array) {
   CHECK(ptr != NULL, "failed to access byte array");
   jsize len = (*env)->GetArrayLength(env, array);
   return (bytes_t){
-      .array = array, .ptr = (const char *)ptr, .len = (size_t)len};
+      .array = array,
+      .str = {.ptr = (const char *)ptr, .len = (size_t)len},
+  };
 }
 
 static void bytes_release(JNIEnv *env, bytes_t bytes) {
-  (*env)->ReleaseByteArrayElements(env, bytes.array, (jbyte *)bytes.ptr,
+  (*env)->ReleaseByteArrayElements(env, bytes.array, (jbyte *)bytes.str.ptr,
                                    JNI_ABORT);
 }
 
@@ -60,15 +61,16 @@ static jobject new_pair(JNIEnv *env, jobject first, jobject second) {
   return pair;
 }
 
-static jbyteArray new_jbytearray(JNIEnv *env, char *ptr, size_t len) {
-  CHECK(len <= INT_MAX, "clipboard text exceeds Java array limit");
+static jbyteArray new_jbytearray(JNIEnv *env, mpclipboard_OwnedString text) {
+  CHECK(text.len <= INT_MAX, "clipboard text exceeds Java array limit");
 
-  jbyteArray bytes = (*env)->NewByteArray(env, (jsize)len);
+  jbyteArray bytes = (*env)->NewByteArray(env, (jsize)text.len);
   CHECK(bytes != NULL, "failed to allocate Java byte array");
-  (*env)->SetByteArrayRegion(env, bytes, 0, (jsize)len, (const jbyte *)ptr);
+  (*env)->SetByteArrayRegion(env, bytes, 0, (jsize)text.len,
+                             (const jbyte *)text.ptr);
   CHECK(!(*env)->ExceptionCheck(env),
         "failed to copy native text into Java array");
-  mpclipboard_drop_str(ptr, len);
+  mpclipboard_drop_str(text);
   return bytes;
 }
 
@@ -94,8 +96,7 @@ jlong JNICALL Java_dev_ibylich_mpclipboard_Ffi_mpclipboard_1new_1inline(
   bytes_t name_bytes = bytes_acquire(env, name);
 
   mpclipboard_MPClipboard *mpclipboard =
-      mpclipboard_new_inline(uri_bytes.ptr, uri_bytes.len, token_bytes.ptr,
-                             token_bytes.len, name_bytes.ptr, name_bytes.len);
+      mpclipboard_new_inline(uri_bytes.str, token_bytes.str, name_bytes.str);
   bytes_release(env, uri_bytes);
   bytes_release(env, token_bytes);
   bytes_release(env, name_bytes);
@@ -134,11 +135,11 @@ JNIEXPORT jobject JNICALL Java_dev_ibylich_mpclipboard_Ffi_mpclipboard_1read(
     connectivity = box_int(env, (jint)output.CONNECTIVITY_CHANGED.connectivity);
     break;
   case MPCLIPBOARD_OUTPUT_NEW_TEXT:
-    text = new_jbytearray(env, output.NEW_TEXT.ptr, output.NEW_TEXT.len);
+    text = new_jbytearray(env, output.NEW_TEXT.text);
     break;
   case MPCLIPBOARD_OUTPUT_BOTH:
     connectivity = box_int(env, (jint)output.BOTH.connectivity);
-    text = new_jbytearray(env, output.BOTH.ptr, output.BOTH.len);
+    text = new_jbytearray(env, output.BOTH.text);
     break;
   case MPCLIPBOARD_OUTPUT_IGNORE:
     return NULL;
@@ -161,7 +162,7 @@ JNIEXPORT void JNICALL Java_dev_ibylich_mpclipboard_Ffi_mpclipboard_1push_1text(
   bytes_t text_bytes = bytes_acquire(env, text);
 
   mpclipboard_PushResult push_result =
-      mpclipboard_push_text(mpclipboard, text_bytes.ptr, text_bytes.len);
+      mpclipboard_push_text(mpclipboard, text_bytes.str);
   bytes_release(env, text_bytes);
 
   switch (push_result) {

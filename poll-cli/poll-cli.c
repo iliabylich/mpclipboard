@@ -66,7 +66,8 @@ void push_stdin_line(mpclipboard_MPClipboard *mpclipboard) {
     len--;
   }
 
-  mpclipboard_push_text(mpclipboard, buffer, len);
+  mpclipboard_push_text(
+      mpclipboard, (mpclipboard_BorrowedString){.ptr = buffer, .len = len});
 }
 
 void print_connectivity(mpclipboard_Connectivity connectivity) {
@@ -93,13 +94,16 @@ void print_output(mpclipboard_Output output) {
     break;
   }
   case MPCLIPBOARD_OUTPUT_NEW_TEXT: {
-    printf("%s%.*s%s\n", YELLOW, (int)output.NEW_TEXT.len, output.NEW_TEXT.ptr,
-           NC);
+    mpclipboard_OwnedString text = output.NEW_TEXT.text;
+    printf("%s%.*s%s\n", YELLOW, (int)text.len, text.ptr, NC);
+    mpclipboard_drop_str(text);
     break;
   }
   case MPCLIPBOARD_OUTPUT_BOTH: {
     print_connectivity(output.BOTH.connectivity);
-    printf("%s%.*s%s\n", YELLOW, (int)output.BOTH.len, output.BOTH.ptr, NC);
+    mpclipboard_OwnedString text = output.BOTH.text;
+    printf("%s%.*s%s\n", YELLOW, (int)text.len, text.ptr, NC);
+    mpclipboard_drop_str(text);
     break;
   }
   case MPCLIPBOARD_OUTPUT_IGNORE: {

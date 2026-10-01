@@ -18,6 +18,16 @@ typedef enum {
 
 typedef struct mpclipboard_MPClipboard mpclipboard_MPClipboard;
 
+typedef struct {
+  const char *ptr;
+  size_t len;
+} mpclipboard_BorrowedString;
+
+typedef struct {
+  char *ptr;
+  size_t len;
+} mpclipboard_OwnedString;
+
 typedef enum {
   MPCLIPBOARD_OUTPUT_CONNECTIVITY_CHANGED,
   MPCLIPBOARD_OUTPUT_NEW_TEXT,
@@ -31,14 +41,12 @@ typedef struct {
 } mpclipboard_ConnectivityChanged_Body;
 
 typedef struct {
-  char *ptr;
-  size_t len;
+  mpclipboard_OwnedString text;
 } mpclipboard_NewText_Body;
 
 typedef struct {
   mpclipboard_Connectivity connectivity;
-  char *ptr;
-  size_t len;
+  mpclipboard_OwnedString text;
 } mpclipboard_Both_Body;
 
 typedef struct {
@@ -50,12 +58,9 @@ typedef struct {
   };
 } mpclipboard_Output;
 
-mpclipboard_MPClipboard *mpclipboard_new_inline(const char *url_ptr,
-                                                size_t url_len,
-                                                const char *token_ptr,
-                                                size_t token_len,
-                                                const char *id_ptr,
-                                                size_t id_len);
+mpclipboard_MPClipboard *mpclipboard_new_inline(mpclipboard_BorrowedString url,
+                                                mpclipboard_BorrowedString token,
+                                                mpclipboard_BorrowedString id);
 
 mpclipboard_MPClipboard *mpclipboard_new_with_local_config(void);
 
@@ -66,9 +71,8 @@ int32_t mpclipboard_get_fd(const mpclipboard_MPClipboard *mpclipboard);
 mpclipboard_Output mpclipboard_read(mpclipboard_MPClipboard *mpclipboard);
 
 mpclipboard_PushResult mpclipboard_push_text(mpclipboard_MPClipboard *mpclipboard,
-                                             const char *ptr,
-                                             size_t len);
+                                             mpclipboard_BorrowedString text);
 
 void mpclipboard_drop(mpclipboard_MPClipboard *mpclipboard);
 
-void mpclipboard_drop_str(char *ptr, size_t len);
+void mpclipboard_drop_str(mpclipboard_OwnedString text);

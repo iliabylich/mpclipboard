@@ -28,11 +28,11 @@ struct Output {
         case MPCLIPBOARD_OUTPUT_CONNECTIVITY_CHANGED:
             return Output(connectivity: Connectivity.from(output.CONNECTIVITY_CHANGED.connectivity), text: nil)
         case MPCLIPBOARD_OUTPUT_NEW_TEXT:
-            return Output(connectivity: nil, text: string(ptr: output.NEW_TEXT.ptr, len: output.NEW_TEXT.len))
+            return Output(connectivity: nil, text: string(output.NEW_TEXT.text))
         case MPCLIPBOARD_OUTPUT_BOTH:
             return Output(
                 connectivity: Connectivity.from(output.BOTH.connectivity),
-                text: string(ptr: output.BOTH.ptr, len: output.BOTH.len)
+                text: string(output.BOTH.text)
             )
         case MPCLIPBOARD_OUTPUT_IGNORE:
             return nil
@@ -43,10 +43,9 @@ struct Output {
         }
     }
 
-    private static func string(ptr: UnsafeMutablePointer<CChar>?, len: Int) -> String {
-        let ptr = ptr!
-        let data = Data(bytes: ptr, count: len)
-        mpclipboard_drop_str(ptr, len)
+    private static func string(_ text: mpclipboard_OwnedString) -> String {
+        let data = Data(bytes: text.ptr!, count: text.len)
+        mpclipboard_drop_str(text)
 
         guard let text = String(data: data, encoding: .utf8) else {
             fatalError("non-utf8 new text in output")
@@ -90,7 +89,8 @@ final class MPClipboard {
 
     func pushText(_ text: String) -> PushResult {
         text.utf8CString.withUnsafeBufferPointer { bytes in
-            let pushResult = mpclipboard_push_text(handle, bytes.baseAddress, bytes.count - 1)
+            let text = mpclipboard_BorrowedString(ptr: bytes.baseAddress, len: bytes.count - 1)
+            let pushResult = mpclipboard_push_text(handle, text)
             switch pushResult {
             case MPCLIPBOARD_PUSH_RESULT_PUSHED:
                 return .pushed
