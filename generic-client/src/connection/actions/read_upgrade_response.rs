@@ -7,26 +7,25 @@ pub fn read_upgrade_response(
     stream: &mut MaybeTlsStream,
     reader: &mut UpgradeResponseReader,
 ) -> Completion<MessageReader, ConnectionError, ()> {
-    let buf = match stream.read_bytes(fd) {
-        Done(buf) => buf,
-        Pending(()) => {
-            log::trace!("handshake response still pending: {reader:?}");
-            return Pending(());
-        }
-        Failed(err) => return Failed(ConnectionError::FailedToRead(err)),
-    };
+    let leftover = loop {
+        let buf = match stream.read_bytes(fd) {
+            Done(buf) => buf,
+            Pending(()) => {
+                log::trace!("handshake response still pending: {reader:?}");
+                return Pending(());
+            }
+            Failed(err) => return Failed(ConnectionError::FailedToRead(err)),
+        };
 
-    let leftover = match reader.received(buf) {
-        Done(leftover) => {
-            log::trace!("Handshake response matches");
-            leftover
-        }
-        Pending(()) => {
-            log::trace!("handshake response still pending: {reader:?}");
-            return Pending(());
-        }
-        Failed(err) => {
-            return Failed(ConnectionError::UpgradeResponseReaderError(err));
+        match reader.received(buf) {
+            Done(leftover) => {
+                log::trace!("Handshake response matches");
+                break leftover;
+            }
+            Pending(()) => {}
+            Failed(err) => {
+                return Failed(ConnectionError::UpgradeResponseReaderError(err));
+            }
         }
     };
 
