@@ -106,7 +106,10 @@ impl MainLoop {
         let fd = match self.listener.accept(revents) {
             Ok(Some(fd)) => fd,
             Ok(None) => return,
-            Err(err) => unreachable!("failed to accept(): {err:?}"),
+            Err(err) => {
+                log::error!("failed to accept(): {err:?}");
+                return;
+            }
         };
         let source = PreSource::new(fd, self.now);
         log::trace!("[{source}] new source");
