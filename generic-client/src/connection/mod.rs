@@ -166,8 +166,18 @@ impl Connection {
 
                 State::ReadingUpgradeResponse(last_activity_at, reader) => {
                     match read_upgrade_response(fd, stream, reader) {
-                        Done(reader) => {
+                        Done(mut reader) => {
+                            let message = read_message(&mut reader, stream, fd);
                             *state = State::Connected(reader, MessageWriter::new());
+
+                            match message {
+                                Done(message) => return Some(message),
+                                Failed(err) => {
+                                    log::error!("failed to read message: {err}");
+                                    *self = Self::Disconnected(Some(now));
+                                }
+                                Pending(()) => {}
+                            }
                         }
                         Pending(()) => *last_activity_at = now,
                         Failed(err) => {

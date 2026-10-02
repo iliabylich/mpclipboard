@@ -3,11 +3,11 @@ use mpclipboard_shared::{MessageReader, UpgradeResponseReader, enable_tcp_keep_a
 use std::os::fd::AsFd;
 
 pub fn read_upgrade_response(
-    fd: impl AsFd,
+    fd: &impl AsFd,
     stream: &mut MaybeTlsStream,
     reader: &mut UpgradeResponseReader,
 ) -> Completion<MessageReader, ConnectionError, ()> {
-    let buf = match stream.read_bytes(&fd) {
+    let buf = match stream.read_bytes(fd) {
         Done(buf) => buf,
         Pending(()) => {
             log::trace!("handshake response still pending: {reader:?}");
@@ -31,7 +31,7 @@ pub fn read_upgrade_response(
     };
 
     log::trace!("Configuring TCP keepalive");
-    if let Err(err) = enable_tcp_keep_alive(&fd) {
+    if let Err(err) = enable_tcp_keep_alive(fd) {
         return Failed(ConnectionError::TcpKeepAliveError(err));
     }
 
