@@ -123,17 +123,17 @@ impl MPClipboard {
             }
         }
 
-        if let Some((readable, writable, has_error)) = polled.fd {
-            if has_error && !self.conn.is_disconnected() {
+        if let Some(fd) = polled.fd {
+            if fd.has_error && !self.conn.is_disconnected() {
                 log::error!("poll() returned connection error, disconnecting");
                 self.conn.force_disconnect(self.now);
             }
 
-            if readable && !self.conn.is_disconnected() {
+            if fd.readable && !self.conn.is_disconnected() {
                 out = self.conn.on_readable(self.now, &self.config);
             }
 
-            if writable && !self.conn.is_disconnected() {
+            if fd.writable && !self.conn.is_disconnected() {
                 self.conn.on_writable(self.now, &self.config);
             }
         }

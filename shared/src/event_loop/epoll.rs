@@ -1,4 +1,4 @@
-use super::{Diff, Epoch, EventLoopError, EventLoopResult, FdState};
+use super::{Diff, Epoch, EventLoopError, EventLoopFdResult, EventLoopResult, FdState};
 use crate::{Timerfd, Wants};
 use core::mem::MaybeUninit;
 use rustix::{
@@ -74,15 +74,15 @@ impl EventLoop {
 
                 Self::FD_ID => {
                     let flags = event.flags;
-                    out.fd = Some((
-                        flags.contains(epoll::EventFlags::IN),
-                        flags.contains(epoll::EventFlags::OUT),
-                        flags.intersects(
+                    out.fd = Some(EventLoopFdResult {
+                        readable: flags.contains(epoll::EventFlags::IN),
+                        writable: flags.contains(epoll::EventFlags::OUT),
+                        has_error: flags.intersects(
                             epoll::EventFlags::ERR
                                 | epoll::EventFlags::HUP
                                 | epoll::EventFlags::RDHUP,
                         ),
-                    ));
+                    });
                 }
 
                 _ => unreachable!("only timer and fd events are ever registered"),

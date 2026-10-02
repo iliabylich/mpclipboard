@@ -73,16 +73,13 @@ impl EventLoop {
                     out.time = Some(self.time);
                 }
                 (Ok(filter @ (EventFilter::EVFILT_READ | EventFilter::EVFILT_WRITE)), _) => {
-                    let (mut readable, mut writable, mut has_error) =
-                        out.fd.unwrap_or((false, false, false));
+                    let fd = out.fd.get_or_insert_default();
 
-                    readable |= filter == EventFilter::EVFILT_READ;
-                    writable |= filter == EventFilter::EVFILT_WRITE;
-                    has_error |= event
+                    fd.readable |= filter == EventFilter::EVFILT_READ;
+                    fd.writable |= filter == EventFilter::EVFILT_WRITE;
+                    fd.has_error |= event
                         .flags()
                         .intersects(EvFlags::EV_ERROR | EvFlags::EV_EOF);
-
-                    out.fd = Some((readable, writable, has_error));
                 }
                 _ => unreachable!("only timer and fd events are ever registered"),
             }

@@ -93,7 +93,7 @@ mod wants;
 pub use wants::Wants;
 
 mod event_loop;
-pub use event_loop::{Epoch, EventLoop, EventLoopError, EventLoopResult};
+pub use event_loop::{Epoch, EventLoop, EventLoopError, EventLoopFdResult, EventLoopResult};
 
 mod revents;
 pub use revents::{REvents, REventsError};
