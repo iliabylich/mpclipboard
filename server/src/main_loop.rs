@@ -66,14 +66,11 @@ impl MainLoop {
     }
 
     pub(crate) fn poll_and_process_events(&mut self) {
-        let revents = self.poll();
+        let mut revents = self.poll();
+        let timer = revents.remove(&self.timer.as_raw_fd());
+        let listener = revents.remove(&self.listener.as_raw_fd());
 
         for (fd, revents) in revents {
-            if fd == self.timer.as_raw_fd() {
-                self.on_timer_event(revents);
-            } else if fd == self.listener.as_raw_fd() {
-                self.on_listener_event(revents);
-            }
             if let Some(source) = self.pre_sources.remove(fd) {
                 self.on_pre_source_event(source, revents);
             } else if let Some(sink) = self.pre_sinks.remove(fd) {
@@ -81,6 +78,13 @@ impl MainLoop {
             } else if let Some(client) = self.clients.remove(fd) {
                 self.on_client_event(client, revents);
             }
+        }
+
+        if let Some(revents) = timer {
+            self.on_timer_event(revents);
+        }
+        if let Some(revents) = listener {
+            self.on_listener_event(revents);
         }
     }
 
