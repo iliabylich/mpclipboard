@@ -16,6 +16,11 @@ pub fn enable_tcp_keep_alive(fd: &impl AsFd) -> Result<(), TcpKeepAliveError> {
 
     // die after 3 failed probes (i.e. after 3s of inactivity)
     set_tcp_keepcnt(fd, 3).map_err(TcpKeepAliveError::SetTcpKeepcnt)?;
+
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    rustix::net::sockopt::set_tcp_user_timeout(fd, 3_000)
+        .map_err(TcpKeepAliveError::SetTcpUserTimeout)?;
+
     Ok(())
 }
 
@@ -29,4 +34,7 @@ pub enum TcpKeepAliveError {
     SetTcpKeepintvl(Errno),
     #[error("failed to set_tcp_keepcnt(): {0:?}")]
     SetTcpKeepcnt(Errno),
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[error("failed to set_tcp_user_timeout(): {0:?}")]
+    SetTcpUserTimeout(Errno),
 }
