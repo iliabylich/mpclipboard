@@ -6,7 +6,7 @@ use crate::{
 use mpclipboard_shared::prelude::*;
 use rustix::{
     fd::OwnedFd,
-    io::Errno,
+    io::{Errno, FdFlags},
     net::{AddressFamily, SocketType},
 };
 
@@ -27,10 +27,14 @@ pub fn reconnect(
         Ok(fd) => fd,
         Err(errno) => return Failed(ConnectionError::FailedToSocket(errno)),
     };
+
+    if let Err(errno) = rustix::io::fcntl_setfd(&fd, FdFlags::CLOEXEC) {
+        return Failed(ConnectionError::FailedToSetCloexec(errno));
+    }
+
     #[cfg(target_os = "macos")]
-    match rustix::net::sockopt::set_socket_nosigpipe(&fd, true) {
-        Ok(()) => {}
-        Err(errno) => return Failed(ConnectionError::FailedToSetNoSigPipe(errno)),
+    if let Err(errno) = rustix::net::sockopt::set_socket_nosigpipe(&fd, true) {
+        return Failed(ConnectionError::FailedToSetNoSigPipe(errno));
     }
 
     if let Err(errno) = rustix::io::ioctl_fionbio(&fd, true) {

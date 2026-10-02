@@ -13,6 +13,8 @@ pub enum ConnectionError {
     FailedToCreateTlsStream(MaybeTlsStreamError),
     #[error("failed to socket(): {0:?}")]
     FailedToSocket(Errno),
+    #[error("failed to fcntl(FD_CLOEXEC): {0:?}")]
+    FailedToSetCloexec(Errno),
     #[cfg(target_os = "macos")]
     #[error("failed to setsockopt(SO_NOSIGPIPE): {0:?}")]
     FailedToSetNoSigPipe(Errno),
