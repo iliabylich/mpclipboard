@@ -1,4 +1,4 @@
-// #![no_std]
+#![no_std]
 #![forbid(unsafe_code)]
 #![warn(trivial_casts)]
 #![warn(trivial_numeric_casts)]
@@ -17,6 +17,9 @@
 #![expect(clippy::redundant_pub_crate)]
 #![allow(clippy::option_if_let_else)]
 #![doc = include_str!("../README.md")]
+
+#[cfg(test)]
+extern crate alloc;
 
 mod config;
 pub use config::{ConfigParser, ConfigParserError};
@@ -102,7 +105,7 @@ mod tcp_keep_alive;
 pub use tcp_keep_alive::{TcpKeepAliveError, enable_tcp_keep_alive};
 
 mod url;
-pub use url::{Url, UrlParseError, UrlResolveError};
+pub use url::{Url, UrlParseError};
 
 pub(crate) fn strip_prefix_ignore_ascii_case<'a>(line: &'a str, prefix: &str) -> Option<&'a str> {
     let (pre, post) = line.split_at_checked(prefix.len())?;

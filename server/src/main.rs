@@ -25,6 +25,7 @@ mod pre_sink;
 mod pre_source;
 mod reaper;
 mod tcp_listener;
+mod url_ext;
 
 mod main_loop;
 use main_loop::MainLoop;

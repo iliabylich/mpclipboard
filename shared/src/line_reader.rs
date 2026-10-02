@@ -82,6 +82,8 @@ impl core::error::Error for LineReaderError {}
 mod tests {
     use super::{LineReader, LineReaderError};
     use crate::prelude::*;
+    use alloc::{string::ToString, vec, vec::Vec};
+    use alloc::string::String;
 
     fn lines(input: &[u8]) -> Result<Vec<String>, LineReaderError> {
         let mut reader = LineReader::<5>::new();

@@ -1,7 +1,6 @@
 use crate::{Buffer, prelude::*};
 use core::num::NonZeroUsize;
-use rustix::io::Errno;
-use std::os::fd::AsFd;
+use rustix::{fd::AsFd, io::Errno};
 
 pub fn read<const N: usize>(fd: impl AsFd) -> Completion<Buffer<N>, ReadError, ()> {
     let mut buf = [0; N];

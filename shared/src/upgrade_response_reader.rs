@@ -146,6 +146,8 @@ impl core::error::Error for UpgradeResponseReaderError {}
 
 #[cfg(test)]
 mod tests {
+    use alloc::{format, string::String};
+
     use super::{UpgradeResponseReader, UpgradeResponseReaderError};
     use crate::{
         Buffer,

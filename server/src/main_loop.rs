@@ -1,6 +1,6 @@
 use crate::{
     as_poll_fd::AsPollFd, client::Client, config::Config, fd_set::FdSet, pre_sink::PreSink,
-    pre_source::PreSource, tcp_listener::TcpListener,
+    pre_source::PreSource, tcp_listener::TcpListener, url_ext::UrlExt,
 };
 use anyhow::Result;
 use mpclipboard_shared::{

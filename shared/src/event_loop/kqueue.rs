@@ -4,8 +4,10 @@ use nix::sys::{
     event::{EvFlags, EventFilter, FilterFlag, KEvent, Kqueue},
     time::TimeSpec,
 };
-use rustix::io::Errno;
-use std::os::fd::{AsFd, AsRawFd, BorrowedFd, RawFd};
+use rustix::{
+    fd::{AsFd, AsRawFd, BorrowedFd, RawFd},
+    io::Errno,
+};
 
 pub struct EventLoop {
     kqueue: Kqueue,

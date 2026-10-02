@@ -1,4 +1,5 @@
 use rustix::{
+    fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd},
     fs::Timespec,
     io::Errno,
     time::{
@@ -6,7 +7,6 @@ use rustix::{
         timerfd_settime,
     },
 };
-use std::os::fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd};
 
 #[derive(Debug)]
 #[must_use]

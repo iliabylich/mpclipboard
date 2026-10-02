@@ -1,6 +1,7 @@
 use crate::{
     config::Config,
     connection::{error::ConnectionError, maybe_tls_stream::MaybeTlsStream},
+    url_ext::UrlExt,
 };
 use mpclipboard_shared::prelude::*;
 use rustix::{

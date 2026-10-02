@@ -1,7 +1,7 @@
-use crate::connection::maybe_tls_stream::MaybeTlsStreamError;
+use crate::{connection::maybe_tls_stream::MaybeTlsStreamError, url_ext::UrlResolveError};
 use mpclipboard_shared::{
     MessageError, MessageWriterError, TcpKeepAliveError, UpgradeRequestWriterError,
-    UpgradeResponseReaderError, UrlResolveError,
+    UpgradeResponseReaderError,
 };
 use rustix::io::Errno;
 

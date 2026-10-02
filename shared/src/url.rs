@@ -2,12 +2,7 @@ use crate::{
     HostPort, MAX_HOST_LENGTH, MAX_HOST_PORT_LENGTH, NonEmptyInlineString,
     NonEmptyInlineStringError, array_writer::ArrayWriter,
 };
-use core::{
-    fmt::Write,
-    net::{SocketAddr, SocketAddrV4},
-    num::ParseIntError,
-};
-use std::net::ToSocketAddrs;
+use core::{fmt::Write, num::ParseIntError};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Url {
@@ -54,19 +49,6 @@ impl Url {
         })
     }
 
-    pub fn resolve(&self) -> Result<SocketAddrV4, UrlResolveError> {
-        let mut addrs = (self.host.as_str(), self.port)
-            .to_socket_addrs()
-            .map_err(UrlResolveError::Lookup)?;
-
-        addrs
-            .find_map(|addr| match addr {
-                SocketAddr::V4(v4) => Some(v4),
-                SocketAddr::V6(_) => None,
-            })
-            .ok_or(UrlResolveError::NoIPv4Address)
-    }
-
     #[must_use]
     pub const fn is_tls(&self) -> bool {
         self.tls
@@ -75,6 +57,11 @@ impl Url {
     #[must_use]
     pub fn host(&self) -> &str {
         self.host.as_str()
+    }
+
+    #[must_use]
+    pub const fn port(&self) -> u16 {
+        self.port
     }
 
     pub const fn header(&self) -> HostPort {
@@ -104,23 +91,6 @@ impl core::fmt::Display for UrlParseError {
 }
 
 impl core::error::Error for UrlParseError {}
-
-#[derive(Debug)]
-pub enum UrlResolveError {
-    Lookup(std::io::Error),
-    NoIPv4Address,
-}
-
-impl core::fmt::Display for UrlResolveError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self {
-            Self::Lookup(err) => write!(f, "failed to resolve URL: {err}"),
-            Self::NoIPv4Address => write!(f, "can't resolve URL to IPv4 address"),
-        }
-    }
-}
-
-impl core::error::Error for UrlResolveError {}
 
 #[cfg(test)]
 mod tests {

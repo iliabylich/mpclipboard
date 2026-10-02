@@ -1,6 +1,8 @@
 use crate::Wants;
-use rustix::io::Errno;
-use std::os::fd::{AsRawFd, BorrowedFd, RawFd};
+use rustix::{
+    fd::{AsRawFd, BorrowedFd, RawFd},
+    io::Errno,
+};
 
 mod epoch;
 pub use epoch::Epoch;

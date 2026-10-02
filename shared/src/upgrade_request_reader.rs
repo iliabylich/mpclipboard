@@ -206,6 +206,7 @@ mod tests {
         prelude::*,
         test_helpers::{as_chunks_with_guaranteed_trailer, buffer},
     };
+    use alloc::{format, string::String};
 
     const REQ: UpgradeRequest = UpgradeRequest {
         host: HostPort::const_new("localhost:3000"),
