@@ -11,8 +11,8 @@ pub struct Config {
     pub(crate) id: ID,
 }
 
-impl std::fmt::Debug for Config {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Debug for Config {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("Config")
             .field("url", &self.url)
             .field("token", &"******")

@@ -9,7 +9,7 @@ use mpclipboard_shared::{
     Message, MessageReader, MessageWriter, UpgradeRequestWriter, UpgradeResponseReader, Wants,
     prelude::*,
 };
-use std::os::fd::{AsFd, BorrowedFd, OwnedFd};
+use rustix::fd::{AsFd, BorrowedFd, OwnedFd};
 
 mod actions;
 use actions::reconnect;
@@ -196,8 +196,16 @@ impl Connection {
                     Pending(()) => {}
                 },
 
-                State::Connecting { .. } | State::WritingUpgradeRequest { .. } => {
-                    unreachable!("can't read() in {} state", self.name())
+                State::WritingUpgradeRequest(last_activity_at, _writer) => match stream.flush(fd) {
+                    Ok(()) => *last_activity_at = now,
+                    Err(err) => {
+                        log::error!("failed to flush TLS data: {err:?}");
+                        *self = Self::Disconnected(Some(now));
+                    }
+                },
+
+                State::Connecting { .. } => {
+                    unreachable!("can't read() in Connecting state")
                 }
             },
         }

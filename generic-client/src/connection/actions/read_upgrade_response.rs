@@ -1,6 +1,6 @@
 use crate::connection::{error::ConnectionError, maybe_tls_stream::MaybeTlsStream};
 use mpclipboard_shared::{MessageReader, UpgradeResponseReader, enable_tcp_keep_alive, prelude::*};
-use std::os::fd::AsFd;
+use rustix::fd::AsFd;
 
 pub fn read_upgrade_response(
     fd: &impl AsFd,

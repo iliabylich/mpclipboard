@@ -1,5 +1,6 @@
+use alloc::sync::Arc;
 use rustls::ClientConfig;
-use std::sync::{Arc, OnceLock};
+use std::sync::OnceLock;
 
 static CLIENT_CONFIG: OnceLock<Arc<ClientConfig>> = OnceLock::new();
 

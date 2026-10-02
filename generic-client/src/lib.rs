@@ -14,7 +14,11 @@
 #![expect(clippy::missing_errors_doc)]
 #![expect(clippy::large_enum_variant)]
 #![allow(clippy::option_if_let_else)]
+#![warn(clippy::std_instead_of_alloc)]
+#![warn(clippy::std_instead_of_core)]
 #![doc = include_str!("../README.md")]
+
+extern crate alloc;
 
 pub use config::ConfigError;
 pub use connectivity::Connectivity;

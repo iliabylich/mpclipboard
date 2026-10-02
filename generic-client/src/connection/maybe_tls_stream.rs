@@ -1,18 +1,16 @@
 use crate::{connection::std_read_write_fd::StdReadWriteFd, tls::TLS};
+use core::num::NonZeroUsize;
 use mpclipboard_shared::{
     Buffer, Url, Wants,
     io::{ReadError, WriteError},
     prelude::*,
 };
+use rustix::fd::AsFd;
 use rustls::{
     ClientConnection,
     pki_types::{InvalidDnsNameError, ServerName},
 };
-use std::{
-    io::{ErrorKind, Read, Write},
-    num::NonZeroUsize,
-    os::fd::AsFd,
-};
+use std::io::{ErrorKind, Read, Write};
 
 #[derive(Debug)]
 pub enum MaybeTlsStream {

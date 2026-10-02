@@ -5,10 +5,10 @@ use crate::{
 };
 use mpclipboard_shared::prelude::*;
 use rustix::{
+    fd::OwnedFd,
     io::Errno,
     net::{AddressFamily, SocketType},
 };
-use std::os::fd::OwnedFd;
 
 pub fn reconnect(
     config: &Config,

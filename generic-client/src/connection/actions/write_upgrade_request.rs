@@ -1,6 +1,6 @@
 use crate::connection::{error::ConnectionError, maybe_tls_stream::MaybeTlsStream};
 use mpclipboard_shared::{UpgradeRequestWriter, prelude::*};
-use std::os::fd::AsFd;
+use rustix::fd::AsFd;
 
 pub fn write_upgrade_request(
     fd: impl AsFd,

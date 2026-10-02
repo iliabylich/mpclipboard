@@ -1,7 +1,5 @@
-use std::{
-    io::{Read, Write},
-    os::fd::AsFd,
-};
+use rustix::fd::AsFd;
+use std::io::{Read, Write};
 
 pub struct StdReadWriteFd<'a, F>(pub &'a F);
 

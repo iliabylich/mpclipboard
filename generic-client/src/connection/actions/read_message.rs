@@ -1,6 +1,6 @@
 use crate::connection::{error::ConnectionError, maybe_tls_stream::MaybeTlsStream};
 use mpclipboard_shared::{Message, MessageReader, prelude::*};
-use std::os::fd::AsFd;
+use rustix::fd::AsFd;
 
 pub fn read_message(
     reader: &mut MessageReader,

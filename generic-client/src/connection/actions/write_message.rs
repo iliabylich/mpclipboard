@@ -1,6 +1,6 @@
 use crate::connection::{error::ConnectionError, maybe_tls_stream::MaybeTlsStream};
 use mpclipboard_shared::{MessageWriter, prelude::*};
-use std::os::fd::AsFd;
+use rustix::fd::AsFd;
 
 pub fn write_message(
     writer: &mut MessageWriter,

@@ -1,6 +1,6 @@
 use crate::{Connectivity, MPClipboard};
-use core::str::Utf8Error;
-use std::{ffi::c_char, os::fd::AsRawFd};
+use core::{ffi::c_char, str::Utf8Error};
+use rustix::fd::AsRawFd;
 
 macro_rules! try_or_null {
     ($v:expr) => {

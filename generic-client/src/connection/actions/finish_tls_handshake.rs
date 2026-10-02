@@ -1,6 +1,6 @@
 use crate::connection::{error::ConnectionError, maybe_tls_stream::MaybeTlsStream};
 use mpclipboard_shared::prelude::*;
-use std::os::fd::AsFd;
+use rustix::fd::AsFd;
 
 pub fn finish_tls_handshake(
     stream: &mut MaybeTlsStream,
