@@ -35,6 +35,9 @@ fn read_toml<'a>(path: &[u8], buffer: &'a mut [u8]) -> Result<Toml<'a>, ConfigPa
     let fd =
         rustix::fs::open(path, OFlags::RDONLY, Mode::empty()).map_err(ConfigParserError::Open)?;
     let len = rustix::io::read(&fd, &mut *buffer).map_err(ConfigParserError::Read)?;
+    if len == buffer.len() {
+        return Err(ConfigParserError::TooLarge(buffer.len()));
+    }
     let bytes = buffer
         .get(..len)
         .unwrap_or_else(|| unreachable!("read() can't return more than buffer.len() bytes"));
@@ -49,6 +52,8 @@ pub enum ConfigParserError {
     Open(Errno),
     #[error("failed to read() config: {0:?}")]
     Read(Errno),
+    #[error("config must be smaller than {0} bytes")]
+    TooLarge(usize),
     #[error("config must be valid utf-8: {0}")]
     NonUtf8(Utf8Error),
     #[error("failed to parse TOML config: {0:?} at byte {1}")]
