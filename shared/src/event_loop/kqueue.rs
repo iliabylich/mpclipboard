@@ -1,5 +1,10 @@
-use super::{Diff, Epoch, EventLoopError, EventLoopResult, FdState};
-use crate::Wants;
+use crate::{
+    Wants,
+    event_loop::{
+        Epoch, EventLoopError, EventLoopResult,
+        fd_state::{Diff, FdState},
+    },
+};
 use nix::sys::{
     event::{EvFlags, EventFilter, FilterFlag, KEvent, Kqueue},
     time::TimeSpec,

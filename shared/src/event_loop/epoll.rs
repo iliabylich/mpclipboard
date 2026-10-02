@@ -1,5 +1,10 @@
-use super::{Diff, Epoch, EventLoopError, EventLoopFdResult, EventLoopResult, FdState};
-use crate::{Timerfd, Wants};
+use crate::{
+    Timerfd, Wants,
+    event_loop::{
+        Epoch, EventLoopError, EventLoopFdResult, EventLoopResult,
+        fd_state::{Diff, FdState},
+    },
+};
 use core::mem::MaybeUninit;
 use rustix::{
     event::epoll,

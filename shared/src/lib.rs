@@ -125,7 +125,7 @@ pub mod io;
 mod test_helpers;
 
 pub mod prelude {
-    pub use super::Completion::{self, *};
+    pub use crate::Completion::{self, *};
 }
 
 pub const PROTOCOL_VERSION: Version = Version::const_new("3");
