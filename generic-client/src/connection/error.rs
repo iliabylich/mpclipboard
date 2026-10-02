@@ -5,55 +5,37 @@ use mpclipboard_shared::{
 };
 use rustix::io::Errno;
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum ConnectionError {
+    #[error("failed to resolve URL: {0}")]
     FailedToResolveUrl(UrlResolveError),
+    #[error("failed to create TLS stream: {0}")]
     FailedToCreateTlsStream(MaybeTlsStreamError),
+    #[error("failed to socket(): {0:?}")]
     FailedToSocket(Errno),
     #[cfg(target_os = "macos")]
+    #[error("failed to setsockopt(SO_NOSIGPIPE): {0:?}")]
     FailedToSetNoSigPipe(Errno),
+    #[error("failed to ioctl(FIONBIO): {0:?}")]
     FailedToSwitchToNonBlocking(Errno),
+    #[error("failed to connect(): {0:?}")]
     FailedToConnect(Errno),
+    #[error("failed to finish TLS handshake: {0}")]
     FailedToFinishTlsHandshake(MaybeTlsStreamError),
+    #[error("failed to write: {0}")]
     FailedToWrite(MaybeTlsStreamError),
+    #[error("UpgradeRequestWriter error: {0}")]
     UpgradeRequestWriterError(UpgradeRequestWriterError),
+    #[error("failed to read: {0}")]
     FailedToRead(MaybeTlsStreamError),
+    #[error("UpgradeResponseReader error: {0}")]
     UpgradeResponseReaderError(UpgradeResponseReaderError),
+    #[error("TCP keepalive error: {0}")]
     TcpKeepAliveError(TcpKeepAliveError),
+    #[error("message error: {0}")]
     MessageError(MessageError),
+    #[error("failed to flush TLS data: {0}")]
     FailedToFlushTls(MaybeTlsStreamError),
+    #[error("MessageWriter error: {0}")]
     MessageWriterError(MessageWriterError),
 }
-
-impl core::fmt::Display for ConnectionError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self {
-            Self::FailedToResolveUrl(err) => write!(f, "failed to resolve URL: {err}"),
-            Self::FailedToCreateTlsStream(err) => write!(f, "failed to create TLS stream: {err}"),
-            Self::FailedToSocket(errno) => write!(f, "failed to socket(): {errno:?}"),
-            #[cfg(target_os = "macos")]
-            Self::FailedToSetNoSigPipe(errno) => {
-                write!(f, "failed to setsockopt(SO_NOSIGPIPE): {errno:?}")
-            }
-            Self::FailedToSwitchToNonBlocking(errno) => {
-                write!(f, "failed to ioctl(FIONBIO): {errno:?}")
-            }
-            Self::FailedToConnect(errno) => write!(f, "failed to connect(): {errno:?}"),
-            Self::FailedToFinishTlsHandshake(err) => {
-                write!(f, "failed to finish TLS handshake: {err}")
-            }
-            Self::FailedToWrite(err) => write!(f, "failed to write: {err}"),
-            Self::UpgradeRequestWriterError(err) => write!(f, "UpgradeRequestWriter error: {err}"),
-            Self::FailedToRead(err) => write!(f, "failed to read: {err}"),
-            Self::UpgradeResponseReaderError(err) => {
-                write!(f, "UpgradeResponseReader error: {err}")
-            }
-            Self::TcpKeepAliveError(err) => write!(f, "TCP keepalive error: {err}"),
-            Self::MessageError(err) => write!(f, "message error: {err}"),
-            Self::FailedToFlushTls(err) => write!(f, "failed to flush TLS data: {err}"),
-            Self::MessageWriterError(err) => write!(f, "MessageWriter error: {err}"),
-        }
-    }
-}
-
-impl core::error::Error for ConnectionError {}

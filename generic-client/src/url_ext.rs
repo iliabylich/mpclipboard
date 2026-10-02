@@ -21,19 +21,10 @@ impl UrlExt for Url {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum UrlResolveError {
+    #[error("failed to resolve URL: {0}")]
     Lookup(std::io::Error),
+    #[error("can't resolve URL to IPv4 address")]
     NoIPv4Address,
 }
-
-impl core::fmt::Display for UrlResolveError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self {
-            Self::Lookup(err) => write!(f, "failed to resolve URL: {err}"),
-            Self::NoIPv4Address => write!(f, "can't resolve URL to IPv4 address"),
-        }
-    }
-}
-
-impl core::error::Error for UrlResolveError {}

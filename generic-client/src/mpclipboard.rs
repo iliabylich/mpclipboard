@@ -174,19 +174,10 @@ impl AsFd for MPClipboard {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum MPClipboardError {
+    #[error("config error: {0}")]
     ConfigError(ConfigError),
+    #[error("event loop error: {0}")]
     EventLoopError(EventLoopError),
 }
-
-impl core::fmt::Display for MPClipboardError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self {
-            Self::ConfigError(err) => write!(f, "config error: {err}"),
-            Self::EventLoopError(err) => write!(f, "event loop error: {err}"),
-        }
-    }
-}
-
-impl core::error::Error for MPClipboardError {}

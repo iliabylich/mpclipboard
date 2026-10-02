@@ -157,33 +157,24 @@ fn tls_write(
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum MaybeTlsStreamError {
+    #[error("failed to build TLS server name: {0}")]
     ServerName(InvalidDnsNameError),
+    #[error("failed to create TLS connection: {0}")]
     TlsConnection(rustls::Error),
+    #[error("TLS handshake failed: {0}")]
     TlsHandshake(std::io::Error),
+    #[error("failed to complete_io() on TLS stream: {0}")]
     TlsIo(std::io::Error),
+    #[error("failed to read_bytes() on TLS stream: {0}")]
     TlsRead(std::io::Error),
+    #[error("failed to read_bytes() on TLS stream: EOF")]
     TlsReadEof,
+    #[error("failed to write_bytes() on TLS stream: {0}")]
     TlsWrite(std::io::Error),
+    #[error("failed to read_bytes() on plain stream: {0}")]
     PlainRead(ReadError),
+    #[error("failed to write_bytes() on plain stream: {0}")]
     PlainWrite(WriteError),
 }
-
-impl core::fmt::Display for MaybeTlsStreamError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self {
-            Self::ServerName(err) => write!(f, "failed to build TLS server name: {err}"),
-            Self::TlsConnection(err) => write!(f, "failed to create TLS connection: {err}"),
-            Self::TlsHandshake(err) => write!(f, "TLS handshake failed: {err}"),
-            Self::TlsIo(err) => write!(f, "failed to complete_io() on TLS stream: {err}"),
-            Self::TlsRead(err) => write!(f, "failed to read_bytes() on TLS stream: {err}"),
-            Self::TlsReadEof => write!(f, "failed to read_bytes() on TLS stream: EOF"),
-            Self::TlsWrite(err) => write!(f, "failed to write_bytes() on TLS stream: {err}"),
-            Self::PlainRead(err) => write!(f, "failed to read_bytes() on plain stream: {err}"),
-            Self::PlainWrite(err) => write!(f, "failed to write_bytes() on plain stream: {err}"),
-        }
-    }
-}
-
-impl core::error::Error for MaybeTlsStreamError {}

@@ -64,25 +64,16 @@ impl Config {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, thiserror::Error)]
 pub enum ConfigError {
+    #[error("malformed url: {0}")]
     Url(UrlParseError),
+    #[error("malformed token: {0}")]
     Token(NonEmptyInlineStringError),
+    #[error("malformed id: {0}")]
     Id(NonEmptyInlineStringError),
+    #[error("failed to parse config: {0}")]
     Parse(ConfigParserError),
+    #[error("neither $XDG_CONFIG_HOME nor $HOME is set")]
     NoConfigDir,
 }
-
-impl core::fmt::Display for ConfigError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self {
-            Self::Url(err) => write!(f, "malformed url: {err}"),
-            Self::Token(err) => write!(f, "malformed token: {err}"),
-            Self::Id(err) => write!(f, "malformed id: {err}"),
-            Self::Parse(err) => write!(f, "failed to parse config: {err}"),
-            Self::NoConfigDir => write!(f, "neither $XDG_CONFIG_HOME nor $HOME is set"),
-        }
-    }
-}
-
-impl core::error::Error for ConfigError {}
