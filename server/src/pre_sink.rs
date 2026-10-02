@@ -41,7 +41,7 @@ impl PreSink {
 
             return match self.write() {
                 Done(()) => Done((self.id, self.fd)),
-                Failed(err) => Failed(err.context(format!("[{self}] write() failed for"))),
+                Failed(err) => Failed(err.context(format!("[{self}] write() failed"))),
                 Pending(()) => Pending(self),
             };
         }

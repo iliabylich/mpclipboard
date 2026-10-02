@@ -39,7 +39,7 @@ impl PreSource {
 
             return match self.read() {
                 Done(req) => Done((req, self.fd)),
-                Failed(err) => Failed(err.context(format!("[{self}] read() failed for"))),
+                Failed(err) => Failed(err.context(format!("[{self}] read() failed"))),
                 Pending(()) => Pending(self),
             };
         }
