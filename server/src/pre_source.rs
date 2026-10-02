@@ -7,7 +7,7 @@ use std::os::fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd};
 pub struct PreSource {
     fd: OwnedFd,
     reader: UpgradeRequestReader,
-    last_activity_at: u64,
+    created_at: u64,
 }
 
 impl PreSource {
@@ -15,14 +15,13 @@ impl PreSource {
         Self {
             fd,
             reader: UpgradeRequestReader::new(),
-            last_activity_at: now,
+            created_at: now,
         }
     }
 
     pub(crate) fn on_poll_event(
         mut self,
         revents: PollFlags,
-        now: u64,
     ) -> Completion<(UpgradeRequest, OwnedFd), anyhow::Error, Self> {
         let revents = match REvents::new(revents) {
             Ok(revents) => revents,
@@ -38,7 +37,7 @@ impl PreSource {
         if revents.readable {
             log::trace!("[{self}] is readable");
 
-            return match self.read(now) {
+            return match self.read() {
                 Done(req) => Done((req, self.fd)),
                 Failed(err) => Failed(err.context(format!("[{self}] read() failed for"))),
                 Pending(()) => Pending(self),
@@ -48,9 +47,7 @@ impl PreSource {
         Pending(self)
     }
 
-    fn read(&mut self, now: u64) -> Completion<UpgradeRequest, anyhow::Error, ()> {
-        self.last_activity_at = now;
-
+    fn read(&mut self) -> Completion<UpgradeRequest, anyhow::Error, ()> {
         let buf = match mpclipboard_shared::io::read(&self.fd) {
             Done(buf) => buf,
             Failed(err) => return Failed(err.into()),
@@ -62,8 +59,8 @@ impl PreSource {
 }
 
 impl CanBeReaped for PreSource {
-    fn last_activity_at(&self) -> u64 {
-        self.last_activity_at
+    fn created_at(&self) -> u64 {
+        self.created_at
     }
 }
 
@@ -71,9 +68,9 @@ impl core::fmt::Display for PreSource {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(
             f,
-            "PreSource(fd={}, last_activity_at={})",
+            "PreSource(fd={}, created_at={})",
             self.fd.as_raw_fd(),
-            self.last_activity_at
+            self.created_at
         )
     }
 }

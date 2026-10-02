@@ -114,7 +114,7 @@ impl MainLoop {
     }
 
     fn on_pre_source_event(&mut self, source: PreSource, revents: PollFlags) {
-        match source.on_poll_event(revents, self.now) {
+        match source.on_poll_event(revents) {
             Failed(err) => log::error!("{err:?}"),
             Pending(source) => self.pre_sources.insert(source),
             Done((
@@ -141,7 +141,7 @@ impl MainLoop {
     }
 
     fn on_pre_sink_event(&mut self, sink: PreSink, revents: PollFlags) {
-        match sink.on_poll_event(revents, self.now) {
+        match sink.on_poll_event(revents) {
             Failed(err) => log::error!("{err:?}"),
             Pending(sink) => self.pre_sinks.insert(sink),
             Done((id, fd)) => {

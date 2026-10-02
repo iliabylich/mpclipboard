@@ -8,7 +8,7 @@ pub struct PreSink {
     fd: OwnedFd,
     id: ID,
     writer: UpgradeResponseWriter,
-    last_activity_at: u64,
+    created_at: u64,
 }
 
 impl PreSink {
@@ -17,14 +17,13 @@ impl PreSink {
             fd,
             id,
             writer: UpgradeResponseWriter::new(),
-            last_activity_at: now,
+            created_at: now,
         }
     }
 
     pub(crate) fn on_poll_event(
         mut self,
         revents: PollFlags,
-        now: u64,
     ) -> Completion<(ID, OwnedFd), anyhow::Error, Self> {
         let revents = match REvents::new(revents) {
             Ok(revents) => revents,
@@ -40,7 +39,7 @@ impl PreSink {
         if revents.writable {
             log::trace!("[{self}] is writable");
 
-            return match self.write(now) {
+            return match self.write() {
                 Done(()) => Done((self.id, self.fd)),
                 Failed(err) => Failed(err.context(format!("[{self}] write() failed for"))),
                 Pending(()) => Pending(self),
@@ -50,9 +49,7 @@ impl PreSink {
         Pending(self)
     }
 
-    fn write(&mut self, now: u64) -> Completion<(), anyhow::Error, ()> {
-        self.last_activity_at = now;
-
+    fn write(&mut self) -> Completion<(), anyhow::Error, ()> {
         let buf = self.writer.remainder();
 
         let len = match mpclipboard_shared::io::write(&self.fd, buf) {
@@ -68,8 +65,8 @@ impl PreSink {
 }
 
 impl CanBeReaped for PreSink {
-    fn last_activity_at(&self) -> u64 {
-        self.last_activity_at
+    fn created_at(&self) -> u64 {
+        self.created_at
     }
 }
 
@@ -77,9 +74,9 @@ impl core::fmt::Display for PreSink {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(
             f,
-            "PreSink(fd={}, last_activity_at={})",
+            "PreSink(fd={}, created_at={})",
             self.fd.as_raw_fd(),
-            self.last_activity_at
+            self.created_at
         )
     }
 }
