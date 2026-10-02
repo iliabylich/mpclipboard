@@ -69,28 +69,19 @@ impl Url {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum UrlParseError {
+    #[error("no :// separator in the URL")]
     NoSchemeSeparator,
+    #[error("no : separator between host and port")]
     NoPortSeparator,
+    #[error("unknown URL scheme")]
     UnknownScheme,
+    #[error("invalid host: {0}")]
     InvalidHost(NonEmptyInlineStringError),
+    #[error("invalid port: {0}")]
     InvalidPort(ParseIntError),
 }
-
-impl core::fmt::Display for UrlParseError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self {
-            Self::NoSchemeSeparator => write!(f, "no :// separator in the URL"),
-            Self::NoPortSeparator => write!(f, "no : separator between host and port"),
-            Self::UnknownScheme => write!(f, "unknown URL scheme"),
-            Self::InvalidHost(err) => write!(f, "invalid host: {err}"),
-            Self::InvalidPort(err) => write!(f, "invalid port: {err}"),
-        }
-    }
-}
-
-impl core::error::Error for UrlParseError {}
 
 #[cfg(test)]
 mod tests {

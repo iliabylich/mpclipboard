@@ -126,25 +126,13 @@ impl<const N: usize> core::fmt::Debug for Writebuf<N> {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum MessageWriterError {
+    #[error("written() called on an empty MessageWriter")]
     Empty,
+    #[error("written() reported {written} bytes, but only {remaining} bytes remained")]
     WrittenTooMuch { written: usize, remaining: usize },
 }
-
-impl core::fmt::Display for MessageWriterError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self {
-            Self::Empty => write!(f, "written() called on an empty MessageWriter"),
-            Self::WrittenTooMuch { written, remaining } => write!(
-                f,
-                "written() reported {written} bytes, but only {remaining} bytes remained"
-            ),
-        }
-    }
-}
-
-impl core::error::Error for MessageWriterError {}
 
 #[cfg(test)]
 mod tests {

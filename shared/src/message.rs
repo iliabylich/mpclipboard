@@ -62,22 +62,13 @@ impl core::fmt::Debug for Message {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum MessageError {
+    #[error("malformed message length")]
     Empty,
+    #[error("non-utf8 message text: {0}")]
     NonUtf8(Utf8Error),
 }
-
-impl core::fmt::Display for MessageError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self {
-            Self::Empty => write!(f, "malformed message length"),
-            Self::NonUtf8(err) => write!(f, "non-utf8 message text: {err}"),
-        }
-    }
-}
-
-impl core::error::Error for MessageError {}
 
 #[cfg(test)]
 mod tests {

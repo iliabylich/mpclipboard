@@ -19,25 +19,14 @@ pub fn enable_tcp_keep_alive(fd: &impl AsFd) -> Result<(), TcpKeepAliveError> {
     Ok(())
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum TcpKeepAliveError {
+    #[error("failed to set_socket_keepalive(): {0:?}")]
     SetSocketKeepalive(Errno),
+    #[error("failed to set_tcp_keepidle(): {0:?}")]
     SetTcpKeepidle(Errno),
+    #[error("failed to set_tcp_keepintvl(): {0:?}")]
     SetTcpKeepintvl(Errno),
+    #[error("failed to set_tcp_keepcnt(): {0:?}")]
     SetTcpKeepcnt(Errno),
 }
-
-impl core::fmt::Display for TcpKeepAliveError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self {
-            Self::SetSocketKeepalive(errno) => {
-                write!(f, "failed to set_socket_keepalive(): {errno:?}")
-            }
-            Self::SetTcpKeepidle(errno) => write!(f, "failed to set_tcp_keepidle(): {errno:?}"),
-            Self::SetTcpKeepintvl(errno) => write!(f, "failed to set_tcp_keepintvl(): {errno:?}"),
-            Self::SetTcpKeepcnt(errno) => write!(f, "failed to set_tcp_keepcnt(): {errno:?}"),
-        }
-    }
-}
-
-impl core::error::Error for TcpKeepAliveError {}

@@ -88,22 +88,13 @@ impl<const MAXLEN: usize> core::fmt::Display for NonEmptyInlineString<MAXLEN> {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum NonEmptyInlineStringError {
+    #[error("string is empty")]
     Empty,
+    #[error("string is too long")]
     TooLong,
 }
-
-impl core::fmt::Display for NonEmptyInlineStringError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self {
-            Self::Empty => write!(f, "string is empty"),
-            Self::TooLong => write!(f, "string is too long"),
-        }
-    }
-}
-
-impl core::error::Error for NonEmptyInlineStringError {}
 
 #[cfg(test)]
 mod tess {

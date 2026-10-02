@@ -61,29 +61,20 @@ impl<const N: usize> LineReader<N> {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum LineReaderError {
+    #[error("bare CR in HTTP line")]
     BareCR,
+    #[error("bare LF in HTTP line")]
     BareLF,
 }
-
-impl core::fmt::Display for LineReaderError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self {
-            Self::BareCR => write!(f, "bare CR in HTTP line"),
-            Self::BareLF => write!(f, "bare LF in HTTP line"),
-        }
-    }
-}
-
-impl core::error::Error for LineReaderError {}
 
 #[cfg(test)]
 mod tests {
     use super::{LineReader, LineReaderError};
     use crate::prelude::*;
-    use alloc::{string::ToString, vec, vec::Vec};
     use alloc::string::String;
+    use alloc::{string::ToString, vec, vec::Vec};
 
     fn lines(input: &[u8]) -> Result<Vec<String>, LineReaderError> {
         let mut reader = LineReader::<5>::new();

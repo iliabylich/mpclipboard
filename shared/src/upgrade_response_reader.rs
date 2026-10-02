@@ -125,24 +125,15 @@ impl HttpLine {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum UpgradeResponseReaderError {
+    #[error("{0}")]
     Line(LineReaderError),
+    #[error("non-utf8 header: {0}")]
     NonUtf8(Utf8Error),
+    #[error("got EOS but UpgradeResponse is incomplete")]
     Incomplete,
 }
-
-impl core::fmt::Display for UpgradeResponseReaderError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self {
-            Self::Line(err) => write!(f, "{err}"),
-            Self::NonUtf8(err) => write!(f, "non-utf8 header: {err}"),
-            Self::Incomplete => write!(f, "got EOS but UpgradeResponse is incomplete"),
-        }
-    }
-}
-
-impl core::error::Error for UpgradeResponseReaderError {}
 
 #[cfg(test)]
 mod tests {

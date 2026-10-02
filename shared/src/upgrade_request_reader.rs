@@ -169,34 +169,25 @@ impl HttpLine {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum UpgradeRequestReaderError {
+    #[error("{0}")]
     Line(LineReaderError),
+    #[error("non-utf8 header: {0}")]
     NonUtf8(Utf8Error),
+    #[error("malformed host: {0}")]
     InvalidHost(NonEmptyInlineStringError),
+    #[error("malformed token: {0}")]
     InvalidToken(NonEmptyInlineStringError),
+    #[error("malformed id: {0}")]
     InvalidID(NonEmptyInlineStringError),
+    #[error("malformed version: {0}")]
     InvalidVersion(NonEmptyInlineStringError),
+    #[error("got leftover in UpgradeRequestReader")]
     Leftover,
+    #[error("got EOS but no complete UpgradeRequest")]
     Incomplete,
 }
-
-impl core::fmt::Display for UpgradeRequestReaderError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self {
-            Self::Line(err) => write!(f, "{err}"),
-            Self::NonUtf8(err) => write!(f, "non-utf8 header: {err}"),
-            Self::InvalidHost(err) => write!(f, "malformed host: {err}"),
-            Self::InvalidToken(err) => write!(f, "malformed token: {err}"),
-            Self::InvalidID(err) => write!(f, "malformed id: {err}"),
-            Self::InvalidVersion(err) => write!(f, "malformed version: {err}"),
-            Self::Leftover => write!(f, "got leftover in UpgradeRequestReader"),
-            Self::Incomplete => write!(f, "got EOS but no complete UpgradeRequest"),
-        }
-    }
-}
-
-impl core::error::Error for UpgradeRequestReaderError {}
 
 #[cfg(test)]
 mod tests {

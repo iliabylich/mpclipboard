@@ -47,23 +47,12 @@ impl Default for UpgradeResponseWriter {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[error("written() reported {written} bytes, but only {remaining} bytes remained")]
 pub struct UpgradeResponseWriterError {
     pub written: usize,
     pub remaining: usize,
 }
-
-impl core::fmt::Display for UpgradeResponseWriterError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(
-            f,
-            "written() reported {} bytes, but only {} bytes remained",
-            self.written, self.remaining
-        )
-    }
-}
-
-impl core::error::Error for UpgradeResponseWriterError {}
 
 #[cfg(test)]
 mod tests {

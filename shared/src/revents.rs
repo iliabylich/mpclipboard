@@ -17,13 +17,6 @@ impl REvents {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[error("got revents {0:?}")]
 pub struct REventsError(pub PollFlags);
-
-impl core::fmt::Display for REventsError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "got revents {:?}", self.0)
-    }
-}
-
-impl core::error::Error for REventsError {}

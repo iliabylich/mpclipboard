@@ -35,30 +35,14 @@ pub fn write(fd: impl AsFd, buf: &[u8]) -> Completion<NonZeroUsize, WriteError, 
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum ReadError {
+    #[error("failed to read(): EOF")]
     EOF,
+    #[error("failed to read(): {0:?}")]
     Errno(Errno),
 }
 
-impl core::fmt::Display for ReadError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self {
-            Self::EOF => write!(f, "failed to read(): EOF"),
-            Self::Errno(errno) => write!(f, "failed to read(): {errno:?}"),
-        }
-    }
-}
-
-impl core::error::Error for ReadError {}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[error("failed to write(): {0:?}")]
 pub struct WriteError(pub Errno);
-
-impl core::fmt::Display for WriteError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "failed to write(): {:?}", self.0)
-    }
-}
-
-impl core::error::Error for WriteError {}

@@ -43,31 +43,18 @@ fn read_toml<'a>(path: &[u8], buffer: &'a mut [u8]) -> Result<Toml<'a>, ConfigPa
     boml::parse(text).map_err(|err| ConfigParserError::MalformedToml(err.kind, err.src.start))
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, thiserror::Error)]
 pub enum ConfigParserError {
+    #[error("failed to open() config: {0:?}")]
     Open(Errno),
+    #[error("failed to read() config: {0:?}")]
     Read(Errno),
+    #[error("config must be valid utf-8: {0}")]
     NonUtf8(Utf8Error),
+    #[error("failed to parse TOML config: {0:?} at byte {1}")]
     MalformedToml(TomlErrorKind, usize),
+    #[error("key {0} is missing in toml")]
     MissingKey(&'static str),
+    #[error("key {0} must be a string in toml, got {1:?}")]
     NotAString(&'static str, TomlValueType),
 }
-
-impl core::fmt::Display for ConfigParserError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self {
-            Self::Open(errno) => write!(f, "failed to open() config: {errno:?}"),
-            Self::Read(errno) => write!(f, "failed to read() config: {errno:?}"),
-            Self::NonUtf8(err) => write!(f, "config must be valid utf-8: {err}"),
-            Self::MalformedToml(kind, offset) => {
-                write!(f, "failed to parse TOML config: {kind:?} at byte {offset}")
-            }
-            Self::MissingKey(key) => write!(f, "key {key} is missing in toml"),
-            Self::NotAString(key, found) => {
-                write!(f, "key {key} must be a string in toml, got {found:?}")
-            }
-        }
-    }
-}
-
-impl core::error::Error for ConfigParserError {}
