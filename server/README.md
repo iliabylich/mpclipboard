@@ -36,7 +36,14 @@ Additionally, there's a [`debian/mpclipboard-server.service`](/debian/mpclipboar
 
 We provide a Docker image on ghcr.io (GitHub container registry).
 
-First, you need a `config.toml` file. Then:
+First, you need a `config.toml` file. Inside a container the server must listen on all interfaces, otherwise port mapping can't reach it:
+
+```toml
+url = "http://0.0.0.0:3000"
+token = "s3cr3t"
+```
+
+Then:
 
 1. optionally enable logging
 2. specify port mapping
@@ -44,10 +51,10 @@ First, you need a `config.toml` file. Then:
 
 ```sh
 docker run \
-    -e RUST_LOG=trace
+    -e RUST_LOG=trace \
     -p 3000:3000 \
     -v ./config.toml:/etc/mpclipboard-server/config.toml:ro \
-    ghcr.io/mpclipboard/server:latest
+    ghcr.io/iliabylich/mpclipboard:latest
 ```
 
 ### Communication protocol
