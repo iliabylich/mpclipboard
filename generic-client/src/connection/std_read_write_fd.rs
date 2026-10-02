@@ -1,3 +1,4 @@
+use mpclipboard_shared::io::SEND_FLAGS;
 use rustix::fd::AsFd;
 use std::io::{Read, Write};
 
@@ -18,7 +19,7 @@ where
     F: AsFd,
 {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        let len = rustix::io::write(self.0, buf)?;
+        let len = rustix::net::send(self.0, buf, SEND_FLAGS)?;
         Ok(len)
     }
 
