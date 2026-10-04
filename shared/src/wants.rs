@@ -28,3 +28,17 @@ impl Wants {
         out
     }
 }
+
+pub trait OptionWantsExt {
+    #[must_use]
+    fn merge_opt(self, other: Self) -> Self;
+}
+
+impl OptionWantsExt for Option<Wants> {
+    fn merge_opt(self, other: Self) -> Self {
+        match (self, other) {
+            (Some(lhs), rhs) => Some(lhs.merge_opt(rhs)),
+            (None, rhs) => rhs,
+        }
+    }
+}

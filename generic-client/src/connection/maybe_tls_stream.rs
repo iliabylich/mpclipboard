@@ -61,19 +61,21 @@ impl MaybeTlsStream {
     pub(crate) fn flush(&mut self, fd: &impl AsFd) -> Result<(), MaybeTlsStreamError> {
         match self {
             Self::Plain => Ok(()),
-            Self::Tls(conn) => complete_io(conn, fd),
+            Self::Tls(conn) => tls_flush(conn, fd),
         }
     }
 
-    pub(crate) fn tls_wants(&self) -> Option<Wants> {
+    pub(crate) fn tls_wants_read(&self) -> Option<Wants> {
         match self {
-            Self::Plain => None,
-            Self::Tls(conn) => match (conn.wants_read(), conn.wants_write()) {
-                (true, true) => Some(Wants::ReadWrite),
-                (true, false) => Some(Wants::Read),
-                (false, true) => Some(Wants::Write),
-                (false, false) => None,
-            },
+            Self::Tls(conn) if conn.wants_read() => Some(Wants::Read),
+            Self::Tls(_) | Self::Plain => None,
+        }
+    }
+
+    pub(crate) fn tls_wants_write(&self) -> Option<Wants> {
+        match self {
+            Self::Tls(conn) if conn.wants_write() => Some(Wants::Write),
+            Self::Tls(_) | Self::Plain => None,
         }
     }
 
@@ -111,6 +113,17 @@ fn complete_io(conn: &mut ClientConnection, fd: &impl AsFd) -> Result<(), MaybeT
     }
 }
 
+fn tls_flush(conn: &mut ClientConnection, fd: &impl AsFd) -> Result<(), MaybeTlsStreamError> {
+    while conn.wants_write() {
+        match conn.write_tls(&mut StdReadWriteFd(fd)) {
+            Ok(_) => {}
+            Err(err) if err.kind() == ErrorKind::WouldBlock => break,
+            Err(err) => return Err(MaybeTlsStreamError::TlsFlush(err)),
+        }
+    }
+    Ok(())
+}
+
 fn tls_read<const N: usize>(
     conn: &mut ClientConnection,
     fd: &impl AsFd,
@@ -145,7 +158,7 @@ fn tls_write(
         Err(err) => return Failed(MaybeTlsStreamError::TlsWrite(err)),
     };
 
-    if let Err(err) = complete_io(conn, fd) {
+    if let Err(err) = tls_flush(conn, fd) {
         return Failed(err);
     }
 
@@ -165,6 +178,8 @@ pub enum MaybeTlsStreamError {
     TlsHandshake(std::io::Error),
     #[error("failed to complete_io() on TLS stream: {0}")]
     TlsIo(std::io::Error),
+    #[error("failed to write_tls() on TLS stream: {0}")]
+    TlsFlush(std::io::Error),
     #[error("failed to read_bytes() on TLS stream: {0}")]
     TlsRead(std::io::Error),
     #[error("failed to read_bytes() on TLS stream: EOF")]

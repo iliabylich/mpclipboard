@@ -6,8 +6,8 @@ use crate::{
     },
 };
 use mpclipboard_shared::{
-    Message, MessageReader, MessageWriter, UpgradeRequestWriter, UpgradeResponseReader, Wants,
-    prelude::*,
+    Message, MessageReader, MessageWriter, OptionWantsExt, UpgradeRequestWriter,
+    UpgradeResponseReader, Wants, prelude::*,
 };
 use rustix::fd::{AsFd, BorrowedFd, OwnedFd};
 
@@ -196,16 +196,12 @@ impl Connection {
                     Pending(()) => {}
                 },
 
-                State::WritingUpgradeRequest(last_activity_at, _writer) => match stream.flush(fd) {
-                    Ok(()) => *last_activity_at = now,
-                    Err(err) => {
-                        log::error!("failed to flush TLS data: {err:?}");
-                        *self = Self::Disconnected(Some(now));
-                    }
-                },
-
                 State::Connecting { .. } => {
                     unreachable!("can't read() in Connecting state")
+                }
+
+                State::WritingUpgradeRequest { .. } => {
+                    unreachable!("can't read() in WritingUpgradeRequest state")
                 }
             },
         }
@@ -293,17 +289,18 @@ impl Connection {
                 let wants = match state {
                     State::Connecting { .. } => Wants::Write,
                     State::TlsHandshake { .. } => stream
-                        .tls_wants()
+                        .tls_wants_read()
+                        .merge_opt(stream.tls_wants_write())
                         .unwrap_or_else(|| unreachable!("TlsStream always wants soemthing")),
                     State::WritingUpgradeRequest { .. } => {
-                        Wants::Write.merge_opt(stream.tls_wants())
+                        Wants::Write.merge_opt(stream.tls_wants_write())
                     }
                     State::ReadingUpgradeResponse { .. } => {
-                        Wants::Read.merge_opt(stream.tls_wants())
+                        Wants::Read.merge_opt(stream.tls_wants_write())
                     }
                     State::Connected(_reader, writer) => Wants::Read
                         .merge_opt(writer.wants())
-                        .merge_opt(stream.tls_wants()),
+                        .merge_opt(stream.tls_wants_write()),
                 };
                 Some((fd, wants))
             }

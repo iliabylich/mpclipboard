@@ -90,7 +90,7 @@ mod buffer;
 pub use buffer::Buffer;
 
 mod wants;
-pub use wants::Wants;
+pub use wants::{OptionWantsExt, Wants};
 
 mod event_loop;
 pub use event_loop::{Epoch, EventLoop, EventLoopError, EventLoopFdResult, EventLoopResult};
