@@ -1,7 +1,6 @@
 baseicon := '../icon_512x512.png'
 resdir := 'src/main/res'
 
-# Generates launcher icon resources
 generate-icons:
     mkdir -p {{resdir}}/drawable-nodpi
     magick {{baseicon}} \
@@ -11,4 +10,4 @@ generate-icons:
         -extent 432x432 \
         -strip \
         -define png:exclude-chunks=date,time \
-        {{resdir}}/drawable-nodpi/ic_launcher_foreground.png
+        {{resdir}}/drawable-nodpi/icon.png

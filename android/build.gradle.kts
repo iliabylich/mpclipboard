@@ -99,7 +99,6 @@ android {
     }
 
     buildFeatures {
-        aidl = true
         buildConfig = true
         compose = true
     }
@@ -118,6 +117,4 @@ dependencies {
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.runtime:runtime")
-    implementation("androidx.datastore:datastore-preferences:1.2.1")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
 }
