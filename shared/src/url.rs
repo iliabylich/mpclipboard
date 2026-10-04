@@ -24,8 +24,8 @@ impl Url {
             "https" => true,
             _ => return Err(UrlParseError::UnknownScheme),
         };
-        let host = NonEmptyInlineString::new(host).map_err(UrlParseError::InvalidHost)?;
-        let port = port.parse::<u16>().map_err(UrlParseError::InvalidPort)?;
+        let host = NonEmptyInlineString::new(host)?;
+        let port = port.parse::<u16>()?;
 
         let mut buf = [0; MAX_HOST_PORT_LENGTH];
         let mut writer = ArrayWriter::new(&mut buf);
@@ -78,9 +78,9 @@ pub enum UrlParseError {
     #[error("unknown URL scheme")]
     UnknownScheme,
     #[error("invalid host: {0}")]
-    InvalidHost(NonEmptyInlineStringError),
+    InvalidHost(#[from] NonEmptyInlineStringError),
     #[error("invalid port: {0}")]
-    InvalidPort(ParseIntError),
+    InvalidPort(#[from] ParseIntError),
 }
 
 #[cfg(test)]

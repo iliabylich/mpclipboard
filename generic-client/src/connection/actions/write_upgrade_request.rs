@@ -14,7 +14,6 @@ pub fn write_upgrade_request(
         return Ok(Pending(()));
     };
 
-    writer
-        .written(len)
-        .map_err(ConnectionError::UpgradeRequestWriterError)
+    let written = writer.written(len)?;
+    Ok(written)
 }

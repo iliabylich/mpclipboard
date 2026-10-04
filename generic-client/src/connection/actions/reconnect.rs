@@ -15,10 +15,7 @@ type FdAndMaybeTlsStream = (OwnedFd, MaybeTlsStream);
 pub fn reconnect(
     config: &Config,
 ) -> Result<Completion<FdAndMaybeTlsStream, FdAndMaybeTlsStream>, ConnectionError> {
-    let addr = config
-        .url
-        .resolve()
-        .map_err(ConnectionError::FailedToResolveUrl)?;
+    let addr = config.url.resolve()?;
 
     let stream =
         MaybeTlsStream::new(&config.url).map_err(ConnectionError::FailedToCreateTlsStream)?;

@@ -41,7 +41,7 @@ fn read_toml<'a>(path: &[u8], buffer: &'a mut [u8]) -> Result<Toml<'a>, ConfigPa
     let bytes = buffer
         .get(..len)
         .unwrap_or_else(|| unreachable!("read() can't return more than buffer.len() bytes"));
-    let text = core::str::from_utf8(bytes).map_err(ConfigParserError::NonUtf8)?;
+    let text = core::str::from_utf8(bytes)?;
 
     boml::parse(text).map_err(|err| ConfigParserError::MalformedToml(err.kind, err.src.start))
 }
@@ -55,7 +55,7 @@ pub enum ConfigParserError {
     #[error("config must be smaller than {0} bytes")]
     TooLarge(usize),
     #[error("config must be valid utf-8: {0}")]
-    NonUtf8(Utf8Error),
+    NonUtf8(#[from] Utf8Error),
     #[error("failed to parse TOML config: {0:?} at byte {1}")]
     MalformedToml(TomlErrorKind, usize),
     #[error("key {0} is missing in toml")]

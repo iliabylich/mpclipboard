@@ -16,17 +16,14 @@ pub fn read_upgrade_response(
             return Ok(Pending(()));
         };
 
-        if let Done(leftover) = reader
-            .received(buf)
-            .map_err(ConnectionError::UpgradeResponseReaderError)?
-        {
+        if let Done(leftover) = reader.received(buf)? {
             log::trace!("Handshake response matches");
             break leftover;
         }
     };
 
     log::trace!("Configuring TCP keepalive");
-    enable_tcp_keep_alive(fd).map_err(ConnectionError::TcpKeepAliveError)?;
+    enable_tcp_keep_alive(fd)?;
 
     Ok(Done(MessageReader::new(leftover)))
 }

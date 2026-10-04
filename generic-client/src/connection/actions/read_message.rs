@@ -17,10 +17,7 @@ pub fn read_message(
             break;
         };
 
-        if let Done(m) = reader
-            .received(buf)
-            .map_err(ConnectionError::MessageError)?
-        {
+        if let Done(m) = reader.received(buf)? {
             message = Some(m);
         }
     }

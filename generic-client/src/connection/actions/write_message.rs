@@ -24,8 +24,6 @@ pub fn write_message(
         return Ok(Pending(()));
     };
 
-    writer
-        .written(len)
-        .map_err(ConnectionError::MessageWriterError)?;
+    writer.written(len)?;
     Ok(Done(()))
 }

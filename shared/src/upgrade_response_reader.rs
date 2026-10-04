@@ -42,11 +42,7 @@ impl UpgradeResponseReader {
         let mut leftover = Buffer::new();
 
         for (pos, &byte) in buf.iter().enumerate() {
-            let Done(line) = self
-                .lines
-                .push(byte)
-                .map_err(UpgradeResponseReaderError::Line)?
-            else {
+            let Done(line) = self.lines.push(byte)? else {
                 continue;
             };
 
@@ -108,7 +104,7 @@ enum HttpLine {
 
 impl HttpLine {
     fn parse(line: &[u8]) -> Result<Self, UpgradeResponseReaderError> {
-        let line = core::str::from_utf8(line).map_err(UpgradeResponseReaderError::NonUtf8)?;
+        let line = core::str::from_utf8(line)?;
 
         if line == "HTTP/1.1 101 Switching Protocols" {
             Ok(Self::StartLine)
@@ -127,9 +123,9 @@ impl HttpLine {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum UpgradeResponseReaderError {
     #[error("{0}")]
-    Line(LineReaderError),
+    Line(#[from] LineReaderError),
     #[error("non-utf8 header: {0}")]
-    NonUtf8(Utf8Error),
+    NonUtf8(#[from] Utf8Error),
     #[error("got EOS but UpgradeResponse is incomplete")]
     Incomplete,
 }

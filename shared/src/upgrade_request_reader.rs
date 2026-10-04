@@ -53,11 +53,7 @@ impl UpgradeRequestReader {
         let buf = buf.as_slice();
 
         for (pos, &byte) in buf.iter().enumerate() {
-            let Done(line) = self
-                .lines
-                .push(byte)
-                .map_err(UpgradeRequestReaderError::Line)?
-            else {
+            let Done(line) = self.lines.push(byte)? else {
                 continue;
             };
 
@@ -136,11 +132,9 @@ enum HttpLine {
 
 impl HttpLine {
     fn parse(line: &[u8]) -> Result<Self, UpgradeRequestReaderError> {
-        use UpgradeRequestReaderError::{
-            InvalidHost, InvalidID, InvalidToken, InvalidVersion, NonUtf8,
-        };
+        use UpgradeRequestReaderError::{InvalidHost, InvalidID, InvalidToken, InvalidVersion};
 
-        let line = core::str::from_utf8(line).map_err(NonUtf8)?;
+        let line = core::str::from_utf8(line)?;
 
         if line == START_LINE {
             Ok(Self::StartLine)
@@ -171,9 +165,9 @@ impl HttpLine {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum UpgradeRequestReaderError {
     #[error("{0}")]
-    Line(LineReaderError),
+    Line(#[from] LineReaderError),
     #[error("non-utf8 header: {0}")]
-    NonUtf8(Utf8Error),
+    NonUtf8(#[from] Utf8Error),
     #[error("malformed host: {0}")]
     InvalidHost(NonEmptyInlineStringError),
     #[error("malformed token: {0}")]

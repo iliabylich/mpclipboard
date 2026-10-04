@@ -8,9 +8,7 @@ pub trait UrlExt {
 
 impl UrlExt for Url {
     fn resolve(&self) -> Result<SocketAddrV4, UrlResolveError> {
-        let mut addrs = (self.host(), self.port())
-            .to_socket_addrs()
-            .map_err(UrlResolveError::Lookup)?;
+        let mut addrs = (self.host(), self.port()).to_socket_addrs()?;
 
         addrs
             .find_map(|addr| match addr {
@@ -24,7 +22,7 @@ impl UrlExt for Url {
 #[derive(Debug, thiserror::Error)]
 pub enum UrlResolveError {
     #[error("failed to resolve URL: {0}")]
-    Lookup(std::io::Error),
+    Lookup(#[from] std::io::Error),
     #[error("can't resolve URL to IPv4 address")]
     NoIPv4Address,
 }

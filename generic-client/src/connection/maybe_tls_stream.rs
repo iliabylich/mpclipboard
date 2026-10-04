@@ -21,10 +21,8 @@ pub enum MaybeTlsStream {
 impl MaybeTlsStream {
     pub(crate) fn new(url: &Url) -> Result<Self, MaybeTlsStreamError> {
         if url.is_tls() {
-            let server_name = ServerName::try_from(url.host().to_owned())
-                .map_err(MaybeTlsStreamError::ServerName)?;
-            let conn = ClientConnection::new(TLS::client_config(), server_name)
-                .map_err(MaybeTlsStreamError::TlsConnection)?;
+            let server_name = ServerName::try_from(url.host().to_owned())?;
+            let conn = ClientConnection::new(TLS::client_config(), server_name)?;
 
             Ok(Self::Tls(Box::new(conn)))
         } else {
@@ -84,7 +82,10 @@ impl MaybeTlsStream {
         fd: &impl AsFd,
     ) -> Result<Completion<Buffer<N>, ()>, MaybeTlsStreamError> {
         match self {
-            Self::Plain => mpclipboard_shared::io::read(fd).map_err(MaybeTlsStreamError::PlainRead),
+            Self::Plain => {
+                let read = mpclipboard_shared::io::read(fd)?;
+                Ok(read)
+            }
             Self::Tls(conn) => tls_read(conn, fd),
         }
     }
@@ -98,7 +99,8 @@ impl MaybeTlsStream {
 
         match self {
             Self::Plain => {
-                mpclipboard_shared::io::write(fd, buf).map_err(MaybeTlsStreamError::PlainWrite)
+                let written = mpclipboard_shared::io::write(fd, buf)?;
+                Ok(written)
             }
             Self::Tls(conn) => tls_write(conn, fd, buf),
         }
@@ -167,9 +169,9 @@ fn tls_write(
 #[derive(Debug, thiserror::Error)]
 pub enum MaybeTlsStreamError {
     #[error("failed to build TLS server name: {0}")]
-    ServerName(InvalidDnsNameError),
+    ServerName(#[from] InvalidDnsNameError),
     #[error("failed to create TLS connection: {0}")]
-    TlsConnection(rustls::Error),
+    TlsConnection(#[from] rustls::Error),
     #[error("TLS handshake failed: {0}")]
     TlsHandshake(std::io::Error),
     #[error("failed to complete_io() on TLS stream: {0}")]
@@ -183,7 +185,7 @@ pub enum MaybeTlsStreamError {
     #[error("failed to write_bytes() on TLS stream: {0}")]
     TlsWrite(std::io::Error),
     #[error("failed to read_bytes() on plain stream: {0}")]
-    PlainRead(ReadError),
+    PlainRead(#[from] ReadError),
     #[error("failed to write_bytes() on plain stream: {0}")]
-    PlainWrite(WriteError),
+    PlainWrite(#[from] WriteError),
 }

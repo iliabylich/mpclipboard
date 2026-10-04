@@ -34,7 +34,7 @@ impl MPClipboard {
 
     fn new(config: Config) -> Result<Self, MPClipboardError> {
         log::info!("Running with config {config:?}");
-        let event_loop = EventLoop::new().map_err(MPClipboardError::EventLoopError)?;
+        let event_loop = EventLoop::new()?;
 
         let mut this = Self {
             event_loop,
@@ -50,43 +50,37 @@ impl MPClipboard {
 
     fn sync_event_loop(&mut self) -> Result<(), MPClipboardError> {
         let wants = self.conn.wants().map(|(fd, wants)| (fd, self.epoch, wants));
-        self.event_loop
-            .sync(wants)
-            .map_err(MPClipboardError::EventLoopError)
+        self.event_loop.sync(wants)?;
+        Ok(())
     }
 
     pub fn new_inline(url: &str, token: &str, id: &str) -> Result<Self, MPClipboardError> {
         Self::init_once();
-        let config = Config::new(url, token, id).map_err(MPClipboardError::ConfigError)?;
+        let config = Config::new(url, token, id)?;
         Self::new(config)
     }
 
     pub fn new_with_local_config() -> Result<Self, MPClipboardError> {
         Self::init_once();
-        let config = Config::read_local_file().map_err(MPClipboardError::ConfigError)?;
+        let config = Config::read_local_file()?;
         Self::new(config)
     }
 
     pub fn new_with_local_config_and_id_override(id: &str) -> Result<Self, MPClipboardError> {
         Self::init_once();
-        let mut config = Config::read_local_file().map_err(MPClipboardError::ConfigError)?;
-        config.id = NonEmptyInlineString::new(id)
-            .map_err(ConfigError::Id)
-            .map_err(MPClipboardError::ConfigError)?;
+        let mut config = Config::read_local_file()?;
+        config.id = NonEmptyInlineString::new(id).map_err(ConfigError::Id)?;
         Self::new(config)
     }
 
     pub fn new_with_xdg_config() -> Result<Self, MPClipboardError> {
         Self::init_once();
-        let config = Config::read_in_xdg_config_dir().map_err(MPClipboardError::ConfigError)?;
+        let config = Config::read_in_xdg_config_dir()?;
         Self::new(config)
     }
 
     pub fn read(&mut self) -> Result<Output, MPClipboardError> {
-        let polled = self
-            .event_loop
-            .drain_events_without_waiting()
-            .map_err(MPClipboardError::EventLoopError)?;
+        let polled = self.event_loop.drain_events_without_waiting()?;
 
         let prev_connectivity = Connectivity::new(&self.conn);
         let text = if let Some(message) = self.drain(&polled)
@@ -177,7 +171,7 @@ impl AsFd for MPClipboard {
 #[derive(Debug, thiserror::Error)]
 pub enum MPClipboardError {
     #[error("config error: {0}")]
-    ConfigError(ConfigError),
+    ConfigError(#[from] ConfigError),
     #[error("event loop error: {0}")]
-    EventLoopError(EventLoopError),
+    EventLoopError(#[from] EventLoopError),
 }

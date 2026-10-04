@@ -23,7 +23,7 @@ impl core::fmt::Debug for Config {
 
 impl Config {
     pub(crate) fn new(url: &str, token: &str, id: &str) -> Result<Self, ConfigError> {
-        let url = Url::parse(url).map_err(ConfigError::Url)?;
+        let url = Url::parse(url)?;
         let token = Token::new(token).map_err(ConfigError::Token)?;
         let id = ID::new(id).map_err(ConfigError::Id)?;
 
@@ -36,8 +36,7 @@ impl Config {
             &mut [0; 1_024],
             ["url", "token", "id"],
             |[url, token, id]| Self::new(url, token, id),
-        )
-        .map_err(ConfigError::Parse)?
+        )?
     }
 
     pub(crate) fn read_local_file() -> Result<Self, ConfigError> {
@@ -67,13 +66,13 @@ impl Config {
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
 pub enum ConfigError {
     #[error("malformed url: {0}")]
-    Url(UrlParseError),
+    Url(#[from] UrlParseError),
     #[error("malformed token: {0}")]
     Token(NonEmptyInlineStringError),
     #[error("malformed id: {0}")]
     Id(NonEmptyInlineStringError),
     #[error("failed to parse config: {0}")]
-    Parse(ConfigParserError),
+    Parse(#[from] ConfigParserError),
     #[error("neither $XDG_CONFIG_HOME nor $HOME is set")]
     NoConfigDir,
 }

@@ -45,9 +45,9 @@ pub enum ReadError {
     #[error("failed to read(): EOF")]
     EOF,
     #[error("failed to read(): {0:?}")]
-    Errno(Errno),
+    Errno(#[from] Errno),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 #[error("failed to write(): {0:?}")]
-pub struct WriteError(pub Errno);
+pub struct WriteError(#[from] pub Errno);

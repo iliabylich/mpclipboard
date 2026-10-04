@@ -8,7 +8,7 @@ use rustix::io::Errno;
 #[derive(Debug, thiserror::Error)]
 pub enum ConnectionError {
     #[error("failed to resolve URL: {0}")]
-    FailedToResolveUrl(UrlResolveError),
+    FailedToResolveUrl(#[from] UrlResolveError),
     #[error("failed to create TLS stream: {0}")]
     FailedToCreateTlsStream(MaybeTlsStreamError),
     #[error("failed to socket(): {0:?}")]
@@ -27,17 +27,17 @@ pub enum ConnectionError {
     #[error("failed to write: {0}")]
     FailedToWrite(MaybeTlsStreamError),
     #[error("UpgradeRequestWriter error: {0}")]
-    UpgradeRequestWriterError(UpgradeRequestWriterError),
+    UpgradeRequestWriterError(#[from] UpgradeRequestWriterError),
     #[error("failed to read: {0}")]
     FailedToRead(MaybeTlsStreamError),
     #[error("UpgradeResponseReader error: {0}")]
-    UpgradeResponseReaderError(UpgradeResponseReaderError),
+    UpgradeResponseReaderError(#[from] UpgradeResponseReaderError),
     #[error("TCP keepalive error: {0}")]
-    TcpKeepAliveError(TcpKeepAliveError),
+    TcpKeepAliveError(#[from] TcpKeepAliveError),
     #[error("message error: {0}")]
-    MessageError(MessageError),
+    MessageError(#[from] MessageError),
     #[error("failed to flush TLS data: {0}")]
     FailedToFlushTls(MaybeTlsStreamError),
     #[error("MessageWriter error: {0}")]
-    MessageWriterError(MessageWriterError),
+    MessageWriterError(#[from] MessageWriterError),
 }
