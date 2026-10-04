@@ -19,7 +19,10 @@ impl UpgradeResponseWriter {
             .unwrap_or_else(|| unreachable!("pos never exceeds UpgradeResponse::BYTES.len()"))
     }
 
-    pub fn written(&mut self, len: NonZeroUsize) -> Completion<(), UpgradeResponseWriterError, ()> {
+    pub fn written(
+        &mut self,
+        len: NonZeroUsize,
+    ) -> Result<Completion<(), ()>, UpgradeResponseWriterError> {
         match self
             .pos
             .checked_add(len.get())
@@ -27,13 +30,13 @@ impl UpgradeResponseWriter {
         {
             Some((nextpos, Ordering::Less)) => {
                 self.pos = nextpos;
-                Pending(())
+                Ok(Pending(()))
             }
             Some((nextpos, Ordering::Equal)) => {
                 self.pos = nextpos;
-                Done(())
+                Ok(Done(()))
             }
-            None | Some((_, Ordering::Greater)) => Failed(UpgradeResponseWriterError {
+            None | Some((_, Ordering::Greater)) => Err(UpgradeResponseWriterError {
                 written: len.get(),
                 remaining: self.remainder().len(),
             }),
@@ -64,18 +67,18 @@ mod tests {
         let mut w = UpgradeResponseWriter::new();
         assert_eq!(w.remainder(), UpgradeResponse::BYTES);
 
-        assert_eq!(w.written(non_zero_usize(50)), Pending(()));
+        assert_eq!(w.written(non_zero_usize(50)), Ok(Pending(())));
         assert_eq!(Some(w.remainder()), UpgradeResponse::BYTES.get(50..));
 
         assert_eq!(
             w.written(non_zero_usize(UpgradeResponse::BYTES.len() - 50)),
-            Done(())
+            Ok(Done(()))
         );
         assert_eq!(w.remainder(), b"");
 
         assert_eq!(
             w.written(non_zero_usize(1)),
-            Failed(UpgradeResponseWriterError {
+            Err(UpgradeResponseWriterError {
                 written: 1,
                 remaining: 0,
             })

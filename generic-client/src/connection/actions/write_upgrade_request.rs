@@ -6,11 +6,12 @@ pub fn write_upgrade_request(
     fd: impl AsFd,
     stream: &mut MaybeTlsStream,
     writer: &mut UpgradeRequestWriter,
-) -> Completion<(), ConnectionError, ()> {
-    let len = match stream.write_bytes(&fd, writer.remainder()) {
-        Done(len) => len,
-        Failed(err) => return Failed(ConnectionError::FailedToWrite(err)),
-        Pending(()) => return Pending(()),
+) -> Result<Completion<(), ()>, ConnectionError> {
+    let Done(len) = stream
+        .write_bytes(&fd, writer.remainder())
+        .map_err(ConnectionError::FailedToWrite)?
+    else {
+        return Ok(Pending(()));
     };
 
     writer

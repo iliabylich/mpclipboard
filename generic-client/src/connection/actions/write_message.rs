@@ -6,25 +6,26 @@ pub fn write_message(
     writer: &mut MessageWriter,
     stream: &mut MaybeTlsStream,
     fd: &impl AsFd,
-) -> Completion<(), ConnectionError, ()> {
-    if writer.is_empty()
-        && let Err(err) = stream.flush(fd)
-    {
-        return Failed(ConnectionError::FailedToFlushTls(err));
+) -> Result<Completion<(), ()>, ConnectionError> {
+    if writer.is_empty() {
+        stream
+            .flush(fd)
+            .map_err(ConnectionError::FailedToFlushTls)?;
     }
 
     let Some(buf) = writer.remainder() else {
-        return Done(());
+        return Ok(Done(()));
     };
 
-    let len = match stream.write_bytes(fd, buf) {
-        Done(len) => len,
-        Failed(err) => return Failed(ConnectionError::FailedToWrite(err)),
-        Pending(()) => return Pending(()),
+    let Done(len) = stream
+        .write_bytes(fd, buf)
+        .map_err(ConnectionError::FailedToWrite)?
+    else {
+        return Ok(Pending(()));
     };
 
-    match writer.written(len) {
-        Ok(()) => Done(()),
-        Err(err) => Failed(ConnectionError::MessageWriterError(err)),
-    }
+    writer
+        .written(len)
+        .map_err(ConnectionError::MessageWriterError)?;
+    Ok(Done(()))
 }

@@ -122,14 +122,14 @@ impl MainLoop {
 
     fn on_pre_source_event(&mut self, source: PreSource, revents: PollFlags) {
         match source.on_poll_event(revents) {
-            Failed(err) => log::error!("{err:?}"),
-            Pending(source) => self.pre_sources.insert(source),
-            Done((
+            Err(err) => log::error!("{err:?}"),
+            Ok(Pending(source)) => self.pre_sources.insert(source),
+            Ok(Done((
                 UpgradeRequest {
                     token, id, version, ..
                 },
                 fd,
-            )) => {
+            ))) => {
                 if token != self.config.token {
                     log::info!("[{id}] invalid token={token:?}");
                     return;
@@ -149,9 +149,9 @@ impl MainLoop {
 
     fn on_pre_sink_event(&mut self, sink: PreSink, revents: PollFlags) {
         match sink.on_poll_event(revents) {
-            Failed(err) => log::error!("{err:?}"),
-            Pending(sink) => self.pre_sinks.insert(sink),
-            Done((id, fd)) => {
+            Err(err) => log::error!("{err:?}"),
+            Ok(Pending(sink)) => self.pre_sinks.insert(sink),
+            Ok(Done((id, fd))) => {
                 log::trace!("[{id}] Configuring TCP keepalive");
                 match enable_tcp_keep_alive(&fd) {
                     Ok(()) => {
@@ -170,9 +170,9 @@ impl MainLoop {
 
     fn on_client_event(&mut self, client: Client, revents: PollFlags) {
         match client.on_poll_event(revents) {
-            Failed(err) => log::error!("{err:?}"),
-            Pending(client) => self.clients.insert(client),
-            Done((message, client)) => {
+            Err(err) => log::error!("{err:?}"),
+            Ok(Pending(client)) => self.clients.insert(client),
+            Ok(Done((message, client))) => {
                 if self.store.add(message) {
                     log::info!("broadcasting {message:?}");
                     self.broadcast(&message, client.id());

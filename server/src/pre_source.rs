@@ -1,5 +1,5 @@
 use crate::{as_poll_fd::AsPollFd, reaper::CanBeReaped};
-use anyhow::anyhow;
+use anyhow::{Context, Result};
 use mpclipboard_shared::{REvents, UpgradeRequest, UpgradeRequestReader, prelude::*};
 use rustix::event::{PollFd, PollFlags};
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd};
@@ -22,13 +22,9 @@ impl PreSource {
     pub(crate) fn on_poll_event(
         mut self,
         revents: PollFlags,
-    ) -> Completion<(UpgradeRequest, OwnedFd), anyhow::Error, Self> {
-        let revents = match REvents::new(revents) {
-            Ok(revents) => revents,
-            Err(err) => {
-                return Failed(anyhow!(err).context(format!("[{self}] polling returned an error")));
-            }
-        };
+    ) -> Result<Completion<(UpgradeRequest, OwnedFd), Self>> {
+        let revents =
+            REvents::new(revents).with_context(|| format!("[{self}] polling returned an error"))?;
 
         if revents.writable {
             unreachable!("[{self}] is writable but noone asked for it");
@@ -37,24 +33,25 @@ impl PreSource {
         if revents.readable {
             log::trace!("[{self}] is readable");
 
-            return match self.read() {
-                Done(req) => Done((req, self.fd)),
-                Failed(err) => Failed(err.context(format!("[{self}] read() failed"))),
-                Pending(()) => Pending(self),
+            let Done(req) = self
+                .read()
+                .with_context(|| format!("[{self}] read() failed"))?
+            else {
+                return Ok(Pending(self));
             };
+            return Ok(Done((req, self.fd)));
         }
 
-        Pending(self)
+        Ok(Pending(self))
     }
 
-    fn read(&mut self) -> Completion<UpgradeRequest, anyhow::Error, ()> {
-        let buf = match mpclipboard_shared::io::read(&self.fd) {
-            Done(buf) => buf,
-            Failed(err) => return Failed(err.into()),
-            Pending(()) => return Pending(()),
+    fn read(&mut self) -> Result<Completion<UpgradeRequest, ()>> {
+        let Done(buf) = mpclipboard_shared::io::read(&self.fd)? else {
+            return Ok(Pending(()));
         };
 
-        self.reader.received(buf).map_err(|err| anyhow!(err))
+        let received = self.reader.received(buf)?;
+        Ok(received)
     }
 }
 

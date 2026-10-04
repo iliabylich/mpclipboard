@@ -20,7 +20,7 @@ impl MessageReader {
     pub fn received(
         &mut self,
         bytes: Buffer<{ Message::BYTESIZE }>,
-    ) -> Completion<Message, MessageError, ()> {
+    ) -> Result<Completion<Message, ()>, MessageError> {
         let mut message = None;
 
         for &byte in bytes.as_slice() {
@@ -29,18 +29,15 @@ impl MessageReader {
             }
 
             if let Some(full) = self.buf.as_full_array() {
-                match Message::decode(full) {
-                    Ok(m) => message = Some(m),
-                    Err(err) => return Failed(err),
-                }
+                message = Some(Message::decode(full)?);
                 self.buf.clear();
             }
         }
 
         if let Some(message) = message {
-            Done(message)
+            Ok(Done(message))
         } else {
-            Pending(())
+            Ok(Pending(()))
         }
     }
 }
@@ -61,7 +58,10 @@ mod tests {
         let mut reader = MessageReader::empty();
 
         let message = Message::new(NonEmptyInlineString::const_new("BOO"));
-        assert_eq!(reader.received(buffer(&message.encode())), Done(message));
+        assert_eq!(
+            reader.received(buffer(&message.encode())),
+            Ok(Done(message))
+        );
     }
 
     #[test]
@@ -75,9 +75,9 @@ mod tests {
 
         let mut reader = MessageReader::empty();
 
-        assert_eq!(reader.received(buffer(first)), Pending(()));
-        assert_eq!(reader.received(buffer(second)), Done(one));
-        assert_eq!(reader.received(buffer(third)), Done(two));
+        assert_eq!(reader.received(buffer(first)), Ok(Pending(())));
+        assert_eq!(reader.received(buffer(second)), Ok(Done(one)));
+        assert_eq!(reader.received(buffer(third)), Ok(Done(two)));
     }
 
     #[test]
@@ -86,7 +86,7 @@ mod tests {
 
         assert_eq!(
             reader.received(buffer(&[0; Message::BYTESIZE])),
-            Failed(MessageError::Empty)
+            Err(MessageError::Empty)
         );
     }
 }

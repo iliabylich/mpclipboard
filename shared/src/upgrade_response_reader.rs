@@ -36,22 +36,21 @@ impl UpgradeResponseReader {
     pub fn received(
         &mut self,
         buf: Buffer<{ Self::BUFFER_SIZE }>,
-    ) -> Completion<Buffer<{ Self::BUFFER_SIZE }>, UpgradeResponseReaderError, ()> {
+    ) -> Result<Completion<Buffer<{ Self::BUFFER_SIZE }>, ()>, UpgradeResponseReaderError> {
         let buf = buf.as_slice();
 
         let mut leftover = Buffer::new();
 
         for (pos, &byte) in buf.iter().enumerate() {
-            let line = match self.lines.push(byte) {
-                Done(line) => line,
-                Pending(()) => continue,
-                Failed(err) => return Failed(UpgradeResponseReaderError::Line(err)),
+            let Done(line) = self
+                .lines
+                .push(byte)
+                .map_err(UpgradeResponseReaderError::Line)?
+            else {
+                continue;
             };
 
-            let line = match HttpLine::parse(line.as_slice()) {
-                Ok(line) => line,
-                Err(err) => return Failed(err),
-            };
+            let line = HttpLine::parse(line.as_slice())?;
 
             match line {
                 HttpLine::StartLine => self.seen_start_line = true,
@@ -75,11 +74,11 @@ impl UpgradeResponseReader {
         }
 
         if self.try_finish() {
-            Done(leftover)
+            Ok(Done(leftover))
         } else if self.seen_eos {
-            Failed(UpgradeResponseReaderError::Incomplete)
+            Err(UpgradeResponseReaderError::Incomplete)
         } else {
-            Pending(())
+            Ok(Pending(()))
         }
     }
 
@@ -149,27 +148,29 @@ mod tests {
 
     fn read_all(
         bytes: &[u8],
-    ) -> Completion<Buffer<{ UpgradeResponseReader::BUFFER_SIZE }>, UpgradeResponseReaderError, ()>
-    {
+    ) -> Result<
+        Completion<Buffer<{ UpgradeResponseReader::BUFFER_SIZE }>, ()>,
+        UpgradeResponseReaderError,
+    > {
         let (chunks, trailer) =
             as_chunks_with_guaranteed_trailer::<{ UpgradeResponseReader::BUFFER_SIZE }>(bytes);
 
         let mut reader = UpgradeResponseReader::new();
         for buf in chunks {
-            assert_eq!(reader.received(buf), Pending(()));
+            assert_eq!(reader.received(buf), Ok(Pending(())));
         }
         reader.received(trailer)
     }
 
     #[test]
     fn test_no_leftover() {
-        assert_eq!(read_all(UpgradeResponse::BYTES), Done(Buffer::new()));
+        assert_eq!(read_all(UpgradeResponse::BYTES), Ok(Done(Buffer::new())));
     }
 
     #[test]
     fn test_leftover() {
         let bytes = [UpgradeResponse::BYTES, b"abc"].concat();
-        assert_eq!(read_all(&bytes), Done(buffer(b"abc")));
+        assert_eq!(read_all(&bytes), Ok(Done(buffer(b"abc"))));
     }
 
     #[test]
@@ -177,7 +178,7 @@ mod tests {
         let mut reader = UpgradeResponseReader::new();
         assert_eq!(
             reader.received(buffer(b"boo\r\n\r\n")),
-            Failed(UpgradeResponseReaderError::Incomplete)
+            Err(UpgradeResponseReaderError::Incomplete)
         );
     }
 
@@ -188,6 +189,6 @@ mod tests {
             &format!("\r\nReport-To: {}\r\n\r\n", "a".repeat(300)),
             1,
         );
-        assert_eq!(read_all(bytes.as_bytes()), Done(Buffer::new()));
+        assert_eq!(read_all(bytes.as_bytes()), Ok(Done(Buffer::new())));
     }
 }

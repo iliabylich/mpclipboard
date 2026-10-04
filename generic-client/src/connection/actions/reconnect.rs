@@ -10,40 +10,33 @@ use rustix::{
     net::{AddressFamily, SocketType},
 };
 
+type FdAndMaybeTlsStream = (OwnedFd, MaybeTlsStream);
+
 pub fn reconnect(
     config: &Config,
-) -> Completion<(OwnedFd, MaybeTlsStream), ConnectionError, (OwnedFd, MaybeTlsStream)> {
-    let addr = match config.url.resolve() {
-        Ok(addr) => addr,
-        Err(err) => return Failed(ConnectionError::FailedToResolveUrl(err)),
-    };
+) -> Result<Completion<FdAndMaybeTlsStream, FdAndMaybeTlsStream>, ConnectionError> {
+    let addr = config
+        .url
+        .resolve()
+        .map_err(ConnectionError::FailedToResolveUrl)?;
 
-    let stream = match MaybeTlsStream::new(&config.url) {
-        Ok(stream) => stream,
-        Err(err) => return Failed(ConnectionError::FailedToCreateTlsStream(err)),
-    };
+    let stream =
+        MaybeTlsStream::new(&config.url).map_err(ConnectionError::FailedToCreateTlsStream)?;
 
-    let fd = match rustix::net::socket(AddressFamily::INET, SocketType::STREAM, None) {
-        Ok(fd) => fd,
-        Err(errno) => return Failed(ConnectionError::FailedToSocket(errno)),
-    };
+    let fd = rustix::net::socket(AddressFamily::INET, SocketType::STREAM, None)
+        .map_err(ConnectionError::FailedToSocket)?;
 
-    if let Err(errno) = rustix::io::fcntl_setfd(&fd, FdFlags::CLOEXEC) {
-        return Failed(ConnectionError::FailedToSetCloexec(errno));
-    }
+    rustix::io::fcntl_setfd(&fd, FdFlags::CLOEXEC).map_err(ConnectionError::FailedToSetCloexec)?;
 
     #[cfg(target_os = "macos")]
-    if let Err(errno) = rustix::net::sockopt::set_socket_nosigpipe(&fd, true) {
-        return Failed(ConnectionError::FailedToSetNoSigPipe(errno));
-    }
+    rustix::net::sockopt::set_socket_nosigpipe(&fd, true)
+        .map_err(ConnectionError::FailedToSetNoSigPipe)?;
 
-    if let Err(errno) = rustix::io::ioctl_fionbio(&fd, true) {
-        return Failed(ConnectionError::FailedToSwitchToNonBlocking(errno));
-    }
+    rustix::io::ioctl_fionbio(&fd, true).map_err(ConnectionError::FailedToSwitchToNonBlocking)?;
 
     match rustix::net::connect(&fd, &addr) {
-        Ok(()) => Done((fd, stream)),
-        Err(Errno::INPROGRESS) => Pending((fd, stream)),
-        Err(errno) => Failed(ConnectionError::FailedToConnect(errno)),
+        Ok(()) => Ok(Done((fd, stream))),
+        Err(Errno::INPROGRESS) => Ok(Pending((fd, stream))),
+        Err(errno) => Err(ConnectionError::FailedToConnect(errno)),
     }
 }

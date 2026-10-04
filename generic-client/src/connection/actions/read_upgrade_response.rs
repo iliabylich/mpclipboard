@@ -6,33 +6,27 @@ pub fn read_upgrade_response(
     fd: &impl AsFd,
     stream: &mut MaybeTlsStream,
     reader: &mut UpgradeResponseReader,
-) -> Completion<MessageReader, ConnectionError, ()> {
+) -> Result<Completion<MessageReader, ()>, ConnectionError> {
     let leftover = loop {
-        let buf = match stream.read_bytes(fd) {
-            Done(buf) => buf,
-            Pending(()) => {
-                log::trace!("handshake response still pending: {reader:?}");
-                return Pending(());
-            }
-            Failed(err) => return Failed(ConnectionError::FailedToRead(err)),
+        let Done(buf) = stream
+            .read_bytes(fd)
+            .map_err(ConnectionError::FailedToRead)?
+        else {
+            log::trace!("handshake response still pending: {reader:?}");
+            return Ok(Pending(()));
         };
 
-        match reader.received(buf) {
-            Done(leftover) => {
-                log::trace!("Handshake response matches");
-                break leftover;
-            }
-            Pending(()) => {}
-            Failed(err) => {
-                return Failed(ConnectionError::UpgradeResponseReaderError(err));
-            }
+        if let Done(leftover) = reader
+            .received(buf)
+            .map_err(ConnectionError::UpgradeResponseReaderError)?
+        {
+            log::trace!("Handshake response matches");
+            break leftover;
         }
     };
 
     log::trace!("Configuring TCP keepalive");
-    if let Err(err) = enable_tcp_keep_alive(fd) {
-        return Failed(ConnectionError::TcpKeepAliveError(err));
-    }
+    enable_tcp_keep_alive(fd).map_err(ConnectionError::TcpKeepAliveError)?;
 
-    Done(MessageReader::new(leftover))
+    Ok(Done(MessageReader::new(leftover)))
 }

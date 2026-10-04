@@ -49,20 +49,19 @@ impl UpgradeRequestReader {
     pub fn received(
         &mut self,
         buf: Buffer<{ Self::BUFFER_SIZE }>,
-    ) -> Completion<UpgradeRequest, UpgradeRequestReaderError, ()> {
+    ) -> Result<Completion<UpgradeRequest, ()>, UpgradeRequestReaderError> {
         let buf = buf.as_slice();
 
         for (pos, &byte) in buf.iter().enumerate() {
-            let line = match self.lines.push(byte) {
-                Done(line) => line,
-                Pending(()) => continue,
-                Failed(err) => return Failed(UpgradeRequestReaderError::Line(err)),
+            let Done(line) = self
+                .lines
+                .push(byte)
+                .map_err(UpgradeRequestReaderError::Line)?
+            else {
+                continue;
             };
 
-            let line = match HttpLine::parse(line.as_slice()) {
-                Ok(line) => line,
-                Err(err) => return Failed(err),
-            };
+            let line = HttpLine::parse(line.as_slice())?;
 
             match line {
                 HttpLine::StartLine => self.seen_start_line = true,
@@ -76,7 +75,7 @@ impl UpgradeRequestReader {
                     self.seen_eos = true;
 
                     if pos.checked_add(1) != Some(buf.len()) {
-                        return Failed(UpgradeRequestReaderError::Leftover);
+                        return Err(UpgradeRequestReaderError::Leftover);
                     }
                     break;
                 }
@@ -85,11 +84,11 @@ impl UpgradeRequestReader {
         }
 
         if let Some(req) = self.try_finish() {
-            Done(req)
+            Ok(Done(req))
         } else if self.seen_eos {
-            Failed(UpgradeRequestReaderError::Incomplete)
+            Err(UpgradeRequestReaderError::Incomplete)
         } else {
-            Pending(())
+            Ok(Pending(()))
         }
     }
 
@@ -210,20 +209,20 @@ mod tests {
         String::from_utf8_lossy(UpgradeRequestWriter::new(REQ).remainder()).into_owned()
     }
 
-    fn read_all(bytes: &[u8]) -> Completion<UpgradeRequest, UpgradeRequestReaderError, ()> {
+    fn read_all(bytes: &[u8]) -> Result<Completion<UpgradeRequest, ()>, UpgradeRequestReaderError> {
         let (chunks, trailer) =
             as_chunks_with_guaranteed_trailer::<{ UpgradeRequestReader::BUFFER_SIZE }>(bytes);
 
         let mut reader = UpgradeRequestReader::new();
         for buf in chunks {
-            assert_eq!(reader.received(buf), Pending(()));
+            assert_eq!(reader.received(buf), Ok(Pending(())));
         }
         reader.received(trailer)
     }
 
     #[test]
     fn test_no_leftover() {
-        assert_eq!(read_all(request().as_bytes()), Done(REQ));
+        assert_eq!(read_all(request().as_bytes()), Ok(Done(REQ)));
     }
 
     #[test]
@@ -231,7 +230,7 @@ mod tests {
         let bytes = format!("{}abc", request());
         assert_eq!(
             read_all(bytes.as_bytes()),
-            Failed(UpgradeRequestReaderError::Leftover)
+            Err(UpgradeRequestReaderError::Leftover)
         );
     }
 
@@ -240,7 +239,7 @@ mod tests {
         let mut reader = UpgradeRequestReader::new();
         assert_eq!(
             reader.received(buffer(b"boo\r\n\r\n")),
-            Failed(UpgradeRequestReaderError::Incomplete)
+            Err(UpgradeRequestReaderError::Incomplete)
         );
     }
 
@@ -251,7 +250,7 @@ mod tests {
             &format!("\r\nX-Long: {}\r\n\r\n", "a".repeat(300)),
             1,
         );
-        assert_eq!(read_all(bytes.as_bytes()), Done(REQ));
+        assert_eq!(read_all(bytes.as_bytes()), Ok(Done(REQ)));
     }
 
     #[test]
@@ -259,7 +258,7 @@ mod tests {
         let bytes = request().replace("Token: sekret", &format!("Token: {}", "a".repeat(300)));
         assert_eq!(
             read_all(bytes.as_bytes()),
-            Failed(UpgradeRequestReaderError::Incomplete)
+            Err(UpgradeRequestReaderError::Incomplete)
         );
     }
 }

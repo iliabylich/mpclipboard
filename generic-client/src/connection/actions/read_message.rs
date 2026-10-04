@@ -6,26 +6,28 @@ pub fn read_message(
     reader: &mut MessageReader,
     stream: &mut MaybeTlsStream,
     fd: &impl AsFd,
-) -> Completion<Message, ConnectionError, ()> {
+) -> Result<Completion<Message, ()>, ConnectionError> {
     let mut message = None;
 
     loop {
-        let buf = match stream.read_bytes(fd) {
-            Done(buf) => buf,
-            Failed(err) => return Failed(ConnectionError::FailedToRead(err)),
-            Pending(()) => break,
+        let Done(buf) = stream
+            .read_bytes(fd)
+            .map_err(ConnectionError::FailedToRead)?
+        else {
+            break;
         };
 
-        match reader.received(buf) {
-            Done(m) => message = Some(m),
-            Failed(err) => return Failed(ConnectionError::MessageError(err)),
-            Pending(()) => {}
+        if let Done(m) = reader
+            .received(buf)
+            .map_err(ConnectionError::MessageError)?
+        {
+            message = Some(m);
         }
     }
 
     if let Some(message) = message {
-        Done(message)
+        Ok(Done(message))
     } else {
-        Pending(())
+        Ok(Pending(()))
     }
 }

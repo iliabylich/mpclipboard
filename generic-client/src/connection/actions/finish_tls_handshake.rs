@@ -5,10 +5,8 @@ use rustix::fd::AsFd;
 pub fn finish_tls_handshake(
     stream: &mut MaybeTlsStream,
     fd: &impl AsFd,
-) -> Completion<(), ConnectionError, ()> {
-    match stream.finish_tls_handshake(fd) {
-        Done(()) => Done(()),
-        Failed(err) => Failed(ConnectionError::FailedToFinishTlsHandshake(err)),
-        Pending(()) => Pending(()),
-    }
+) -> Result<Completion<(), ()>, ConnectionError> {
+    stream
+        .finish_tls_handshake(fd)
+        .map_err(ConnectionError::FailedToFinishTlsHandshake)
 }

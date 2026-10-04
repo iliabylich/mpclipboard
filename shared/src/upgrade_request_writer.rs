@@ -61,7 +61,10 @@ impl UpgradeRequestWriter {
             .unwrap_or_else(|| unreachable!("pos never exceeds the length of the request"))
     }
 
-    pub fn written(&mut self, n: NonZeroUsize) -> Completion<(), UpgradeRequestWriterError, ()> {
+    pub fn written(
+        &mut self,
+        n: NonZeroUsize,
+    ) -> Result<Completion<(), ()>, UpgradeRequestWriterError> {
         match self
             .pos
             .checked_add(n.get())
@@ -69,13 +72,13 @@ impl UpgradeRequestWriter {
         {
             Some((newpos, Ordering::Less)) => {
                 self.pos = newpos;
-                Pending(())
+                Ok(Pending(()))
             }
             Some((newpos, Ordering::Equal)) => {
                 self.pos = newpos;
-                Done(())
+                Ok(Done(()))
             }
-            None | Some((_, Ordering::Greater)) => Failed(UpgradeRequestWriterError {
+            None | Some((_, Ordering::Greater)) => Err(UpgradeRequestWriterError {
                 written: n.get(),
                 remaining: self.remainder().len(),
             }),
@@ -125,7 +128,7 @@ mod tests {
             )
         );
 
-        assert_eq!(writer.written(non_zero_usize(119)), Pending(()));
+        assert_eq!(writer.written(non_zero_usize(119)), Ok(Pending(())));
         assert_eq!(
             core::str::from_utf8(writer.remainder()),
             Ok("mpclipboard-raw\r\n\r\n")
@@ -133,13 +136,13 @@ mod tests {
 
         assert_eq!(
             writer.written(non_zero_usize(writer.remainder().len())),
-            Done(())
+            Ok(Done(()))
         );
         assert_eq!(core::str::from_utf8(writer.remainder()), Ok(""));
 
         assert_eq!(
             writer.written(non_zero_usize(1)),
-            Failed(UpgradeRequestWriterError {
+            Err(UpgradeRequestWriterError {
                 written: 1,
                 remaining: 0,
             })

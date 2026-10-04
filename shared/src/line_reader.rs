@@ -14,21 +14,21 @@ impl<const N: usize> LineReader<N> {
         Self::LineWaitingForSlashR(Buffer::new())
     }
 
-    pub(crate) fn push(&mut self, byte: u8) -> Completion<Buffer<N>, LineReaderError, ()> {
+    pub(crate) fn push(&mut self, byte: u8) -> Result<Completion<Buffer<N>, ()>, LineReaderError> {
         match self {
             Self::LineWaitingForSlashR(buf) => match byte {
                 b'\r' => {
                     *self = Self::LineWaitingForSlashN(*buf);
-                    Pending(())
+                    Ok(Pending(()))
                 }
 
-                b'\n' => Failed(LineReaderError::BareLF),
+                b'\n' => Err(LineReaderError::BareLF),
 
                 byte => {
                     if !buf.push(byte) {
                         *self = Self::SkipWaitingForSlashR;
                     }
-                    Pending(())
+                    Ok(Pending(()))
                 }
             },
 
@@ -36,26 +36,26 @@ impl<const N: usize> LineReader<N> {
                 b'\n' => {
                     let line = *buf;
                     *self = Self::new();
-                    Done(line)
+                    Ok(Done(line))
                 }
-                _ => Failed(LineReaderError::BareCR),
+                _ => Err(LineReaderError::BareCR),
             },
 
             Self::SkipWaitingForSlashR => match byte {
                 b'\r' => {
                     *self = Self::SkipWaitingForSlashN;
-                    Pending(())
+                    Ok(Pending(()))
                 }
-                b'\n' => Failed(LineReaderError::BareLF),
-                _ => Pending(()),
+                b'\n' => Err(LineReaderError::BareLF),
+                _ => Ok(Pending(())),
             },
 
             Self::SkipWaitingForSlashN => match byte {
                 b'\n' => {
                     *self = Self::new();
-                    Pending(())
+                    Ok(Pending(()))
                 }
-                _ => Failed(LineReaderError::BareCR),
+                _ => Err(LineReaderError::BareCR),
             },
         }
     }
@@ -80,12 +80,8 @@ mod tests {
         let mut reader = LineReader::<5>::new();
         let mut out = vec![];
         for &byte in input {
-            match reader.push(byte) {
-                Done(line) => {
-                    out.push(String::from_utf8_lossy(line.as_slice()).into_owned());
-                }
-                Failed(err) => return Err(err),
-                Pending(()) => {}
+            if let Done(line) = reader.push(byte)? {
+                out.push(String::from_utf8_lossy(line.as_slice()).into_owned());
             }
         }
         Ok(out)

@@ -39,22 +39,22 @@ impl MaybeTlsStream {
     pub(crate) fn finish_tls_handshake(
         &mut self,
         fd: &impl AsFd,
-    ) -> Completion<(), MaybeTlsStreamError, ()> {
+    ) -> Result<Completion<(), ()>, MaybeTlsStreamError> {
         let conn = match self {
             Self::Tls(conn) => conn,
-            Self::Plain => return Done(()),
+            Self::Plain => return Ok(Done(())),
         };
 
         match conn.complete_io(&mut StdReadWriteFd(fd)) {
             Ok(_) => {
                 if conn.is_handshaking() {
-                    Pending(())
+                    Ok(Pending(()))
                 } else {
-                    Done(())
+                    Ok(Done(()))
                 }
             }
-            Err(err) if err.kind() == ErrorKind::WouldBlock => Pending(()),
-            Err(err) => Failed(MaybeTlsStreamError::TlsHandshake(err)),
+            Err(err) if err.kind() == ErrorKind::WouldBlock => Ok(Pending(())),
+            Err(err) => Err(MaybeTlsStreamError::TlsHandshake(err)),
         }
     }
 
@@ -82,7 +82,7 @@ impl MaybeTlsStream {
     pub(crate) fn read_bytes<const N: usize>(
         &mut self,
         fd: &impl AsFd,
-    ) -> Completion<Buffer<N>, MaybeTlsStreamError, ()> {
+    ) -> Result<Completion<Buffer<N>, ()>, MaybeTlsStreamError> {
         match self {
             Self::Plain => mpclipboard_shared::io::read(fd).map_err(MaybeTlsStreamError::PlainRead),
             Self::Tls(conn) => tls_read(conn, fd),
@@ -93,7 +93,7 @@ impl MaybeTlsStream {
         &mut self,
         fd: &impl AsFd,
         buf: &[u8],
-    ) -> Completion<NonZeroUsize, MaybeTlsStreamError, ()> {
+    ) -> Result<Completion<NonZeroUsize, ()>, MaybeTlsStreamError> {
         assert!(!buf.is_empty(), "can't write an empty buffer");
 
         match self {
@@ -127,10 +127,8 @@ fn tls_flush(conn: &mut ClientConnection, fd: &impl AsFd) -> Result<(), MaybeTls
 fn tls_read<const N: usize>(
     conn: &mut ClientConnection,
     fd: &impl AsFd,
-) -> Completion<Buffer<N>, MaybeTlsStreamError, ()> {
-    if let Err(err) = complete_io(conn, fd) {
-        return Failed(err);
-    }
+) -> Result<Completion<Buffer<N>, ()>, MaybeTlsStreamError> {
+    complete_io(conn, fd)?;
 
     let mut buf = [0; N];
     match conn.reader().read(&mut buf).map(NonZeroUsize::new) {
@@ -139,11 +137,11 @@ fn tls_read<const N: usize>(
                 .get(..len.get())
                 .and_then(Buffer::from_slice)
                 .unwrap_or_else(|| unreachable!("read() can't return more than N bytes"));
-            Done(buf)
+            Ok(Done(buf))
         }
-        Ok(None) => Failed(MaybeTlsStreamError::TlsReadEof),
-        Err(err) if err.kind() == ErrorKind::WouldBlock => Pending(()),
-        Err(err) => Failed(MaybeTlsStreamError::TlsRead(err)),
+        Ok(None) => Err(MaybeTlsStreamError::TlsReadEof),
+        Err(err) if err.kind() == ErrorKind::WouldBlock => Ok(Pending(())),
+        Err(err) => Err(MaybeTlsStreamError::TlsRead(err)),
     }
 }
 
@@ -151,20 +149,18 @@ fn tls_write(
     conn: &mut ClientConnection,
     fd: &impl AsFd,
     buf: &[u8],
-) -> Completion<NonZeroUsize, MaybeTlsStreamError, ()> {
+) -> Result<Completion<NonZeroUsize, ()>, MaybeTlsStreamError> {
     let len = match conn.writer().write(buf).map(NonZeroUsize::new) {
         Ok(len) => len,
-        Err(err) if err.kind() == ErrorKind::WouldBlock => return Pending(()),
-        Err(err) => return Failed(MaybeTlsStreamError::TlsWrite(err)),
+        Err(err) if err.kind() == ErrorKind::WouldBlock => return Ok(Pending(())),
+        Err(err) => return Err(MaybeTlsStreamError::TlsWrite(err)),
     };
 
-    if let Err(err) = tls_flush(conn, fd) {
-        return Failed(err);
-    }
+    tls_flush(conn, fd)?;
 
     match len {
-        Some(len) => Done(len),
-        None => Pending(()),
+        Some(len) => Ok(Done(len)),
+        None => Ok(Pending(())),
     }
 }
 
