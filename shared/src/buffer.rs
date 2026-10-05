@@ -1,3 +1,4 @@
+use crate::NonEmptyInlineString;
 use core::ops::ControlFlow;
 
 #[must_use]
@@ -27,6 +28,36 @@ impl<const MAXLEN: usize> Buffer<MAXLEN> {
 
     pub const fn new(buf: [u8; MAXLEN]) -> Self {
         Self { buf, len: MAXLEN }
+    }
+
+    pub(crate) fn append_non_empty_string<const B: usize, const C: usize>(
+        &self,
+        other: &NonEmptyInlineString<B>,
+    ) -> Buffer<C> {
+        const { assert!(MAXLEN + B <= C, "C must be at least MAXLEN + B") };
+
+        let mut buf = [0; C];
+        let len = buf
+            .iter_mut()
+            .zip(self.as_slice().iter().chain(other.as_bytes()))
+            .map(|(dst, src)| *dst = *src)
+            .count();
+        Buffer { buf, len }
+    }
+
+    pub(crate) fn append_byte_array<const B: usize, const C: usize>(
+        &self,
+        other: &[u8; B],
+    ) -> Buffer<C> {
+        const { assert!(MAXLEN + B <= C, "C must be at least MAXLEN + B") };
+
+        let mut buf = [0; C];
+        let len = buf
+            .iter_mut()
+            .zip(self.as_slice().iter().chain(other))
+            .map(|(dst, src)| *dst = *src)
+            .count();
+        Buffer { buf, len }
     }
 
     fn from_suffix(suffix: &[u8]) -> Self {

@@ -73,6 +73,7 @@ pub enum MessageError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use core::assert_matches;
 
     type S = NonEmptyInlineString<MAX_TEXT_LEN>;
 
@@ -88,9 +89,9 @@ mod tests {
             Message::decode(&[0; Message::BYTESIZE]),
             Err(MessageError::Empty)
         );
-        assert!(matches!(
+        assert_matches!(
             Message::decode(&[b'\xC8'; Message::BYTESIZE]),
             Err(MessageError::NonUtf8(_))
-        ));
+        );
     }
 }

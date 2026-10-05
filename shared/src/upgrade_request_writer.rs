@@ -1,53 +1,89 @@
 use crate::{
-    Buffer, CONNECTION_UPGRADE_HEADER, HOST_PREFIX, ID_PREFIX, PushResult, START_LINE,
-    TOKEN_PREFIX, UPGRADE_MPCLIPBOARD_RAW_HEADER, UpgradeRequest, VERSION_PREFIX, prelude::*,
+    Buffer, CONNECTION_UPGRADE_HEADER, CRLF, HOST_PREFIX, ID_PREFIX, MAX_HOST_PORT_LENGTH,
+    MAX_ID_LENGTH, MAX_TOKEN_LENGTH, MAX_VERSION_LENGTH, START_LINE, TOKEN_PREFIX,
+    UPGRADE_MPCLIPBOARD_RAW_HEADER, UpgradeRequest, VERSION_PREFIX, prelude::*,
 };
 use core::num::NonZeroUsize;
+
+macro_rules! layout_sizes {
+    ($sizes:ident, $max:ident; $($kind:ident $x:ident => $m:expr),* $(,)?) => {
+        const COMPONENTS_COUNT: usize = [$($m),*].len();
+
+        #[expect(clippy::indexing_slicing)]
+        const $sizes: [usize; COMPONENTS_COUNT + 1] = {
+            let mut sizes = [0; COMPONENTS_COUNT + 1];
+            let mut idx = 0;
+            $(
+                sizes[idx + 1] = sizes[idx] + $m;
+                idx += 1;
+            )*
+            sizes
+        };
+        const $max: usize = {
+            let [.., last] = $sizes;
+            last
+        };
+    };
+}
+
+macro_rules! layout_step {
+    ($sizes:ident, $req:ident, $buf:expr, $idx:expr;) => { $buf };
+    ($sizes:ident, $req:ident, $buf:expr, $idx:expr; bytes $x:ident => $m:expr, $($rest:tt)*) => {
+        layout_step!($sizes, $req, $buf.append_byte_array::<{ $m }, { $sizes[$idx] }>($x), $idx + 1; $($rest)*)
+    };
+    ($sizes:ident, $req:ident, $buf:expr, $idx:expr; string $field:ident => $m:expr, $($rest:tt)*) => {
+        layout_step!($sizes, $req, $buf.append_non_empty_string::<{ $m }, { $sizes[$idx] }>(&$req.$field), $idx + 1; $($rest)*)
+    };
+}
+
+macro_rules! layout_chain {
+    ($sizes:ident, $req:ident; $($pieces:tt)*) => {
+        layout_step!($sizes, $req, Buffer::<{ $sizes[0] }>::empty(), 1; $($pieces)*)
+    };
+}
+
+macro_rules! layout {
+    ($sizes:ident, $max:ident; $($pieces:tt)*) => {
+        layout_sizes!($sizes, $max; $($pieces)*);
+
+        fn encode(req: &UpgradeRequest) -> Buffer<$max> {
+            layout_chain!($sizes, req; $($pieces)*)
+        }
+    };
+}
+
+layout! {
+    SIZES, MAX_LENGTH;
+    bytes START_LINE => START_LINE.len(),
+    bytes CRLF => CRLF.len(),
+    bytes HOST_PREFIX => HOST_PREFIX.len(),
+    string host => MAX_HOST_PORT_LENGTH,
+    bytes CRLF => CRLF.len(),
+    bytes TOKEN_PREFIX => TOKEN_PREFIX.len(),
+    string token => MAX_TOKEN_LENGTH,
+    bytes CRLF => CRLF.len(),
+    bytes ID_PREFIX => ID_PREFIX.len(),
+    string id => MAX_ID_LENGTH,
+    bytes CRLF => CRLF.len(),
+    bytes VERSION_PREFIX => VERSION_PREFIX.len(),
+    string version => MAX_VERSION_LENGTH,
+    bytes CRLF => CRLF.len(),
+    bytes CONNECTION_UPGRADE_HEADER => CONNECTION_UPGRADE_HEADER.len(),
+    bytes CRLF => CRLF.len(),
+    bytes UPGRADE_MPCLIPBOARD_RAW_HEADER => UPGRADE_MPCLIPBOARD_RAW_HEADER.len(),
+    bytes CRLF => CRLF.len(),
+    bytes CRLF => CRLF.len(),
+}
 
 #[must_use]
 #[derive(Debug, Clone, Copy)]
 pub struct UpgradeRequestWriter {
-    buf: Buffer<{ UpgradeRequest::MAX_LENGTH }>,
+    buf: Buffer<MAX_LENGTH>,
 }
 
 impl UpgradeRequestWriter {
     pub fn new(req: UpgradeRequest) -> Self {
-        let mut buf = Buffer::empty();
-
-        let mut append = |s: &str| {
-            for &byte in s.as_bytes() {
-                if let PushResult::Full(_) = buf.push(byte) {
-                    unreachable!("UpgradeRequest is never longer than UpgradeRequest::MAX_LENGTH");
-                }
-            }
-        };
-
-        append(START_LINE);
-        append("\r\n");
-
-        append(HOST_PREFIX);
-        append(req.host.as_str());
-        append("\r\n");
-
-        append(TOKEN_PREFIX);
-        append(req.token.as_str());
-        append("\r\n");
-
-        append(ID_PREFIX);
-        append(req.id.as_str());
-        append("\r\n");
-
-        append(VERSION_PREFIX);
-        append(req.version.as_str());
-        append("\r\n");
-
-        append(CONNECTION_UPGRADE_HEADER);
-        append("\r\n");
-
-        append(UPGRADE_MPCLIPBOARD_RAW_HEADER);
-        append("\r\n");
-
-        append("\r\n");
+        let buf = encode(&req);
 
         Self { buf }
     }

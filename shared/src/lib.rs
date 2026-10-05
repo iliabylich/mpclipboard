@@ -85,13 +85,14 @@ pub type ID = NonEmptyInlineString<MAX_ID_LENGTH>;
 const MAX_VERSION_LENGTH: usize = 50;
 pub type Version = NonEmptyInlineString<MAX_VERSION_LENGTH>;
 
-pub(crate) const START_LINE: &str = "GET / HTTP/1.1";
-pub(crate) const HOST_PREFIX: &str = "Host: ";
-pub(crate) const TOKEN_PREFIX: &str = "Token: ";
-pub(crate) const ID_PREFIX: &str = "ID: ";
-pub(crate) const VERSION_PREFIX: &str = "Version: ";
-pub(crate) const CONNECTION_UPGRADE_HEADER: &str = "Connection: Upgrade";
-pub(crate) const UPGRADE_MPCLIPBOARD_RAW_HEADER: &str = "Upgrade: mpclipboard-raw";
+pub(crate) const START_LINE: &[u8; 14] = b"GET / HTTP/1.1";
+pub(crate) const HOST_PREFIX: &[u8; 6] = b"Host: ";
+pub(crate) const TOKEN_PREFIX: &[u8; 7] = b"Token: ";
+pub(crate) const ID_PREFIX: &[u8; 4] = b"ID: ";
+pub(crate) const VERSION_PREFIX: &[u8; 9] = b"Version: ";
+pub(crate) const CONNECTION_UPGRADE_HEADER: &[u8; 19] = b"Connection: Upgrade";
+pub(crate) const UPGRADE_MPCLIPBOARD_RAW_HEADER: &[u8; 24] = b"Upgrade: mpclipboard-raw";
+pub(crate) const CRLF: &[u8; 2] = b"\r\n";
 
 mod non_empty_inline_string;
 pub use non_empty_inline_string::{NonEmptyInlineString, NonEmptyInlineStringError};
@@ -117,9 +118,9 @@ pub use tcp_keep_alive::{TcpKeepAliveError, enable_tcp_keep_alive};
 mod url;
 pub use url::{Url, UrlParseError};
 
-pub(crate) fn strip_prefix_ignore_ascii_case<'a>(line: &'a str, prefix: &str) -> Option<&'a str> {
+pub(crate) fn strip_prefix_ignore_ascii_case<'a>(line: &'a str, prefix: &[u8]) -> Option<&'a str> {
     let (pre, post) = line.split_at_checked(prefix.len())?;
-    if pre.eq_ignore_ascii_case(prefix) {
+    if pre.as_bytes().eq_ignore_ascii_case(prefix) {
         Some(post)
     } else {
         None

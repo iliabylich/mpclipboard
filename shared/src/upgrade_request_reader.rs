@@ -139,7 +139,7 @@ impl HttpLine {
 
         let line = core::str::from_utf8(line)?;
 
-        if line == START_LINE {
+        if line.as_bytes() == START_LINE {
             Ok(Self::StartLine)
         } else if let Some(host) = strip_prefix_ignore_ascii_case(line, HOST_PREFIX) {
             let host = HostPort::new(host).map_err(InvalidHost)?;
