@@ -60,17 +60,13 @@ impl<const MAXLEN: usize> Buffer<MAXLEN> {
         Buffer { buf, len }
     }
 
-    fn from_suffix(suffix: &[u8]) -> Self {
-        assert!(suffix.len() <= MAXLEN, "suffix doesn't fit into Buffer");
-
+    fn shift_left(&mut self, n: usize) {
         let mut buf = [0; MAXLEN];
-        for (dst, src) in buf.iter_mut().zip(suffix) {
+        for (dst, src) in buf.iter_mut().zip(self.buf.iter().skip(n)) {
             *dst = *src;
         }
-        Self {
-            buf,
-            len: suffix.len(),
-        }
+        self.buf = buf;
+        self.len = self.len.saturating_sub(n);
     }
 
     pub fn push(&mut self, byte: u8) -> PushResult<'_, MAXLEN> {
@@ -83,10 +79,10 @@ impl<const MAXLEN: usize> Buffer<MAXLEN> {
     }
 
     pub fn drop_n_front_bytes(&mut self, n: usize) -> Result<(), usize> {
-        let Some(rest) = self.as_slice().get(n..) else {
+        if n > self.len {
             return Err(self.len);
-        };
-        *self = Self::from_suffix(rest);
+        }
+        self.shift_left(n);
         Ok(())
     }
 
@@ -94,13 +90,14 @@ impl<const MAXLEN: usize> Buffer<MAXLEN> {
         &mut self,
         mut f: impl FnMut(u8) -> Result<ControlFlow<()>, E>,
     ) -> Result<(), E> {
-        let mut bytes = self.as_slice().iter();
-        for &byte in bytes.by_ref() {
+        let mut consumed = self.len;
+        for (n, &byte) in (1..=self.len).zip(self.as_slice()) {
             if f(byte)?.is_break() {
+                consumed = n;
                 break;
             }
         }
-        *self = Self::from_suffix(bytes.as_slice());
+        self.shift_left(consumed);
         Ok(())
     }
 
