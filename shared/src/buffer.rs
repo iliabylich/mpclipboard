@@ -1,3 +1,5 @@
+use core::ops::ControlFlow;
+
 #[must_use]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Buffer<const MAXLEN: usize> {
@@ -27,28 +29,47 @@ impl<const MAXLEN: usize> Buffer<MAXLEN> {
         Self { buf, len: MAXLEN }
     }
 
-    #[must_use]
-    pub fn push(&mut self, byte: u8) -> bool {
+    fn from_suffix(suffix: &[u8]) -> Self {
+        assert!(suffix.len() <= MAXLEN, "suffix doesn't fit into Buffer");
+
+        let mut buf = [0; MAXLEN];
+        for (dst, src) in buf.iter_mut().zip(suffix) {
+            *dst = *src;
+        }
+        Self {
+            buf,
+            len: suffix.len(),
+        }
+    }
+
+    pub fn push(&mut self, byte: u8) -> PushResult<'_, MAXLEN> {
         let Some((slot, len)) = self.buf.get_mut(self.len).zip(self.len.checked_add(1)) else {
-            return false;
+            return PushResult::Full(&self.buf);
         };
         *slot = byte;
         self.len = len;
-        true
+        PushResult::Pushed
     }
 
     pub fn drop_n_front_bytes(&mut self, n: usize) -> Result<(), usize> {
         let Some(rest) = self.as_slice().get(n..) else {
             return Err(self.len);
         };
-        let mut buf = [0; MAXLEN];
-        for (dst, src) in buf.iter_mut().zip(rest) {
-            *dst = *src;
+        *self = Self::from_suffix(rest);
+        Ok(())
+    }
+
+    pub fn drain_front<E>(
+        &mut self,
+        mut f: impl FnMut(u8) -> Result<ControlFlow<()>, E>,
+    ) -> Result<(), E> {
+        let mut bytes = self.as_slice().iter();
+        for &byte in bytes.by_ref() {
+            if f(byte)?.is_break() {
+                break;
+            }
         }
-        *self = Self {
-            buf,
-            len: rest.len(),
-        };
+        *self = Self::from_suffix(bytes.as_slice());
         Ok(())
     }
 
@@ -62,15 +83,6 @@ impl<const MAXLEN: usize> Buffer<MAXLEN> {
             .get(..self.len)
             .unwrap_or_else(|| unreachable!("Buffer always has valid len"))
     }
-
-    #[must_use]
-    pub const fn as_full_array(&self) -> Option<&[u8; MAXLEN]> {
-        if self.len == MAXLEN {
-            Some(&self.buf)
-        } else {
-            None
-        }
-    }
 }
 
 impl<const MAXLEN: usize> Default for Buffer<MAXLEN> {
@@ -79,19 +91,28 @@ impl<const MAXLEN: usize> Default for Buffer<MAXLEN> {
     }
 }
 
+#[must_use]
+#[derive(Debug, PartialEq, Eq)]
+pub enum PushResult<'a, const MAXLEN: usize> {
+    Pushed,
+    Full(&'a [u8; MAXLEN]),
+}
+
 #[cfg(test)]
 mod tests {
-    use super::Buffer;
+    use super::{Buffer, PushResult};
+    use alloc::vec;
+    use core::ops::ControlFlow::{Break, Continue};
 
     #[test]
     fn test_push() {
         let mut buf = Buffer::<3>::empty();
         assert_eq!(buf.as_slice(), b"");
 
-        assert!(buf.push(b'a'));
-        assert!(buf.push(b'b'));
-        assert!(buf.push(b'c'));
-        assert!(!buf.push(b'd'));
+        assert_eq!(buf.push(b'a'), PushResult::Pushed);
+        assert_eq!(buf.push(b'b'), PushResult::Pushed);
+        assert_eq!(buf.push(b'c'), PushResult::Pushed);
+        assert_eq!(buf.push(b'd'), PushResult::Full(b"abc"));
 
         assert_eq!(buf.as_slice(), b"abc");
     }
@@ -99,23 +120,11 @@ mod tests {
     #[test]
     fn test_clear() {
         let mut buf = Buffer::<3>::empty();
-        assert!(buf.push(b'a'));
-        assert!(buf.push(b'b'));
+        assert_eq!(buf.push(b'a'), PushResult::Pushed);
+        assert_eq!(buf.push(b'b'), PushResult::Pushed);
 
         buf.clear();
         assert_eq!(buf, Buffer::empty());
-    }
-
-    #[test]
-    fn test_as_full_array() {
-        let mut buf = Buffer::<2>::empty();
-        assert_eq!(buf.as_full_array(), None);
-
-        assert!(buf.push(b'a'));
-        assert_eq!(buf.as_full_array(), None);
-
-        assert!(buf.push(b'b'));
-        assert_eq!(buf.as_full_array(), Some(b"ab"));
     }
 
     #[test]
@@ -130,6 +139,31 @@ mod tests {
 
         assert_eq!(buf.drop_n_front_bytes(3), Ok(()));
         assert_eq!(buf, Buffer::empty());
+    }
+
+    #[test]
+    fn test_drain_front() {
+        let mut buf = Buffer::<5>::new(*b"ab|cd");
+        let mut seen = vec![];
+        let res: Result<(), ()> = buf.drain_front(|byte| {
+            seen.push(byte);
+            Ok(if byte == b'|' {
+                Break(())
+            } else {
+                Continue(())
+            })
+        });
+        assert_eq!(res, Ok(()));
+        assert_eq!(seen, b"ab|");
+        assert_eq!(buf.as_slice(), b"cd");
+
+        let res: Result<(), ()> = buf.drain_front(|_| Ok(Continue(())));
+        assert_eq!(res, Ok(()));
+        assert_eq!(buf, Buffer::empty());
+
+        let mut buf = Buffer::<3>::new(*b"abc");
+        assert_eq!(buf.drain_front(|_| Err("boom")), Err("boom"));
+        assert_eq!(buf.as_slice(), b"abc");
     }
 
     #[test]

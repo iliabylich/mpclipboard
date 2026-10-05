@@ -97,7 +97,7 @@ mod non_empty_inline_string;
 pub use non_empty_inline_string::{NonEmptyInlineString, NonEmptyInlineStringError};
 
 mod buffer;
-pub use buffer::Buffer;
+pub use buffer::{Buffer, PushResult};
 
 mod wants;
 pub use wants::{OptionWantsExt, Wants};

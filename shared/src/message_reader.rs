@@ -1,9 +1,9 @@
-use crate::{Buffer, Message, MessageError, prelude::*};
+use crate::{Buffer, Message, MessageError, PushResult, prelude::*};
 
 #[must_use]
 #[derive(Debug, Clone, Copy)]
 pub struct MessageReader {
-    buf: Buffer<{ Message::BYTESIZE }>,
+    buf: Buffer<{ Message::BYTESIZE - 1 }>,
 }
 
 impl MessageReader {
@@ -13,10 +13,8 @@ impl MessageReader {
         }
     }
 
-    pub fn new(partial: Buffer<{ Message::BYTESIZE - 1 }>) -> Self {
-        let buf = Buffer::from_slice(partial.as_slice())
-            .unwrap_or_else(|| unreachable!("partial message is always shorter than a message"));
-        Self { buf }
+    pub const fn new(partial: Buffer<{ Message::BYTESIZE - 1 }>) -> Self {
+        Self { buf: partial }
     }
 
     pub fn received(
@@ -26,12 +24,8 @@ impl MessageReader {
         let mut message = None;
 
         for &byte in bytes.as_slice() {
-            if !self.buf.push(byte) {
-                unreachable!("buf is cleared as soon as it's full");
-            }
-
-            if let Some(full) = self.buf.as_full_array() {
-                message = Some(Message::decode(full)?);
+            if let PushResult::Full(buffered) = self.buf.push(byte) {
+                message = Some(Message::decode(&concat(buffered, byte))?);
                 self.buf.clear();
             }
         }
@@ -48,6 +42,16 @@ impl Default for MessageReader {
     fn default() -> Self {
         Self::empty()
     }
+}
+
+fn concat<const N: usize, const M: usize>(head: &[u8; N], last: u8) -> [u8; M] {
+    const { assert!(N + 1 == M, "M must be N + 1") };
+
+    let mut out = [0; M];
+    for (dst, src) in out.iter_mut().zip(head.iter().copied().chain([last])) {
+        *dst = src;
+    }
+    out
 }
 
 #[cfg(test)]

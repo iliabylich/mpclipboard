@@ -5,7 +5,10 @@ use crate::{
     prelude::*,
     strip_prefix_ignore_ascii_case,
 };
-use core::str::Utf8Error;
+use core::{
+    ops::ControlFlow::{Break, Continue},
+    str::Utf8Error,
+};
 
 #[expect(clippy::struct_excessive_bools)]
 #[must_use]
@@ -35,15 +38,11 @@ impl UpgradeResponseReader {
 
     pub fn received(
         &mut self,
-        buf: Buffer<{ Self::BUFFER_SIZE }>,
+        mut buf: Buffer<{ Self::BUFFER_SIZE }>,
     ) -> Result<Completion<Buffer<{ Self::BUFFER_SIZE }>, ()>, UpgradeResponseReaderError> {
-        let buf = buf.as_slice();
-
-        let mut leftover = Buffer::empty();
-
-        for (pos, &byte) in buf.iter().enumerate() {
+        buf.drain_front::<UpgradeResponseReaderError>(|byte| {
             let Done(line) = self.lines.push(byte)? else {
-                continue;
+                return Ok(Continue(()));
             };
 
             let line = HttpLine::parse(line.as_slice())?;
@@ -54,23 +53,16 @@ impl UpgradeResponseReader {
                 HttpLine::UpgradeMPClipboardRaw => self.seen_upgrade_mpclipboard_raw = true,
                 HttpLine::EndOfResponse => {
                     self.seen_eos = true;
-
-                    let rest = pos
-                        .checked_add(1)
-                        .and_then(|start| buf.get(start..))
-                        .unwrap_or_else(|| unreachable!("pos is an index into buf"));
-                    let rest = Buffer::from_slice(rest).unwrap_or_else(|| {
-                        unreachable!("rest is a part of a buffer of the same size")
-                    });
-                    leftover = rest;
-                    break;
+                    return Ok(Break(()));
                 }
                 HttpLine::Other => {}
             }
-        }
+
+            Ok(Continue(()))
+        })?;
 
         if self.try_finish() {
-            Ok(Done(leftover))
+            Ok(Done(buf))
         } else if self.seen_eos {
             Err(UpgradeResponseReaderError::Incomplete)
         } else {

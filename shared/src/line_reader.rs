@@ -1,4 +1,4 @@
-use crate::{Buffer, prelude::*};
+use crate::{Buffer, PushResult, prelude::*};
 
 #[must_use]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -25,7 +25,7 @@ impl<const N: usize> LineReader<N> {
                 b'\n' => Err(LineReaderError::BareLF),
 
                 byte => {
-                    if !buf.push(byte) {
+                    if let PushResult::Full(_) = buf.push(byte) {
                         *self = Self::SkipWaitingForSlashR;
                     }
                     Ok(Pending(()))

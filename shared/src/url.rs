@@ -87,6 +87,7 @@ pub enum UrlParseError {
 mod tests {
     use super::{Url, UrlParseError};
     use crate::{HostPort, NonEmptyInlineString, NonEmptyInlineStringError};
+    use core::assert_matches;
 
     #[test]
     fn test_parse() {
@@ -129,9 +130,9 @@ mod tests {
             Url::parse("http://:3000"),
             Err(UrlParseError::InvalidHost(NonEmptyInlineStringError::Empty))
         );
-        assert!(matches!(
+        assert_matches!(
             Url::parse("http://localhost:99999"),
             Err(UrlParseError::InvalidPort(_))
-        ));
+        );
     }
 }

@@ -1,6 +1,6 @@
 use crate::{
-    Buffer, CONNECTION_UPGRADE_HEADER, HOST_PREFIX, ID_PREFIX, START_LINE, TOKEN_PREFIX,
-    UPGRADE_MPCLIPBOARD_RAW_HEADER, UpgradeRequest, VERSION_PREFIX, prelude::*,
+    Buffer, CONNECTION_UPGRADE_HEADER, HOST_PREFIX, ID_PREFIX, PushResult, START_LINE,
+    TOKEN_PREFIX, UPGRADE_MPCLIPBOARD_RAW_HEADER, UpgradeRequest, VERSION_PREFIX, prelude::*,
 };
 use core::num::NonZeroUsize;
 
@@ -16,7 +16,7 @@ impl UpgradeRequestWriter {
 
         let mut append = |s: &str| {
             for &byte in s.as_bytes() {
-                if !buf.push(byte) {
+                if let PushResult::Full(_) = buf.push(byte) {
                     unreachable!("UpgradeRequest is never longer than UpgradeRequest::MAX_LENGTH");
                 }
             }

@@ -6,7 +6,10 @@ use crate::{
     prelude::*,
     strip_prefix_ignore_ascii_case,
 };
-use core::str::Utf8Error;
+use core::{
+    ops::ControlFlow::{Break, Continue},
+    str::Utf8Error,
+};
 
 #[expect(clippy::struct_excessive_bools)]
 #[must_use]
@@ -48,13 +51,11 @@ impl UpgradeRequestReader {
 
     pub fn received(
         &mut self,
-        buf: Buffer<{ Self::BUFFER_SIZE }>,
+        mut buf: Buffer<{ Self::BUFFER_SIZE }>,
     ) -> Result<Completion<UpgradeRequest, ()>, UpgradeRequestReaderError> {
-        let buf = buf.as_slice();
-
-        for (pos, &byte) in buf.iter().enumerate() {
+        buf.drain_front::<UpgradeRequestReaderError>(|byte| {
             let Done(line) = self.lines.push(byte)? else {
-                continue;
+                return Ok(Continue(()));
             };
 
             let line = HttpLine::parse(line.as_slice())?;
@@ -69,14 +70,16 @@ impl UpgradeRequestReader {
                 HttpLine::UpgradeMPClipboardRaw => self.seen_upgrade_mpclipboard_raw = true,
                 HttpLine::EndOfRequest => {
                     self.seen_eos = true;
-
-                    if pos.checked_add(1) != Some(buf.len()) {
-                        return Err(UpgradeRequestReaderError::Leftover);
-                    }
-                    break;
+                    return Ok(Break(()));
                 }
                 HttpLine::Other => {}
             }
+
+            Ok(Continue(()))
+        })?;
+
+        if !buf.as_slice().is_empty() {
+            return Err(UpgradeRequestReaderError::Leftover);
         }
 
         if let Some(req) = self.try_finish() {
