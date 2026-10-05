@@ -1,4 +1,5 @@
 use anyhow::{Context, Result, ensure};
+use core::mem::MaybeUninit;
 use mpclipboard_shared::{ConfigParser, Token, Url};
 
 #[derive(Clone, Copy)]
@@ -15,14 +16,19 @@ const PATH: &[u8] = if cfg!(debug_assertions) {
 
 impl Config {
     pub(crate) fn read() -> Result<Self> {
-        ConfigParser::parse(PATH, &mut [0; 1_024], ["url", "token"], |[url, token]| {
-            let url = Url::parse(url).context("malformed url")?;
-            ensure!(!url.is_tls(), "url must have http scheme");
+        ConfigParser::parse(
+            PATH,
+            &mut [MaybeUninit::uninit(); 1_024],
+            ["url", "token"],
+            |[url, token]| {
+                let url = Url::parse(url).context("malformed url")?;
+                ensure!(!url.is_tls(), "url must have http scheme");
 
-            let token = Token::new(token).context("token is too long")?;
+                let token = Token::new(token).context("token is too long")?;
 
-            Ok(Self { url, token })
-        })
+                Ok(Self { url, token })
+            },
+        )
         .context("failed to parse config")?
     }
 }

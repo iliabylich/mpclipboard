@@ -1,3 +1,4 @@
+use core::mem::MaybeUninit;
 use mpclipboard_shared::{
     ConfigParser, ConfigParserError, ID, NonEmptyInlineStringError, PROTOCOL_VERSION, Token,
     UpgradeRequest, Url, UrlParseError,
@@ -33,7 +34,7 @@ impl Config {
     fn read(path: impl AsRef<Path>) -> Result<Self, ConfigError> {
         ConfigParser::parse(
             path.as_ref().as_os_str().as_encoded_bytes(),
-            &mut [0; 1_024],
+            &mut [MaybeUninit::uninit(); 1_024],
             ["url", "token", "id"],
             |[url, token, id]| Self::new(url, token, id),
         )?

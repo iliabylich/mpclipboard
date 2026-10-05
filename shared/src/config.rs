@@ -1,5 +1,5 @@
 use boml::{Toml, prelude::TomlErrorKind, table::TomlGetError, types::TomlValueType};
-use core::str::Utf8Error;
+use core::{mem::MaybeUninit, str::Utf8Error};
 use rustix::{
     fs::{Mode, OFlags},
     io::Errno,
@@ -10,7 +10,7 @@ pub struct ConfigParser;
 impl ConfigParser {
     pub fn parse<const N: usize, T>(
         path: &[u8],
-        buffer: &mut [u8],
+        buffer: &mut [MaybeUninit<u8>],
         keys: [&'static str; N],
         f: impl FnOnce([&str; N]) -> T,
     ) -> Result<T, ConfigParserError> {
@@ -31,16 +31,17 @@ impl ConfigParser {
     }
 }
 
-fn read_toml<'a>(path: &[u8], buffer: &'a mut [u8]) -> Result<Toml<'a>, ConfigParserError> {
+fn read_toml<'a>(
+    path: &[u8],
+    buffer: &'a mut [MaybeUninit<u8>],
+) -> Result<Toml<'a>, ConfigParserError> {
     let fd =
         rustix::fs::open(path, OFlags::RDONLY, Mode::empty()).map_err(ConfigParserError::Open)?;
-    let len = rustix::io::read(&fd, &mut *buffer).map_err(ConfigParserError::Read)?;
-    if len == buffer.len() {
-        return Err(ConfigParserError::TooLarge(buffer.len()));
+    let len = buffer.len();
+    let (bytes, spare) = rustix::io::read(&fd, buffer).map_err(ConfigParserError::Read)?;
+    if spare.is_empty() {
+        return Err(ConfigParserError::TooLarge(len));
     }
-    let bytes = buffer
-        .get(..len)
-        .unwrap_or_else(|| unreachable!("read() can't return more than buffer.len() bytes"));
     let text = core::str::from_utf8(bytes)?;
 
     boml::parse(text).map_err(|err| ConfigParserError::MalformedToml(err.kind, err.src.start))
