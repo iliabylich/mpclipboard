@@ -18,15 +18,14 @@ impl<const MAXLEN: usize> NonEmptyInlineString<MAXLEN> {
     pub fn new(s: &str) -> Result<Self, NonEmptyInlineStringError> {
         let () = Self::MAXLEN_FITS_INTO_U8;
 
+        let len = u8::try_from(s.len()).map_err(|_| NonEmptyInlineStringError::TooLong)?;
+        let len = NonZeroU8::new(len).ok_or(NonEmptyInlineStringError::Empty)?;
+
         let mut bytes = [0; MAXLEN];
         bytes
             .get_mut(..s.len())
             .ok_or(NonEmptyInlineStringError::TooLong)?
             .copy_from_slice(s.as_bytes());
-
-        let len =
-            u8::try_from(s.len()).unwrap_or_else(|_| unreachable!("s.len() <= MAXLEN <= u8::MAX"));
-        let len = NonZeroU8::new(len).ok_or(NonEmptyInlineStringError::Empty)?;
 
         Ok(Self { len, bytes })
     }
@@ -148,6 +147,10 @@ mod tess {
         );
         assert_eq!(
             NonEmptyInlineString::<3>::new("abcd"),
+            Err(NonEmptyInlineStringError::TooLong)
+        );
+        assert_eq!(
+            NonEmptyInlineString::<3>::new(&"a".repeat(300)),
             Err(NonEmptyInlineStringError::TooLong)
         );
     }

@@ -1,45 +1,40 @@
 use crate::{prelude::*, upgrade_response::UpgradeResponse};
-use core::{cmp::Ordering, num::NonZeroUsize};
+use core::num::NonZeroUsize;
 
 #[must_use]
 #[derive(Debug, Clone, Copy)]
 pub struct UpgradeResponseWriter {
-    pos: usize,
+    remainder: &'static [u8],
 }
 
 impl UpgradeResponseWriter {
     pub const fn new() -> Self {
-        Self { pos: 0 }
+        Self {
+            remainder: UpgradeResponse::BYTES,
+        }
     }
 
     #[must_use]
-    pub fn remainder(&self) -> &[u8] {
-        UpgradeResponse::BYTES
-            .get(self.pos..)
-            .unwrap_or_else(|| unreachable!("pos never exceeds UpgradeResponse::BYTES.len()"))
+    pub const fn remainder(&self) -> &[u8] {
+        self.remainder
     }
 
     pub fn written(
         &mut self,
         len: NonZeroUsize,
     ) -> Result<Completion<(), ()>, UpgradeResponseWriterError> {
-        match self
-            .pos
-            .checked_add(len.get())
-            .map(|nextpos| (nextpos, nextpos.cmp(&UpgradeResponse::BYTES.len())))
-        {
-            Some((nextpos, Ordering::Less)) => {
-                self.pos = nextpos;
-                Ok(Pending(()))
-            }
-            Some((nextpos, Ordering::Equal)) => {
-                self.pos = nextpos;
-                Ok(Done(()))
-            }
-            None | Some((_, Ordering::Greater)) => Err(UpgradeResponseWriterError {
+        let (_, rest) = self.remainder.split_at_checked(len.get()).ok_or_else(|| {
+            UpgradeResponseWriterError {
                 written: len.get(),
-                remaining: self.remainder().len(),
-            }),
+                remaining: self.remainder.len(),
+            }
+        })?;
+        self.remainder = rest;
+
+        if self.remainder.is_empty() {
+            Ok(Done(()))
+        } else {
+            Ok(Pending(()))
         }
     }
 }

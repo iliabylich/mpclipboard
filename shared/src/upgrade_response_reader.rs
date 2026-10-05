@@ -39,7 +39,7 @@ impl UpgradeResponseReader {
     ) -> Result<Completion<Buffer<{ Self::BUFFER_SIZE }>, ()>, UpgradeResponseReaderError> {
         let buf = buf.as_slice();
 
-        let mut leftover = Buffer::new();
+        let mut leftover = Buffer::empty();
 
         for (pos, &byte) in buf.iter().enumerate() {
             let Done(line) = self.lines.push(byte)? else {
@@ -160,7 +160,7 @@ mod tests {
 
     #[test]
     fn test_no_leftover() {
-        assert_eq!(read_all(UpgradeResponse::BYTES), Ok(Done(Buffer::new())));
+        assert_eq!(read_all(UpgradeResponse::BYTES), Ok(Done(Buffer::empty())));
     }
 
     #[test]
@@ -185,6 +185,6 @@ mod tests {
             &format!("\r\nReport-To: {}\r\n\r\n", "a".repeat(300)),
             1,
         );
-        assert_eq!(read_all(bytes.as_bytes()), Ok(Done(Buffer::new())));
+        assert_eq!(read_all(bytes.as_bytes()), Ok(Done(Buffer::empty())));
     }
 }

@@ -2,18 +2,17 @@ use crate::{
     Buffer, CONNECTION_UPGRADE_HEADER, HOST_PREFIX, ID_PREFIX, START_LINE, TOKEN_PREFIX,
     UPGRADE_MPCLIPBOARD_RAW_HEADER, UpgradeRequest, VERSION_PREFIX, prelude::*,
 };
-use core::{cmp::Ordering, num::NonZeroUsize};
+use core::num::NonZeroUsize;
 
 #[must_use]
 #[derive(Debug, Clone, Copy)]
 pub struct UpgradeRequestWriter {
     buf: Buffer<{ UpgradeRequest::MAX_LENGTH }>,
-    pos: usize,
 }
 
 impl UpgradeRequestWriter {
     pub fn new(req: UpgradeRequest) -> Self {
-        let mut buf = Buffer::new();
+        let mut buf = Buffer::empty();
 
         let mut append = |s: &str| {
             for &byte in s.as_bytes() {
@@ -50,38 +49,29 @@ impl UpgradeRequestWriter {
 
         append("\r\n");
 
-        Self { buf, pos: 0 }
+        Self { buf }
     }
 
     #[must_use]
     pub fn remainder(&self) -> &[u8] {
-        self.buf
-            .as_slice()
-            .get(self.pos..)
-            .unwrap_or_else(|| unreachable!("pos never exceeds the length of the request"))
+        self.buf.as_slice()
     }
 
     pub fn written(
         &mut self,
         n: NonZeroUsize,
     ) -> Result<Completion<(), ()>, UpgradeRequestWriterError> {
-        match self
-            .pos
-            .checked_add(n.get())
-            .map(|newpos| (newpos, newpos.cmp(&self.buf.as_slice().len())))
-        {
-            Some((newpos, Ordering::Less)) => {
-                self.pos = newpos;
-                Ok(Pending(()))
-            }
-            Some((newpos, Ordering::Equal)) => {
-                self.pos = newpos;
-                Ok(Done(()))
-            }
-            None | Some((_, Ordering::Greater)) => Err(UpgradeRequestWriterError {
+        self.buf
+            .drop_n_front_bytes(n.get())
+            .map_err(|remaining| UpgradeRequestWriterError {
                 written: n.get(),
-                remaining: self.remainder().len(),
-            }),
+                remaining,
+            })?;
+
+        if self.remainder().is_empty() {
+            Ok(Done(()))
+        } else {
+            Ok(Pending(()))
         }
     }
 }

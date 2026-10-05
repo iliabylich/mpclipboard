@@ -11,7 +11,7 @@ pub(crate) enum LineReader<const N: usize> {
 
 impl<const N: usize> LineReader<N> {
     pub(crate) const fn new() -> Self {
-        Self::LineWaitingForSlashR(Buffer::new())
+        Self::LineWaitingForSlashR(Buffer::empty())
     }
 
     pub(crate) fn push(&mut self, byte: u8) -> Result<Completion<Buffer<N>, ()>, LineReaderError> {

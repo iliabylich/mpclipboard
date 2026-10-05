@@ -1,5 +1,5 @@
-use crate::{Wants, message::Message};
-use core::{cmp::Ordering, num::NonZeroUsize};
+use crate::{Buffer, Wants, message::Message};
+use core::num::NonZeroUsize;
 
 #[must_use]
 #[expect(clippy::large_enum_variant)]
@@ -8,8 +8,8 @@ pub enum MessageWriter {
     Empty,
 
     Some {
-        current: Writebuf<{ Message::BYTESIZE }>,
-        next: Option<Writebuf<{ Message::BYTESIZE }>>,
+        current: Buffer<{ Message::BYTESIZE }>,
+        next: Option<Buffer<{ Message::BYTESIZE }>>,
     },
 }
 
@@ -22,7 +22,7 @@ impl MessageWriter {
     pub fn remainder(&self) -> Option<&[u8]> {
         match self {
             Self::Empty => None,
-            Self::Some { current, .. } => Some(current.remainder()),
+            Self::Some { current, .. } => Some(current.as_slice()),
         }
     }
 
@@ -31,8 +31,15 @@ impl MessageWriter {
             Self::Empty => return Err(MessageWriterError::Empty),
 
             Self::Some { current, next } => {
-                if current.written(n)? {
-                    if let Some(next) = core::mem::take(next) {
+                current.drop_n_front_bytes(n.get()).map_err(|remaining| {
+                    MessageWriterError::WrittenTooMuch {
+                        written: n.get(),
+                        remaining,
+                    }
+                })?;
+
+                if current.as_slice().is_empty() {
+                    if let Some(next) = next.take() {
                         *current = next;
                     } else {
                         *self = Self::new();
@@ -45,7 +52,7 @@ impl MessageWriter {
     }
 
     pub fn push(&mut self, data: &Message) {
-        let item = Writebuf::new(data.encode());
+        let item = Buffer::new(data.encode());
 
         match self {
             Self::Empty => {
@@ -76,53 +83,6 @@ impl MessageWriter {
 impl Default for MessageWriter {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-#[derive(Clone, Copy)]
-pub struct Writebuf<const N: usize> {
-    buf: [u8; N],
-    pos: usize,
-}
-
-impl<const N: usize> Writebuf<N> {
-    pub(crate) const fn new(buf: [u8; N]) -> Self {
-        Self { buf, pos: 0 }
-    }
-
-    pub(crate) fn remainder(&self) -> &[u8] {
-        &self.buf[self.pos..]
-    }
-
-    pub(crate) fn written(&mut self, n: NonZeroUsize) -> Result<bool, MessageWriterError> {
-        match self
-            .pos
-            .checked_add(n.get())
-            .map(|newpos| (newpos, newpos.cmp(&N)))
-        {
-            Some((newpos, Ordering::Less)) => {
-                self.pos = newpos;
-                Ok(false)
-            }
-            Some((_, Ordering::Equal)) => {
-                self.pos = 0;
-                self.buf = [0; _];
-                Ok(true)
-            }
-            None | Some((_, Ordering::Greater)) => Err(MessageWriterError::WrittenTooMuch {
-                written: n.get(),
-                remaining: self.remainder().len(),
-            }),
-        }
-    }
-}
-
-impl<const N: usize> core::fmt::Debug for Writebuf<N> {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("Writebuf")
-            .field("buf", &self.buf)
-            .field("pos", &self.pos)
-            .finish()
     }
 }
 

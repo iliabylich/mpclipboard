@@ -6,7 +6,7 @@ pub struct Buffer<const MAXLEN: usize> {
 }
 
 impl<const MAXLEN: usize> Buffer<MAXLEN> {
-    pub const fn new() -> Self {
+    pub const fn empty() -> Self {
         Self {
             buf: [0; MAXLEN],
             len: 0,
@@ -23,6 +23,10 @@ impl<const MAXLEN: usize> Buffer<MAXLEN> {
         })
     }
 
+    pub const fn new(buf: [u8; MAXLEN]) -> Self {
+        Self { buf, len: MAXLEN }
+    }
+
     #[must_use]
     pub fn push(&mut self, byte: u8) -> bool {
         let Some((slot, len)) = self.buf.get_mut(self.len).zip(self.len.checked_add(1)) else {
@@ -33,8 +37,23 @@ impl<const MAXLEN: usize> Buffer<MAXLEN> {
         true
     }
 
+    pub fn drop_n_front_bytes(&mut self, n: usize) -> Result<(), usize> {
+        let Some(rest) = self.as_slice().get(n..) else {
+            return Err(self.len);
+        };
+        let mut buf = [0; MAXLEN];
+        for (dst, src) in buf.iter_mut().zip(rest) {
+            *dst = *src;
+        }
+        *self = Self {
+            buf,
+            len: rest.len(),
+        };
+        Ok(())
+    }
+
     pub const fn clear(&mut self) {
-        *self = Self::new();
+        *self = Self::empty();
     }
 
     #[must_use]
@@ -56,7 +75,7 @@ impl<const MAXLEN: usize> Buffer<MAXLEN> {
 
 impl<const MAXLEN: usize> Default for Buffer<MAXLEN> {
     fn default() -> Self {
-        Self::new()
+        Self::empty()
     }
 }
 
@@ -66,7 +85,7 @@ mod tests {
 
     #[test]
     fn test_push() {
-        let mut buf = Buffer::<3>::new();
+        let mut buf = Buffer::<3>::empty();
         assert_eq!(buf.as_slice(), b"");
 
         assert!(buf.push(b'a'));
@@ -79,17 +98,17 @@ mod tests {
 
     #[test]
     fn test_clear() {
-        let mut buf = Buffer::<3>::new();
+        let mut buf = Buffer::<3>::empty();
         assert!(buf.push(b'a'));
         assert!(buf.push(b'b'));
 
         buf.clear();
-        assert_eq!(buf, Buffer::new());
+        assert_eq!(buf, Buffer::empty());
     }
 
     #[test]
     fn test_as_full_array() {
-        let mut buf = Buffer::<2>::new();
+        let mut buf = Buffer::<2>::empty();
         assert_eq!(buf.as_full_array(), None);
 
         assert!(buf.push(b'a'));
@@ -97,6 +116,20 @@ mod tests {
 
         assert!(buf.push(b'b'));
         assert_eq!(buf.as_full_array(), Some(b"ab"));
+    }
+
+    #[test]
+    fn test_drop_n_front_bytes() {
+        let mut buf = Buffer::<4>::new(*b"abcd");
+
+        assert_eq!(buf.drop_n_front_bytes(1), Ok(()));
+        assert_eq!(buf.as_slice(), b"bcd");
+
+        assert_eq!(buf.drop_n_front_bytes(4), Err(3));
+        assert_eq!(buf.as_slice(), b"bcd");
+
+        assert_eq!(buf.drop_n_front_bytes(3), Ok(()));
+        assert_eq!(buf, Buffer::empty());
     }
 
     #[test]

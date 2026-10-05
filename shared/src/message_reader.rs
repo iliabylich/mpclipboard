@@ -8,7 +8,9 @@ pub struct MessageReader {
 
 impl MessageReader {
     pub const fn empty() -> Self {
-        Self { buf: Buffer::new() }
+        Self {
+            buf: Buffer::empty(),
+        }
     }
 
     pub fn new(partial: Buffer<{ Message::BYTESIZE - 1 }>) -> Self {
