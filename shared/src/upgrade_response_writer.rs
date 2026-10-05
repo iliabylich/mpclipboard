@@ -63,7 +63,7 @@ mod tests {
         assert_eq!(w.remainder(), UpgradeResponse::BYTES);
 
         assert_eq!(w.written(non_zero_usize(50)), Ok(Pending(())));
-        assert_eq!(Some(w.remainder()), UpgradeResponse::BYTES.get(50..));
+        assert_eq!(w.remainder(), &UpgradeResponse::BYTES[50..]);
 
         assert_eq!(
             w.written(non_zero_usize(UpgradeResponse::BYTES.len() - 50)),

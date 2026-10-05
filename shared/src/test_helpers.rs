@@ -6,25 +6,18 @@ pub(crate) fn as_chunks_with_guaranteed_trailer<const BUFSIZE: usize>(
 ) -> (impl Iterator<Item = Buffer<BUFSIZE>>, Buffer<BUFSIZE>) {
     const CHUNK_SIZE: usize = 20;
 
-    let (head, tail) = buf.split_at(
-        buf.len()
-            .checked_sub(CHUNK_SIZE)
-            .unwrap_or_else(|| unreachable!("bug")),
-    );
+    let (head, tail) = buf.split_at(buf.len() - CHUNK_SIZE);
 
-    let chunks = head.chunks(CHUNK_SIZE).map(|chunk| {
-        Buffer::from_slice(chunk).unwrap_or_else(|| unreachable!("chunk fits into a buffer"))
-    });
-    let trailer =
-        Buffer::from_slice(tail).unwrap_or_else(|| unreachable!("trailer fits into a buffer"));
+    let chunks = head.chunks(CHUNK_SIZE).map(buffer);
+    let trailer = buffer(tail);
 
     (chunks, trailer)
 }
 
 pub(crate) fn buffer<const N: usize>(bytes: &[u8]) -> Buffer<N> {
-    Buffer::from_slice(bytes).unwrap_or_else(|| panic!("bytes don't fit into a buffer"))
+    Buffer::from_slice(bytes).unwrap()
 }
 
 pub(crate) fn non_zero_usize(n: usize) -> NonZeroUsize {
-    NonZeroUsize::new(n).unwrap_or_else(|| panic!("must be non-zero"))
+    NonZeroUsize::new(n).unwrap()
 }

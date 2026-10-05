@@ -1,21 +1,31 @@
 #![no_std]
 #![forbid(unsafe_code)]
-#![warn(trivial_casts)]
-#![warn(trivial_numeric_casts)]
-#![warn(unused_qualifications)]
-#![warn(deprecated_in_future)]
-#![warn(unused_lifetimes)]
-#![warn(clippy::unwrap_used)]
-#![warn(clippy::expect_used)]
-#![warn(clippy::indexing_slicing)]
-#![warn(clippy::arithmetic_side_effects)]
-#![warn(clippy::pedantic)]
-#![warn(clippy::nursery)]
-#![warn(clippy::std_instead_of_alloc)]
-#![warn(clippy::std_instead_of_core)]
-#![expect(clippy::missing_errors_doc)]
-#![expect(clippy::redundant_pub_crate)]
+#![warn(
+    trivial_casts,
+    trivial_numeric_casts,
+    unused_qualifications,
+    deprecated_in_future,
+    unused_lifetimes,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::pedantic,
+    clippy::nursery,
+    clippy::std_instead_of_alloc,
+    clippy::std_instead_of_core
+)]
+#![expect(clippy::missing_errors_doc, clippy::redundant_pub_crate)]
 #![allow(clippy::option_if_let_else)]
+#![cfg_attr(
+    test,
+    allow(
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::indexing_slicing,
+        clippy::arithmetic_side_effects
+    )
+)]
 #![doc = include_str!("../README.md")]
 
 #[cfg(test)]

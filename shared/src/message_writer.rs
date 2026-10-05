@@ -109,7 +109,7 @@ mod tests {
         writer.push(&msg);
         assert_eq!(writer.remainder(), Some(encoded.as_slice()));
         assert_eq!(writer.written(non_zero_usize(100)), Ok(()));
-        assert_eq!(writer.remainder(), encoded.get(100..));
+        assert_eq!(writer.remainder(), Some(&encoded[100..]));
         assert_eq!(
             writer.written(non_zero_usize(Message::BYTESIZE - 100)),
             Ok(())
