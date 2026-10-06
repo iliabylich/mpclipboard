@@ -1,16 +1,17 @@
 use crate::{Buffer, PushResult, prelude::*};
+use generic_array::ArrayLength;
 
 #[must_use]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub(crate) enum LineReader<const N: usize> {
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub(crate) enum LineReader<N: ArrayLength> {
     LineWaitingForSlashR(Buffer<N>),
     LineWaitingForSlashN(Buffer<N>),
     SkipWaitingForSlashR,
     SkipWaitingForSlashN,
 }
 
-impl<const N: usize> LineReader<N> {
-    pub(crate) const fn new() -> Self {
+impl<N: ArrayLength> LineReader<N> {
+    pub(crate) fn new() -> Self {
         Self::LineWaitingForSlashR(Buffer::empty())
     }
 
@@ -18,7 +19,7 @@ impl<const N: usize> LineReader<N> {
         match self {
             Self::LineWaitingForSlashR(buf) => match byte {
                 b'\r' => {
-                    *self = Self::LineWaitingForSlashN(*buf);
+                    *self = Self::LineWaitingForSlashN(core::mem::take(buf));
                     Ok(Pending(()))
                 }
 
@@ -34,7 +35,7 @@ impl<const N: usize> LineReader<N> {
 
             Self::LineWaitingForSlashN(buf) => match byte {
                 b'\n' => {
-                    let line = *buf;
+                    let line = core::mem::take(buf);
                     *self = Self::new();
                     Ok(Done(line))
                 }
@@ -75,9 +76,10 @@ mod tests {
     use crate::prelude::*;
     use alloc::string::String;
     use alloc::{string::ToString, vec, vec::Vec};
+    use typenum::U5;
 
     fn lines(input: &[u8]) -> Result<Vec<String>, LineReaderError> {
-        let mut reader = LineReader::<5>::new();
+        let mut reader = LineReader::<U5>::new();
         let mut out = vec![];
         for &byte in input {
             if let Done(line) = reader.push(byte)? {

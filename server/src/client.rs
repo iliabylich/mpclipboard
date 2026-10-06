@@ -12,7 +12,7 @@ pub struct Client {
 }
 
 impl Client {
-    pub(crate) const fn new(fd: OwnedFd, id: ID) -> Self {
+    pub(crate) fn new(fd: OwnedFd, id: ID) -> Self {
         Self {
             fd,
             id,
@@ -69,12 +69,12 @@ impl Client {
             return Ok(Pending(()));
         };
 
-        let received = self.reader.received(buf)?;
+        let received = self.reader.received(&buf)?;
         Ok(received)
     }
 
-    pub(crate) const fn id(&self) -> ID {
-        self.id
+    pub(crate) const fn id(&self) -> &ID {
+        &self.id
     }
 }
 

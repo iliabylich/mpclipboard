@@ -34,7 +34,7 @@ fn main() -> Result<()> {
     env_logger::init();
     let config = Config::read()?;
 
-    let mut main_loop = MainLoop::new(&config)?;
+    let mut main_loop = MainLoop::new(config)?;
 
     loop {
         main_loop.poll_and_process_events();

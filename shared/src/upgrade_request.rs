@@ -1,6 +1,6 @@
 use crate::{HostPort, ID, Token, Version};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UpgradeRequest {
     pub host: HostPort,
     pub token: Token,

@@ -1,5 +1,6 @@
+use crate::message::MessageSize;
 use crate::{
-    Buffer, CONNECTION_UPGRADE_HEADER, HOST_PREFIX, HostPort, ID, ID_PREFIX, Message,
+    Buffer, CONNECTION_UPGRADE_HEADER, HOST_PREFIX, HostPort, ID, ID_PREFIX,
     NonEmptyInlineStringError, START_LINE, TOKEN_PREFIX, Token, UPGRADE_MPCLIPBOARD_RAW_HEADER,
     UpgradeRequest, VERSION_PREFIX, Version,
     line_reader::{LineReader, LineReaderError},
@@ -10,12 +11,15 @@ use core::{
     ops::ControlFlow::{Break, Continue},
     str::Utf8Error,
 };
+use typenum::{U1, op};
+
+type BufferSize = op!(MessageSize - U1);
 
 #[expect(clippy::struct_excessive_bools)]
 #[must_use]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct UpgradeRequestReader {
-    lines: LineReader<{ Self::BUFFER_SIZE }>,
+    lines: LineReader<BufferSize>,
 
     seen_start_line: bool,
 
@@ -30,9 +34,7 @@ pub struct UpgradeRequestReader {
 }
 
 impl UpgradeRequestReader {
-    pub const BUFFER_SIZE: usize = Message::BYTESIZE - 1;
-
-    pub const fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             lines: LineReader::new(),
 
@@ -51,7 +53,7 @@ impl UpgradeRequestReader {
 
     pub fn received(
         &mut self,
-        mut buf: Buffer<{ Self::BUFFER_SIZE }>,
+        mut buf: Buffer<BufferSize>,
     ) -> Result<Completion<UpgradeRequest, ()>, UpgradeRequestReaderError> {
         buf.drain_front::<UpgradeRequestReaderError>(|byte| {
             let Done(line) = self.lines.push(byte)? else {
@@ -91,21 +93,21 @@ impl UpgradeRequestReader {
         }
     }
 
-    const fn try_finish(&self) -> Option<UpgradeRequest> {
+    fn try_finish(&self) -> Option<UpgradeRequest> {
         if self.seen_start_line
-            && let Some(host) = self.host
-            && let Some(token) = self.token
-            && let Some(id) = self.id
-            && let Some(version) = self.version
+            && let Some(host) = &self.host
+            && let Some(token) = &self.token
+            && let Some(id) = &self.id
+            && let Some(version) = &self.version
             && self.seen_connection_upgrade
             && self.seen_upgrade_mpclipboard_raw
             && self.seen_eos
         {
             Some(UpgradeRequest {
-                host,
-                token,
-                id,
-                version,
+                host: host.clone(),
+                token: token.clone(),
+                id: id.clone(),
+                version: version.clone(),
             })
         } else {
             None
@@ -139,23 +141,24 @@ impl HttpLine {
 
         let line = core::str::from_utf8(line)?;
 
-        if line.as_bytes() == START_LINE {
+        if line.as_bytes() == START_LINE.as_slice() {
             Ok(Self::StartLine)
-        } else if let Some(host) = strip_prefix_ignore_ascii_case(line, HOST_PREFIX) {
+        } else if let Some(host) = strip_prefix_ignore_ascii_case(line, &HOST_PREFIX) {
             let host = HostPort::new(host).map_err(InvalidHost)?;
             Ok(Self::HostPort(host))
-        } else if let Some(value) = strip_prefix_ignore_ascii_case(line, TOKEN_PREFIX) {
+        } else if let Some(value) = strip_prefix_ignore_ascii_case(line, &TOKEN_PREFIX) {
             let token = Token::new(value).map_err(InvalidToken)?;
             Ok(Self::Token(token))
-        } else if let Some(value) = strip_prefix_ignore_ascii_case(line, ID_PREFIX) {
+        } else if let Some(value) = strip_prefix_ignore_ascii_case(line, &ID_PREFIX) {
             let id = ID::new(value).map_err(InvalidID)?;
             Ok(Self::ID(id))
-        } else if let Some(version) = strip_prefix_ignore_ascii_case(line, VERSION_PREFIX) {
+        } else if let Some(version) = strip_prefix_ignore_ascii_case(line, &VERSION_PREFIX) {
             let version = Version::new(version).map_err(InvalidVersion)?;
             Ok(Self::Version(version))
-        } else if strip_prefix_ignore_ascii_case(line, CONNECTION_UPGRADE_HEADER) == Some("") {
+        } else if strip_prefix_ignore_ascii_case(line, &CONNECTION_UPGRADE_HEADER) == Some("") {
             Ok(Self::ConnectionUpgrade)
-        } else if strip_prefix_ignore_ascii_case(line, UPGRADE_MPCLIPBOARD_RAW_HEADER) == Some("") {
+        } else if strip_prefix_ignore_ascii_case(line, &UPGRADE_MPCLIPBOARD_RAW_HEADER) == Some("")
+        {
             Ok(Self::UpgradeMPClipboardRaw)
         } else if line.is_empty() {
             Ok(Self::EndOfRequest)
@@ -203,12 +206,11 @@ mod tests {
     };
 
     fn request() -> String {
-        String::from_utf8_lossy(UpgradeRequestWriter::new(REQ).remainder()).into_owned()
+        String::from_utf8_lossy(UpgradeRequestWriter::new(&REQ).remainder()).into_owned()
     }
 
     fn read_all(bytes: &[u8]) -> Result<Completion<UpgradeRequest, ()>, UpgradeRequestReaderError> {
-        let (chunks, trailer) =
-            as_chunks_with_guaranteed_trailer::<{ UpgradeRequestReader::BUFFER_SIZE }>(bytes);
+        let (chunks, trailer) = as_chunks_with_guaranteed_trailer::<super::BufferSize>(bytes);
 
         let mut reader = UpgradeRequestReader::new();
         for buf in chunks {

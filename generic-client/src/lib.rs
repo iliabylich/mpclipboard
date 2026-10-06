@@ -10,7 +10,6 @@
 #![warn(clippy::arithmetic_side_effects)]
 #![warn(clippy::pedantic)]
 #![warn(clippy::nursery)]
-#![expect(clippy::large_types_passed_by_value)]
 #![expect(clippy::missing_errors_doc)]
 #![expect(clippy::large_enum_variant)]
 #![allow(clippy::option_if_let_else)]

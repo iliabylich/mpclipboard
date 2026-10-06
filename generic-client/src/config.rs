@@ -5,7 +5,7 @@ use mpclipboard_shared::{
 };
 use std::path::{Path, PathBuf};
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct Config {
     pub(crate) url: Url,
     pub(crate) token: Token,
@@ -54,11 +54,11 @@ impl Config {
         Self::read(path)
     }
 
-    pub(crate) const fn update_request(&self) -> UpgradeRequest {
+    pub(crate) fn upgrade_request(&self) -> UpgradeRequest {
         UpgradeRequest {
-            host: self.url.header(),
-            token: self.token,
-            id: self.id,
+            host: self.url.header().clone(),
+            token: self.token.clone(),
+            id: self.id.clone(),
             version: PROTOCOL_VERSION,
         }
     }

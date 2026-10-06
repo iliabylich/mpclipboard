@@ -1,89 +1,58 @@
 use crate::{
-    Buffer, CONNECTION_UPGRADE_HEADER, CRLF, HOST_PREFIX, ID_PREFIX, MAX_HOST_PORT_LENGTH,
-    MAX_ID_LENGTH, MAX_TOKEN_LENGTH, MAX_VERSION_LENGTH, START_LINE, TOKEN_PREFIX,
-    UPGRADE_MPCLIPBOARD_RAW_HEADER, UpgradeRequest, VERSION_PREFIX, prelude::*,
+    Buffer, CONNECTION_UPGRADE_HEADER, CRLF, ConnectionUpgradeHeaderLength, CrlfLength,
+    HOST_PREFIX, HostPrefixLength, ID_PREFIX, IdPrefixLength, MaxHostPortLength, MaxIdLength,
+    MaxTokenLength, MaxVersionLength, START_LINE, StartLineLength, TOKEN_PREFIX, TokenPrefixLength,
+    UPGRADE_MPCLIPBOARD_RAW_HEADER, UpgradeMpclipboardRawHeaderLength, UpgradeRequest,
+    VERSION_PREFIX, VersionPrefixLength, prelude::*,
 };
 use core::num::NonZeroUsize;
+use typenum::{U0, op};
 
-macro_rules! layout_sizes {
-    ($sizes:ident, $max:ident; $($kind:ident $x:ident => $m:expr),* $(,)?) => {
-        const COMPONENTS_COUNT: usize = [$($m),*].len();
+type StartLineWithCrlfLength = op!(StartLineLength + CrlfLength);
+type HostLineLength = op!(HostPrefixLength + MaxHostPortLength + CrlfLength);
+type TokenLineLength = op!(TokenPrefixLength + MaxTokenLength + CrlfLength);
+type IdLineLength = op!(IdPrefixLength + MaxIdLength + CrlfLength);
+type VersionLineLength = op!(VersionPrefixLength + MaxVersionLength + CrlfLength);
+type ConnectionLineLength = op!(ConnectionUpgradeHeaderLength + CrlfLength);
+type UpgradeLineLength = op!(UpgradeMpclipboardRawHeaderLength + CrlfLength);
 
-        #[expect(clippy::indexing_slicing)]
-        const $sizes: [usize; COMPONENTS_COUNT + 1] = {
-            let mut sizes = [0; COMPONENTS_COUNT + 1];
-            let mut idx = 0;
-            $(
-                sizes[idx + 1] = sizes[idx] + $m;
-                idx += 1;
-            )*
-            sizes
-        };
-        const $max: usize = {
-            let [.., last] = $sizes;
-            last
-        };
-    };
-}
-
-macro_rules! layout_step {
-    ($sizes:ident, $req:ident, $buf:expr, $idx:expr;) => { $buf };
-    ($sizes:ident, $req:ident, $buf:expr, $idx:expr; bytes $x:ident => $m:expr, $($rest:tt)*) => {
-        layout_step!($sizes, $req, $buf.append_byte_array::<{ $m }, { $sizes[$idx] }>($x), $idx + 1; $($rest)*)
-    };
-    ($sizes:ident, $req:ident, $buf:expr, $idx:expr; string $field:ident => $m:expr, $($rest:tt)*) => {
-        layout_step!($sizes, $req, $buf.append_non_empty_string::<{ $m }, { $sizes[$idx] }>(&$req.$field), $idx + 1; $($rest)*)
-    };
-}
-
-macro_rules! layout_chain {
-    ($sizes:ident, $req:ident; $($pieces:tt)*) => {
-        layout_step!($sizes, $req, Buffer::<{ $sizes[0] }>::empty(), 1; $($pieces)*)
-    };
-}
-
-macro_rules! layout {
-    ($sizes:ident, $max:ident; $($pieces:tt)*) => {
-        layout_sizes!($sizes, $max; $($pieces)*);
-
-        fn encode(req: &UpgradeRequest) -> Buffer<$max> {
-            layout_chain!($sizes, req; $($pieces)*)
-        }
-    };
-}
-
-layout! {
-    SIZES, MAX_LENGTH;
-    bytes START_LINE => START_LINE.len(),
-    bytes CRLF => CRLF.len(),
-    bytes HOST_PREFIX => HOST_PREFIX.len(),
-    string host => MAX_HOST_PORT_LENGTH,
-    bytes CRLF => CRLF.len(),
-    bytes TOKEN_PREFIX => TOKEN_PREFIX.len(),
-    string token => MAX_TOKEN_LENGTH,
-    bytes CRLF => CRLF.len(),
-    bytes ID_PREFIX => ID_PREFIX.len(),
-    string id => MAX_ID_LENGTH,
-    bytes CRLF => CRLF.len(),
-    bytes VERSION_PREFIX => VERSION_PREFIX.len(),
-    string version => MAX_VERSION_LENGTH,
-    bytes CRLF => CRLF.len(),
-    bytes CONNECTION_UPGRADE_HEADER => CONNECTION_UPGRADE_HEADER.len(),
-    bytes CRLF => CRLF.len(),
-    bytes UPGRADE_MPCLIPBOARD_RAW_HEADER => UPGRADE_MPCLIPBOARD_RAW_HEADER.len(),
-    bytes CRLF => CRLF.len(),
-    bytes CRLF => CRLF.len(),
-}
+type MaxLength = op!(StartLineWithCrlfLength
+    + HostLineLength
+    + TokenLineLength
+    + IdLineLength
+    + VersionLineLength
+    + ConnectionLineLength
+    + UpgradeLineLength
+    + CrlfLength);
 
 #[must_use]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct UpgradeRequestWriter {
-    buf: Buffer<MAX_LENGTH>,
+    buf: Buffer<MaxLength>,
 }
 
 impl UpgradeRequestWriter {
-    pub fn new(req: UpgradeRequest) -> Self {
-        let buf = encode(&req);
+    pub fn new(req: &UpgradeRequest) -> Self {
+        let buf: Buffer<MaxLength> = Buffer::<U0>::empty()
+            .append_byte_array(&START_LINE)
+            .append_byte_array(&CRLF)
+            .append_byte_array(&HOST_PREFIX)
+            .append_non_empty_string(&req.host)
+            .append_byte_array(&CRLF)
+            .append_byte_array(&TOKEN_PREFIX)
+            .append_non_empty_string(&req.token)
+            .append_byte_array(&CRLF)
+            .append_byte_array(&ID_PREFIX)
+            .append_non_empty_string(&req.id)
+            .append_byte_array(&CRLF)
+            .append_byte_array(&VERSION_PREFIX)
+            .append_non_empty_string(&req.version)
+            .append_byte_array(&CRLF)
+            .append_byte_array(&CONNECTION_UPGRADE_HEADER)
+            .append_byte_array(&CRLF)
+            .append_byte_array(&UPGRADE_MPCLIPBOARD_RAW_HEADER)
+            .append_byte_array(&CRLF)
+            .append_byte_array(&CRLF);
 
         Self { buf }
     }
@@ -135,7 +104,7 @@ mod tests {
 
     #[test]
     fn test_encode() {
-        let writer = UpgradeRequestWriter::new(REQ);
+        let writer = UpgradeRequestWriter::new(&REQ);
         assert_eq!(
             core::str::from_utf8(writer.buf.as_slice()),
             Ok(
@@ -146,7 +115,7 @@ mod tests {
 
     #[test]
     fn test_write() {
-        let mut writer = UpgradeRequestWriter::new(REQ);
+        let mut writer = UpgradeRequestWriter::new(&REQ);
         assert_eq!(
             core::str::from_utf8(writer.remainder()),
             Ok(

@@ -1,7 +1,7 @@
 use crate::{
     Buffer, CONNECTION_UPGRADE_HEADER, UPGRADE_MPCLIPBOARD_RAW_HEADER,
     line_reader::{LineReader, LineReaderError},
-    message::Message,
+    message::MessageSize,
     prelude::*,
     strip_prefix_ignore_ascii_case,
 };
@@ -9,12 +9,15 @@ use core::{
     ops::ControlFlow::{Break, Continue},
     str::Utf8Error,
 };
+use typenum::{U1, op};
+
+type BufferSize = op!(MessageSize - U1);
 
 #[expect(clippy::struct_excessive_bools)]
 #[must_use]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct UpgradeResponseReader {
-    lines: LineReader<{ Self::BUFFER_SIZE }>,
+    lines: LineReader<BufferSize>,
 
     seen_start_line: bool,
     seen_connection_upgrade: bool,
@@ -23,9 +26,7 @@ pub struct UpgradeResponseReader {
 }
 
 impl UpgradeResponseReader {
-    pub const BUFFER_SIZE: usize = Message::BYTESIZE - 1;
-
-    pub const fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             lines: LineReader::new(),
 
@@ -38,8 +39,8 @@ impl UpgradeResponseReader {
 
     pub fn received(
         &mut self,
-        mut buf: Buffer<{ Self::BUFFER_SIZE }>,
-    ) -> Result<Completion<Buffer<{ Self::BUFFER_SIZE }>, ()>, UpgradeResponseReaderError> {
+        mut buf: Buffer<BufferSize>,
+    ) -> Result<Completion<Buffer<BufferSize>, ()>, UpgradeResponseReaderError> {
         buf.drain_front::<UpgradeResponseReaderError>(|byte| {
             let Done(line) = self.lines.push(byte)? else {
                 return Ok(Continue(()));
@@ -100,9 +101,10 @@ impl HttpLine {
 
         if line == "HTTP/1.1 101 Switching Protocols" {
             Ok(Self::StartLine)
-        } else if strip_prefix_ignore_ascii_case(line, CONNECTION_UPGRADE_HEADER) == Some("") {
+        } else if strip_prefix_ignore_ascii_case(line, &CONNECTION_UPGRADE_HEADER) == Some("") {
             Ok(Self::ConnectionUpgrade)
-        } else if strip_prefix_ignore_ascii_case(line, UPGRADE_MPCLIPBOARD_RAW_HEADER) == Some("") {
+        } else if strip_prefix_ignore_ascii_case(line, &UPGRADE_MPCLIPBOARD_RAW_HEADER) == Some("")
+        {
             Ok(Self::UpgradeMPClipboardRaw)
         } else if line.is_empty() {
             Ok(Self::EndOfResponse)
@@ -136,12 +138,8 @@ mod tests {
 
     fn read_all(
         bytes: &[u8],
-    ) -> Result<
-        Completion<Buffer<{ UpgradeResponseReader::BUFFER_SIZE }>, ()>,
-        UpgradeResponseReaderError,
-    > {
-        let (chunks, trailer) =
-            as_chunks_with_guaranteed_trailer::<{ UpgradeResponseReader::BUFFER_SIZE }>(bytes);
+    ) -> Result<Completion<Buffer<super::BufferSize>, ()>, UpgradeResponseReaderError> {
+        let (chunks, trailer) = as_chunks_with_guaranteed_trailer::<super::BufferSize>(bytes);
 
         let mut reader = UpgradeResponseReader::new();
         for buf in chunks {

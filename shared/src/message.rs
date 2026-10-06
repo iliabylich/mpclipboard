@@ -1,22 +1,23 @@
 use crate::NonEmptyInlineString;
 use core::{num::NonZeroUsize, str::Utf8Error};
+use generic_array::{
+    GenericArray,
+    sequence::{Lengthen, Shorten},
+};
+use typenum::{U1, U255, Unsigned, op};
 
-const MAX_TEXT_LEN: usize = 255;
+type MaxTextLength = U255;
+pub(crate) type MessageSize = op!(MaxTextLength + U1);
+const _: () = assert!(MessageSize::USIZE == 256);
 
 #[must_use]
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Message {
-    pub(crate) string: NonEmptyInlineString<MAX_TEXT_LEN>,
+    pub(crate) string: NonEmptyInlineString<MaxTextLength>,
 }
 
 impl Message {
-    pub const BYTESIZE: usize = {
-        let size = size_of::<u8>() + MAX_TEXT_LEN;
-        assert!(size == 256);
-        size
-    };
-
-    pub const fn new(string: NonEmptyInlineString<MAX_TEXT_LEN>) -> Self {
+    pub const fn new(string: NonEmptyInlineString<MaxTextLength>) -> Self {
         Self { string }
     }
 
@@ -31,26 +32,21 @@ impl Message {
     }
 
     #[must_use]
-    pub(crate) fn encode(&self) -> [u8; Self::BYTESIZE] {
+    pub(crate) fn encode(&self) -> GenericArray<u8, MessageSize> {
         let len = self.string.len().get();
-
-        let mut buf = [0; Self::BYTESIZE];
-        buf[0] = len;
-        buf[1..Self::BYTESIZE].copy_from_slice(self.string.as_fixed_size_bytes());
-
-        buf
+        self.string.as_fixed_size_bytes().prepend(len)
     }
 
-    pub(crate) fn decode(buf: &[u8; Self::BYTESIZE]) -> Result<Self, MessageError> {
-        let [len, text @ ..] = buf;
+    pub(crate) fn decode(buf: GenericArray<u8, MessageSize>) -> Result<Self, MessageError> {
+        let (len, text) = buf.pop_front();
 
-        let len = NonZeroUsize::new(usize::from(*len)).ok_or(MessageError::Empty)?;
+        let len = NonZeroUsize::new(usize::from(len)).ok_or(MessageError::Empty)?;
         let text = text
             .get(..len.get())
-            .unwrap_or_else(|| unreachable!("len is a u8, so it never exceeds MAX_TEXT_LEN"));
+            .unwrap_or_else(|| unreachable!("len is a u8, so it never exceeds MaxTextLength"));
         let text = core::str::from_utf8(text)?;
         let string = NonEmptyInlineString::new(text)
-            .unwrap_or_else(|_| unreachable!("text is non-empty and never exceeds MAX_TEXT_LEN"));
+            .unwrap_or_else(|_| unreachable!("text is non-empty and never exceeds MaxTextLength"));
 
         Ok(Self { string })
     }
@@ -75,22 +71,22 @@ mod tests {
     use super::*;
     use core::assert_matches;
 
-    type S = NonEmptyInlineString<MAX_TEXT_LEN>;
+    type S = NonEmptyInlineString<MaxTextLength>;
 
     #[test]
     fn test_encode_decode() {
         let text = Message::new(S::const_new("aaaaaaaaaa"));
-        assert_eq!(Message::decode(&text.encode()), Ok(text));
+        assert_eq!(Message::decode(text.encode()), Ok(text));
     }
 
     #[test]
     fn test_decode_invalid() {
         assert_eq!(
-            Message::decode(&[0; Message::BYTESIZE]),
+            Message::decode(GenericArray::from_array([0; MessageSize::USIZE])),
             Err(MessageError::Empty)
         );
         assert_matches!(
-            Message::decode(&[b'\xC8'; Message::BYTESIZE]),
+            Message::decode(GenericArray::from_array([b'\xC8'; MessageSize::USIZE])),
             Err(MessageError::NonUtf8(_))
         );
     }

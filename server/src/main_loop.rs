@@ -26,7 +26,7 @@ pub struct MainLoop {
 }
 
 impl MainLoop {
-    pub(crate) fn new(config: &Config) -> Result<Self> {
+    pub(crate) fn new(config: Config) -> Result<Self> {
         let listener = TcpListener::new(config.url.resolve()?)?;
 
         let timer = Timerfd::new()?;
@@ -39,7 +39,7 @@ impl MainLoop {
             listener,
             timer,
             now: 0,
-            config: *config,
+            config,
             store: Store::empty(),
 
             pre_sources,
@@ -140,7 +140,7 @@ impl MainLoop {
                     return;
                 }
 
-                let sink = PreSink::new(fd, id, self.now);
+                let sink = PreSink::new(fd, id.clone(), self.now);
                 log::info!("[{id}] promoting to {sink}");
                 self.pre_sinks.insert(sink);
             }
@@ -155,10 +155,10 @@ impl MainLoop {
                 log::trace!("[{id}] Configuring TCP keepalive");
                 match enable_tcp_keep_alive(&fd) {
                     Ok(()) => {
-                        let mut client = Client::new(fd, id);
+                        let mut client = Client::new(fd, id.clone());
                         log::info!("[{id}] promoting to {client}");
                         if let Some(message) = self.store.current() {
-                            client.push(&message);
+                            client.push(message);
                         }
                         self.clients.insert(client);
                     }
@@ -173,7 +173,7 @@ impl MainLoop {
             Err(err) => log::error!("{err:?}"),
             Ok(Pending(client)) => self.clients.insert(client),
             Ok(Done((message, client))) => {
-                if self.store.add(message) {
+                if self.store.add(&message) {
                     log::info!("broadcasting {message:?}");
                     self.broadcast(&message, client.id());
                 }
@@ -183,7 +183,7 @@ impl MainLoop {
         }
     }
 
-    fn broadcast(&mut self, message: &Message, sender_id: ID) {
+    fn broadcast(&mut self, message: &Message, sender_id: &ID) {
         self.clients
             .fds_mut()
             .filter(|client| client.id() != sender_id)

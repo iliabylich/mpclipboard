@@ -17,7 +17,7 @@ pub fn read_message(
             break;
         };
 
-        if let Done(m) = reader.received(buf)? {
+        if let Done(m) = reader.received(&buf)? {
             message = Some(m);
         }
     }

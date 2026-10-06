@@ -11,7 +11,7 @@ pub struct PreSource {
 }
 
 impl PreSource {
-    pub(crate) const fn new(fd: OwnedFd, now: u64) -> Self {
+    pub(crate) fn new(fd: OwnedFd, now: u64) -> Self {
         Self {
             fd,
             reader: UpgradeRequestReader::new(),

@@ -1,24 +1,26 @@
-use crate::NonEmptyInlineString;
-use core::ops::ControlFlow;
+use crate::{NonEmptyInlineString, NonEmptyInlineStringLength};
+use core::ops::{Add, ControlFlow};
+use generic_array::{ArrayLength, GenericArray};
+use typenum::Sum;
 
 #[must_use]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Buffer<const MAXLEN: usize> {
-    buf: [u8; MAXLEN],
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Buffer<N: ArrayLength> {
+    buf: GenericArray<u8, N>,
     len: usize,
 }
 
-impl<const MAXLEN: usize> Buffer<MAXLEN> {
-    pub const fn empty() -> Self {
+impl<N: ArrayLength> Buffer<N> {
+    pub fn empty() -> Self {
         Self {
-            buf: [0; MAXLEN],
+            buf: GenericArray::default(),
             len: 0,
         }
     }
 
     #[must_use]
     pub fn from_slice(bytes: &[u8]) -> Option<Self> {
-        let mut buf = [0; MAXLEN];
+        let mut buf = GenericArray::default();
         buf.get_mut(..bytes.len())?.copy_from_slice(bytes);
         Some(Self {
             buf,
@@ -26,17 +28,18 @@ impl<const MAXLEN: usize> Buffer<MAXLEN> {
         })
     }
 
-    pub const fn new(buf: [u8; MAXLEN]) -> Self {
-        Self { buf, len: MAXLEN }
+    pub const fn new(buf: GenericArray<u8, N>) -> Self {
+        Self { buf, len: N::USIZE }
     }
 
-    pub(crate) fn append_non_empty_string<const B: usize, const C: usize>(
+    pub(crate) fn append_non_empty_string<M: NonEmptyInlineStringLength>(
         &self,
-        other: &NonEmptyInlineString<B>,
-    ) -> Buffer<C> {
-        const { assert!(MAXLEN + B <= C, "C must be at least MAXLEN + B") };
-
-        let mut buf = [0; C];
+        other: &NonEmptyInlineString<M>,
+    ) -> Buffer<Sum<N, M>>
+    where
+        N: Add<M, Output: ArrayLength>,
+    {
+        let mut buf = GenericArray::default();
         let len = buf
             .iter_mut()
             .zip(self.as_slice().iter().chain(other.as_bytes()))
@@ -45,13 +48,14 @@ impl<const MAXLEN: usize> Buffer<MAXLEN> {
         Buffer { buf, len }
     }
 
-    pub(crate) fn append_byte_array<const B: usize, const C: usize>(
+    pub(crate) fn append_byte_array<M: ArrayLength>(
         &self,
-        other: &[u8; B],
-    ) -> Buffer<C> {
-        const { assert!(MAXLEN + B <= C, "C must be at least MAXLEN + B") };
-
-        let mut buf = [0; C];
+        other: &GenericArray<u8, M>,
+    ) -> Buffer<Sum<N, M>>
+    where
+        N: Add<M, Output: ArrayLength>,
+    {
+        let mut buf = GenericArray::default();
         let len = buf
             .iter_mut()
             .zip(self.as_slice().iter().chain(other))
@@ -61,7 +65,7 @@ impl<const MAXLEN: usize> Buffer<MAXLEN> {
     }
 
     fn shift_left(&mut self, n: usize) {
-        let mut buf = [0; MAXLEN];
+        let mut buf = GenericArray::<u8, N>::default();
         for (dst, src) in buf.iter_mut().zip(self.buf.iter().skip(n)) {
             *dst = *src;
         }
@@ -69,7 +73,7 @@ impl<const MAXLEN: usize> Buffer<MAXLEN> {
         self.len = self.len.saturating_sub(n);
     }
 
-    pub fn push(&mut self, byte: u8) -> PushResult<'_, MAXLEN> {
+    pub fn push(&mut self, byte: u8) -> PushResult<'_, N> {
         let Some((slot, len)) = self.buf.get_mut(self.len).zip(self.len.checked_add(1)) else {
             return PushResult::Full(&self.buf);
         };
@@ -101,7 +105,7 @@ impl<const MAXLEN: usize> Buffer<MAXLEN> {
         Ok(())
     }
 
-    pub const fn clear(&mut self) {
+    pub fn clear(&mut self) {
         *self = Self::empty();
     }
 
@@ -113,7 +117,7 @@ impl<const MAXLEN: usize> Buffer<MAXLEN> {
     }
 }
 
-impl<const MAXLEN: usize> Default for Buffer<MAXLEN> {
+impl<N: ArrayLength> Default for Buffer<N> {
     fn default() -> Self {
         Self::empty()
     }
@@ -121,9 +125,9 @@ impl<const MAXLEN: usize> Default for Buffer<MAXLEN> {
 
 #[must_use]
 #[derive(Debug, PartialEq, Eq)]
-pub enum PushResult<'a, const MAXLEN: usize> {
+pub enum PushResult<'a, N: ArrayLength> {
     Pushed,
-    Full(&'a [u8; MAXLEN]),
+    Full(&'a GenericArray<u8, N>),
 }
 
 #[cfg(test)]
@@ -131,23 +135,28 @@ mod tests {
     use super::{Buffer, PushResult};
     use alloc::vec;
     use core::ops::ControlFlow::{Break, Continue};
+    use generic_array::GenericArray;
+    use typenum::{U3, U4, U5};
 
     #[test]
     fn test_push() {
-        let mut buf = Buffer::<3>::empty();
+        let mut buf = Buffer::<U3>::empty();
         assert_eq!(buf.as_slice(), b"");
 
         assert_eq!(buf.push(b'a'), PushResult::Pushed);
         assert_eq!(buf.push(b'b'), PushResult::Pushed);
         assert_eq!(buf.push(b'c'), PushResult::Pushed);
-        assert_eq!(buf.push(b'd'), PushResult::Full(b"abc"));
+        assert_eq!(
+            buf.push(b'd'),
+            PushResult::Full(&GenericArray::from_array(*b"abc"))
+        );
 
         assert_eq!(buf.as_slice(), b"abc");
     }
 
     #[test]
     fn test_clear() {
-        let mut buf = Buffer::<3>::empty();
+        let mut buf = Buffer::<U3>::empty();
         assert_eq!(buf.push(b'a'), PushResult::Pushed);
         assert_eq!(buf.push(b'b'), PushResult::Pushed);
 
@@ -157,7 +166,7 @@ mod tests {
 
     #[test]
     fn test_drop_n_front_bytes() {
-        let mut buf = Buffer::<4>::new(*b"abcd");
+        let mut buf = Buffer::<U4>::new(GenericArray::from_array(*b"abcd"));
 
         assert_eq!(buf.drop_n_front_bytes(1), Ok(()));
         assert_eq!(buf.as_slice(), b"bcd");
@@ -171,7 +180,7 @@ mod tests {
 
     #[test]
     fn test_drain_front() {
-        let mut buf = Buffer::<5>::new(*b"ab|cd");
+        let mut buf = Buffer::<U5>::new(GenericArray::from_array(*b"ab|cd"));
         let mut seen = vec![];
         let res: Result<(), ()> = buf.drain_front(|byte| {
             seen.push(byte);
@@ -189,7 +198,7 @@ mod tests {
         assert_eq!(res, Ok(()));
         assert_eq!(buf, Buffer::empty());
 
-        let mut buf = Buffer::<3>::new(*b"abc");
+        let mut buf = Buffer::<U3>::new(GenericArray::from_array(*b"abc"));
         assert_eq!(buf.drain_front(|_| Err("boom")), Err("boom"));
         assert_eq!(buf.as_slice(), b"abc");
     }
@@ -197,13 +206,13 @@ mod tests {
     #[test]
     fn test_from_slice() {
         assert_eq!(
-            Buffer::<3>::from_slice(b"ab").map(|buf| buf.as_slice().to_vec()),
+            Buffer::<U3>::from_slice(b"ab").map(|buf| buf.as_slice().to_vec()),
             Some(b"ab".to_vec())
         );
         assert_eq!(
-            Buffer::<3>::from_slice(b"abc").map(|buf| buf.as_slice().to_vec()),
+            Buffer::<U3>::from_slice(b"abc").map(|buf| buf.as_slice().to_vec()),
             Some(b"abc".to_vec())
         );
-        assert_eq!(Buffer::<3>::from_slice(b"abcd"), None);
+        assert_eq!(Buffer::<U3>::from_slice(b"abcd"), None);
     }
 }

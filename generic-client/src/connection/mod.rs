@@ -75,7 +75,7 @@ impl Connection {
                 state: if stream.is_tls() {
                     State::TlsHandshake(now)
                 } else {
-                    let writer = UpgradeRequestWriter::new(config.update_request());
+                    let writer = UpgradeRequestWriter::new(&config.upgrade_request());
                     State::WritingUpgradeRequest(now, writer)
                 },
                 stream,
@@ -132,14 +132,14 @@ impl Connection {
         }
     }
 
-    pub(crate) fn push(&mut self, message: Message) -> bool {
+    pub(crate) fn push(&mut self, message: &Message) -> bool {
         let Self::State { state: active, .. } = self else {
             return false;
         };
         let State::Connected(_reader, writer) = active else {
             return false;
         };
-        writer.push(&message);
+        writer.push(message);
         true
     }
 
@@ -154,7 +154,7 @@ impl Connection {
             Self::State { fd, stream, state } => match state {
                 State::TlsHandshake(last_activity_at) => match finish_tls_handshake(stream, fd) {
                     Ok(Done(())) => {
-                        let writer = UpgradeRequestWriter::new(config.update_request());
+                        let writer = UpgradeRequestWriter::new(&config.upgrade_request());
                         *state = State::WritingUpgradeRequest(now, writer);
                     }
                     Ok(Pending(())) => *last_activity_at = now,
@@ -229,14 +229,14 @@ impl Connection {
                     } else if stream.is_tls() {
                         *active = State::TlsHandshake(now);
                     } else {
-                        let writer = UpgradeRequestWriter::new(config.update_request());
+                        let writer = UpgradeRequestWriter::new(&config.upgrade_request());
                         *active = State::WritingUpgradeRequest(now, writer);
                     }
                 }
 
                 State::TlsHandshake(last_activity_at) => match finish_tls_handshake(stream, fd) {
                     Ok(Done(())) => {
-                        let writer = UpgradeRequestWriter::new(config.update_request());
+                        let writer = UpgradeRequestWriter::new(&config.upgrade_request());
                         *active = State::WritingUpgradeRequest(now, writer);
                     }
                     Ok(Pending(())) => *last_activity_at = now,

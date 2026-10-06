@@ -2,7 +2,7 @@ use anyhow::{Context, Result, ensure};
 use core::mem::MaybeUninit;
 use mpclipboard_shared::{ConfigParser, Token, Url};
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct Config {
     pub(crate) url: Url,
     pub(crate) token: Token,

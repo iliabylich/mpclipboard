@@ -1,13 +1,14 @@
 use crate::{
-    HostPort, MAX_HOST_LENGTH, MAX_HOST_PORT_LENGTH, NonEmptyInlineString,
-    NonEmptyInlineStringError, array_writer::ArrayWriter,
+    HostPort, MaxHostLength, MaxHostPortLength, NonEmptyInlineString, NonEmptyInlineStringError,
+    array_writer::ArrayWriter,
 };
 use core::{fmt::Write, num::ParseIntError};
+use typenum::Unsigned;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Url {
     tls: bool,
-    host: NonEmptyInlineString<MAX_HOST_LENGTH>,
+    host: NonEmptyInlineString<MaxHostLength>,
     port: u16,
     header: HostPort,
 }
@@ -27,18 +28,18 @@ impl Url {
         let host = NonEmptyInlineString::new(host)?;
         let port = port.parse::<u16>()?;
 
-        let mut buf = [0; MAX_HOST_PORT_LENGTH];
+        let mut buf = [0; MaxHostPortLength::USIZE];
         let mut writer = ArrayWriter::new(&mut buf);
         write!(writer, "{}:{port}", host.as_str()).unwrap_or_else(|_| {
             unreachable!(
-                "host (<= MAX_HOST_LENGTH) + ':' + port (<= 5 digits) fits into MAX_HOST_PORT_LENGTH"
+                "host (<= MaxHostLength) + ':' + port (<= 5 digits) fits into MaxHostPortLength"
             )
         });
         let header = core::str::from_utf8(writer.as_bytes()).unwrap_or_else(|_| {
             unreachable!("concatenation of valid utf8 strings is a valid utf8 string")
         });
         let header = NonEmptyInlineString::new(header).unwrap_or_else(|_| {
-            unreachable!("header is non-empty and fits into MAX_HOST_PORT_LENGTH")
+            unreachable!("header is non-empty and fits into MaxHostPortLength")
         });
 
         Ok(Self {
@@ -64,8 +65,8 @@ impl Url {
         self.port
     }
 
-    pub const fn header(&self) -> HostPort {
-        self.header
+    pub const fn header(&self) -> &HostPort {
+        &self.header
     }
 }
 

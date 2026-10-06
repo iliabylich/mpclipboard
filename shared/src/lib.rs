@@ -31,6 +31,9 @@
 #[cfg(test)]
 extern crate alloc;
 
+use generic_array::GenericArray;
+use typenum::{U1, U2, U4, U5, U6, U7, U9, U14, U19, U24, U50, U100, U249, Unsigned, op};
+
 mod config;
 pub use config::{ConfigParser, ConfigParserError};
 
@@ -69,33 +72,58 @@ mod timerfd;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub use timerfd::Timerfd;
 
-pub(crate) const MAX_HOST_LENGTH: usize = 249;
-const MAX_PORT_LENGTH: usize = 5;
-pub(crate) const MAX_HOST_PORT_LENGTH: usize = MAX_HOST_LENGTH + 1 + MAX_PORT_LENGTH;
-const _: () = assert!(MAX_HOST_PORT_LENGTH == 255);
+pub(crate) type MaxHostLength = U249;
+type MaxPortLength = U5;
+pub(crate) type MaxHostPortLength = op!(MaxHostLength + U1 + MaxPortLength);
+const _: () = assert!(MaxHostPortLength::USIZE == 255);
 
-pub type HostPort = NonEmptyInlineString<MAX_HOST_PORT_LENGTH>;
+pub type HostPort = NonEmptyInlineString<MaxHostPortLength>;
 
-const MAX_TOKEN_LENGTH: usize = 100;
-pub type Token = NonEmptyInlineString<MAX_TOKEN_LENGTH>;
+pub(crate) type MaxTokenLength = U100;
+pub type Token = NonEmptyInlineString<MaxTokenLength>;
 
-pub(crate) const MAX_ID_LENGTH: usize = 100;
-pub type ID = NonEmptyInlineString<MAX_ID_LENGTH>;
+pub(crate) type MaxIdLength = U100;
+pub type ID = NonEmptyInlineString<MaxIdLength>;
 
-const MAX_VERSION_LENGTH: usize = 50;
-pub type Version = NonEmptyInlineString<MAX_VERSION_LENGTH>;
+pub(crate) type MaxVersionLength = U50;
+pub type Version = NonEmptyInlineString<MaxVersionLength>;
 
-pub(crate) const START_LINE: &[u8; 14] = b"GET / HTTP/1.1";
-pub(crate) const HOST_PREFIX: &[u8; 6] = b"Host: ";
-pub(crate) const TOKEN_PREFIX: &[u8; 7] = b"Token: ";
-pub(crate) const ID_PREFIX: &[u8; 4] = b"ID: ";
-pub(crate) const VERSION_PREFIX: &[u8; 9] = b"Version: ";
-pub(crate) const CONNECTION_UPGRADE_HEADER: &[u8; 19] = b"Connection: Upgrade";
-pub(crate) const UPGRADE_MPCLIPBOARD_RAW_HEADER: &[u8; 24] = b"Upgrade: mpclipboard-raw";
-pub(crate) const CRLF: &[u8; 2] = b"\r\n";
+pub(crate) type StartLineLength = U14;
+pub(crate) const START_LINE: GenericArray<u8, StartLineLength> =
+    GenericArray::from_array(*b"GET / HTTP/1.1");
+
+pub(crate) type HostPrefixLength = U6;
+pub(crate) const HOST_PREFIX: GenericArray<u8, HostPrefixLength> =
+    GenericArray::from_array(*b"Host: ");
+
+pub(crate) type TokenPrefixLength = U7;
+pub(crate) const TOKEN_PREFIX: GenericArray<u8, TokenPrefixLength> =
+    GenericArray::from_array(*b"Token: ");
+
+pub(crate) type IdPrefixLength = U4;
+pub(crate) const ID_PREFIX: GenericArray<u8, IdPrefixLength> = GenericArray::from_array(*b"ID: ");
+
+pub(crate) type VersionPrefixLength = U9;
+pub(crate) const VERSION_PREFIX: GenericArray<u8, VersionPrefixLength> =
+    GenericArray::from_array(*b"Version: ");
+
+pub(crate) type ConnectionUpgradeHeaderLength = U19;
+pub(crate) const CONNECTION_UPGRADE_HEADER: GenericArray<u8, ConnectionUpgradeHeaderLength> =
+    GenericArray::from_array(*b"Connection: Upgrade");
+
+pub(crate) type UpgradeMpclipboardRawHeaderLength = U24;
+pub(crate) const UPGRADE_MPCLIPBOARD_RAW_HEADER: GenericArray<
+    u8,
+    UpgradeMpclipboardRawHeaderLength,
+> = GenericArray::from_array(*b"Upgrade: mpclipboard-raw");
+
+pub(crate) type CrlfLength = U2;
+pub(crate) const CRLF: GenericArray<u8, CrlfLength> = GenericArray::from_array(*b"\r\n");
 
 mod non_empty_inline_string;
-pub use non_empty_inline_string::{NonEmptyInlineString, NonEmptyInlineStringError};
+pub use non_empty_inline_string::{
+    NonEmptyInlineString, NonEmptyInlineStringError, NonEmptyInlineStringLength,
+};
 
 mod buffer;
 pub use buffer::{Buffer, PushResult};
