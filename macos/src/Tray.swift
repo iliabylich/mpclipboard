@@ -15,7 +15,7 @@ final class Tray {
         statusItem.button?.image = redImage
 
         let menu = NSMenu()
-        menu.addItem(NSMenuItem(title: "Quit", action: #selector(AppDelegate.quit), keyEquivalent: "q"))
+        menu.addItem(NSMenuItem(title: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         statusItem.menu = menu
     }
 
