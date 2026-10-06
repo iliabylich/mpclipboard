@@ -1,4 +1,5 @@
 import Cocoa
+import ServiceManagement
 import UserNotifications
 
 @main
@@ -22,6 +23,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ aNotification: Notification) {
         ProcessInfo.processInfo.disableAutomaticTermination("MPClipboard runs continuously as a menu bar clipboard sync agent")
         ProcessInfo.processInfo.disableSuddenTermination()
+
+        #if !DEBUG
+        registerLoginItem()
+        #endif
 
         Task {
             do {
@@ -56,6 +61,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         log.notice("Quitting...")
         self.clipboardTimer?.invalidate()
         NSApp.terminate(self)
+    }
+
+    private func registerLoginItem() {
+        let service = SMAppService.mainApp
+        guard service.status == .notRegistered else {
+            return
+        }
+        do {
+            try service.register()
+        } catch {
+            log.error("Error registering login item: \(error, privacy: .public)")
+        }
     }
 
     private func readMPClipboard() {
