@@ -1,4 +1,5 @@
-use crate::{connection::maybe_tls_stream::MaybeTlsStreamError, url_ext::UrlResolveError};
+use crate::connection::maybe_tls_stream::MaybeTlsStreamError;
+use mini_sansio_dns::DnsError;
 use mpclipboard_shared::{
     MessageError, MessageWriterError, TcpKeepAliveError, UpgradeRequestWriterError,
     UpgradeResponseReaderError,
@@ -7,8 +8,12 @@ use rustix::io::Errno;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ConnectionError {
-    #[error("failed to resolve URL: {0}")]
-    FailedToResolveUrl(#[from] UrlResolveError),
+    #[error("DNS error: {0}")]
+    Dns(#[from] DnsError),
+    #[error("failed to write DNS request: {0:?}")]
+    FailedToWriteDnsRequest(Errno),
+    #[error("failed to read DNS response: {0:?}")]
+    FailedToReadDnsResponse(Errno),
     #[error("failed to create TLS stream: {0}")]
     FailedToCreateTlsStream(MaybeTlsStreamError),
     #[error("failed to socket(): {0:?}")]

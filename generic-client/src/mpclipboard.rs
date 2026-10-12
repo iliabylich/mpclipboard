@@ -1,12 +1,12 @@
 use crate::{
-    Connectivity, Output,
+    Output,
     config::{Config, ConfigError},
     connection::Connection,
     logger::Logger,
     tls::TLS,
 };
 use mpclipboard_shared::{
-    Epoch, EventLoop, EventLoopError, EventLoopResult, Message, NonEmptyInlineString, Store,
+    EventLoop, EventLoopError, EventLoopResult, Message, NonEmptyInlineString, Store,
 };
 use std::{
     os::fd::{AsFd, AsRawFd, BorrowedFd},
@@ -17,7 +17,6 @@ pub struct MPClipboard {
     event_loop: EventLoop,
     now: u64,
     conn: Connection,
-    epoch: Epoch,
     store: Store,
     config: Config,
 }
@@ -40,7 +39,6 @@ impl MPClipboard {
             event_loop,
             now: 0,
             conn: Connection::new(),
-            epoch: Epoch::new(),
             store: Store::empty(),
             config,
         };
@@ -49,7 +47,7 @@ impl MPClipboard {
     }
 
     fn sync_event_loop(&mut self) -> Result<(), MPClipboardError> {
-        let wants = self.conn.wants().map(|(fd, wants)| (fd, self.epoch, wants));
+        let wants = self.conn.wants();
         self.event_loop.sync(wants)?;
         Ok(())
     }
@@ -82,7 +80,7 @@ impl MPClipboard {
     pub fn read(&mut self) -> Result<Output, MPClipboardError> {
         let polled = self.event_loop.drain_events_without_waiting()?;
 
-        let prev_connectivity = Connectivity::new(&self.conn);
+        let prev_connectivity = self.conn.connectivity();
         let text = if let Some(message) = self.drain(&polled)
             && self.store.add(&message)
         {
@@ -90,7 +88,7 @@ impl MPClipboard {
         } else {
             None
         };
-        let next_connectivity = Connectivity::new(&self.conn);
+        let next_connectivity = self.conn.connectivity();
 
         log::trace!("Connection wants: {:?}", self.conn.wants());
         self.sync_event_loop()?;
@@ -110,11 +108,7 @@ impl MPClipboard {
         if let Some(time) = polled.time {
             self.now = time;
             log::trace!("tick {}", self.now);
-            let was_disconnected = self.conn.is_disconnected();
             self.conn.tick(self.now, &self.config);
-            if was_disconnected && !self.conn.is_disconnected() {
-                self.epoch.bump();
-            }
         }
 
         if let Some(fd) = polled.fd {

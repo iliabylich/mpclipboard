@@ -1,8 +1,17 @@
 mod finish_connecting;
 pub use finish_connecting::finish_connecting;
 
-mod reconnect;
-pub use reconnect::reconnect;
+mod start_resolving;
+pub use start_resolving::start_resolving;
+
+mod write_dns_request;
+pub use write_dns_request::write_dns_request;
+
+mod read_dns_response;
+pub use read_dns_response::read_dns_response;
+
+mod connect;
+pub use connect::connect;
 
 mod write_upgrade_request;
 pub use write_upgrade_request::write_upgrade_request;

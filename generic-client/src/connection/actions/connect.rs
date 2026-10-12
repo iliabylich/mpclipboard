@@ -1,8 +1,8 @@
 use crate::{
     config::Config,
     connection::{error::ConnectionError, maybe_tls_stream::MaybeTlsStream},
-    url_ext::UrlExt,
 };
+use core::net::SocketAddr;
 use mpclipboard_shared::prelude::*;
 use rustix::{
     fd::OwnedFd,
@@ -12,11 +12,10 @@ use rustix::{
 
 type FdAndMaybeTlsStream = (OwnedFd, MaybeTlsStream);
 
-pub fn reconnect(
+pub fn connect(
+    addr: SocketAddr,
     config: &Config,
 ) -> Result<Completion<FdAndMaybeTlsStream, FdAndMaybeTlsStream>, ConnectionError> {
-    let addr = config.url.resolve()?;
-
     let stream =
         MaybeTlsStream::new(&config.url).map_err(ConnectionError::FailedToCreateTlsStream)?;
 

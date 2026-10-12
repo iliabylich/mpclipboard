@@ -33,4 +33,3 @@ mod logger;
 mod mpclipboard;
 mod output;
 mod tls;
-mod url_ext;
