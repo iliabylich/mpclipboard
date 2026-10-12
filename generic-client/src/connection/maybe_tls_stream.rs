@@ -1,6 +1,5 @@
 use crate::{connection::std_read_write_fd::StdReadWriteFd, tls::TLS};
 use core::num::NonZeroUsize;
-use generic_array::{ArrayLength, GenericArray, typenum::NonZero};
 use mpclipboard_shared::{
     Buffer, Url, Wants,
     io::{ReadError, WriteError},
@@ -78,7 +77,7 @@ impl MaybeTlsStream {
         }
     }
 
-    pub(crate) fn read_bytes<N: ArrayLength + NonZero>(
+    pub(crate) fn read_bytes<const N: usize>(
         &mut self,
         fd: &impl AsFd,
     ) -> Result<Completion<Buffer<N>, ()>, MaybeTlsStreamError> {
@@ -127,18 +126,14 @@ fn tls_flush(conn: &mut ClientConnection, fd: &impl AsFd) -> Result<(), MaybeTls
     Ok(())
 }
 
-fn tls_read<N: ArrayLength + NonZero>(
+fn tls_read<const N: usize>(
     conn: &mut ClientConnection,
     fd: &impl AsFd,
 ) -> Result<Completion<Buffer<N>, ()>, MaybeTlsStreamError> {
     complete_io(conn, fd)?;
 
-    let mut buf = GenericArray::<u8, N>::default();
-    match conn
-        .reader()
-        .read(buf.as_mut_slice())
-        .map(NonZeroUsize::new)
-    {
+    let mut buf = [0; N];
+    match conn.reader().read(&mut buf).map(NonZeroUsize::new) {
         Ok(Some(len)) => {
             let buf = buf
                 .get(..len.get())

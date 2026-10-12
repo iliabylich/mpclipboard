@@ -1,36 +1,27 @@
-use const_default::ConstDefault;
 use core::num::NonZeroU8;
-use generic_array::{ArrayLength, GenericArray};
-use typenum::{IsLessOrEqual, NonZero, True, U255};
-
-pub trait NonEmptyInlineStringLength:
-    ArrayLength + NonZero + IsLessOrEqual<U255, Output = True>
-{
-}
-
-impl<N: ArrayLength + NonZero + IsLessOrEqual<U255, Output = True>> NonEmptyInlineStringLength
-    for N
-{
-}
 
 #[must_use]
-#[derive(Clone, PartialEq, Eq, Hash)]
-pub struct NonEmptyInlineString<N: NonEmptyInlineStringLength> {
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct NonEmptyInlineString<const MAXLEN: usize> {
     len: NonZeroU8,
-    bytes: GenericArray<u8, N>,
+    bytes: [u8; MAXLEN],
 }
 
-impl<N: NonEmptyInlineStringLength> NonEmptyInlineString<N> {
+impl<const MAXLEN: usize> NonEmptyInlineString<MAXLEN> {
+    const MAXLEN_FITS_INTO_U8: () = assert!(MAXLEN <= u8::MAX as usize, "MAXLEN must fit into u8");
+
     pub fn truncate(s: &str) -> Result<Self, NonEmptyInlineStringError> {
-        let (head, _tail) = s.split_at(s.floor_char_boundary(N::USIZE));
+        let (head, _tail) = s.split_at(s.floor_char_boundary(MAXLEN));
         Self::new(head)
     }
 
     pub fn new(s: &str) -> Result<Self, NonEmptyInlineStringError> {
+        let () = Self::MAXLEN_FITS_INTO_U8;
+
         let len = u8::try_from(s.len()).map_err(|_| NonEmptyInlineStringError::TooLong)?;
         let len = NonZeroU8::new(len).ok_or(NonEmptyInlineStringError::Empty)?;
 
-        let mut bytes = GenericArray::default();
+        let mut bytes = [0; MAXLEN];
         bytes
             .get_mut(..s.len())
             .ok_or(NonEmptyInlineStringError::TooLong)?
@@ -47,7 +38,7 @@ impl<N: NonEmptyInlineStringLength> NonEmptyInlineString<N> {
     }
 
     #[must_use]
-    pub const fn as_fixed_size_bytes(&self) -> &GenericArray<u8, N> {
+    pub const fn as_fixed_size_bytes(&self) -> &[u8; MAXLEN] {
         &self.bytes
     }
 
@@ -67,15 +58,13 @@ impl<N: NonEmptyInlineStringLength> NonEmptyInlineString<N> {
     /// Panics if given string is either empty or too long.
     ///
     /// This function is designed to be used in a const context, that's why it panics instead of returning an error.
-    pub const fn const_new(s: &str) -> Self
-    where
-        GenericArray<u8, N>: ConstDefault,
-    {
+    pub const fn const_new(s: &str) -> Self {
+        let () = Self::MAXLEN_FITS_INTO_U8;
         assert!(!s.is_empty(), "empty string");
-        assert!(s.len() <= N::USIZE, "string is too long");
+        assert!(s.len() <= MAXLEN, "string is too long");
 
-        let mut bytes = GenericArray::DEFAULT;
-        let (head, _tail) = bytes.as_mut_slice().split_at_mut(s.len());
+        let mut bytes = [0; MAXLEN];
+        let (head, _tail) = bytes.split_at_mut(s.len());
         head.copy_from_slice(s.as_bytes());
 
         #[expect(clippy::cast_possible_truncation)]
@@ -86,13 +75,13 @@ impl<N: NonEmptyInlineStringLength> NonEmptyInlineString<N> {
     }
 }
 
-impl<N: NonEmptyInlineStringLength> core::fmt::Debug for NonEmptyInlineString<N> {
+impl<const MAXLEN: usize> core::fmt::Debug for NonEmptyInlineString<MAXLEN> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "{:?}", self.as_str())
     }
 }
 
-impl<N: NonEmptyInlineStringLength> core::fmt::Display for NonEmptyInlineString<N> {
+impl<const MAXLEN: usize> core::fmt::Display for NonEmptyInlineString<MAXLEN> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "{}", self.as_str())
     }
@@ -109,12 +98,11 @@ pub enum NonEmptyInlineStringError {
 #[cfg(test)]
 mod tess {
     use super::*;
-    use typenum::{U3, U5, U10, U100};
 
     #[test]
     fn test_short() {
         assert_eq!(
-            NonEmptyInlineString::<U5>::truncate("abcde")
+            NonEmptyInlineString::<5>::truncate("abcde")
                 .as_ref()
                 .map(NonEmptyInlineString::as_str),
             Ok("abcde")
@@ -124,7 +112,7 @@ mod tess {
     #[test]
     fn test_long() {
         assert_eq!(
-            NonEmptyInlineString::<U5>::truncate("abcdef")
+            NonEmptyInlineString::<5>::truncate("abcdef")
                 .as_ref()
                 .map(NonEmptyInlineString::as_str),
             Ok("abcde")
@@ -132,7 +120,7 @@ mod tess {
 
         assert_eq!('Ⴀ'.len_utf8(), 3);
         assert_eq!(
-            NonEmptyInlineString::<U10>::truncate("ႠႠႠႠ")
+            NonEmptyInlineString::<10>::truncate("ႠႠႠႠ")
                 .as_ref()
                 .map(NonEmptyInlineString::as_str),
             Ok("ႠႠႠ")
@@ -140,7 +128,7 @@ mod tess {
 
         assert_eq!('🦴'.len_utf8(), 4);
         assert_eq!(
-            NonEmptyInlineString::<U10>::truncate("🦴🦴🦴")
+            NonEmptyInlineString::<10>::truncate("🦴🦴🦴")
                 .as_ref()
                 .map(NonEmptyInlineString::as_str),
             Ok("🦴🦴")
@@ -150,26 +138,26 @@ mod tess {
     #[test]
     fn test_err() {
         assert_eq!(
-            NonEmptyInlineString::<U100>::truncate(""),
+            NonEmptyInlineString::<100>::truncate(""),
             Err(NonEmptyInlineStringError::Empty)
         );
         assert_eq!(
-            NonEmptyInlineString::<U3>::new(""),
+            NonEmptyInlineString::<3>::new(""),
             Err(NonEmptyInlineStringError::Empty)
         );
         assert_eq!(
-            NonEmptyInlineString::<U3>::new("abcd"),
+            NonEmptyInlineString::<3>::new("abcd"),
             Err(NonEmptyInlineStringError::TooLong)
         );
         assert_eq!(
-            NonEmptyInlineString::<U3>::new(&"a".repeat(300)),
+            NonEmptyInlineString::<3>::new(&"a".repeat(300)),
             Err(NonEmptyInlineStringError::TooLong)
         );
     }
 
     #[test]
     fn test_const_new() {
-        type Ten = NonEmptyInlineString<U10>;
+        type Ten = NonEmptyInlineString<10>;
 
         const S1: Ten = Ten::const_new("foobarbaz0");
         const S2: Ten = Ten::const_new("abc");

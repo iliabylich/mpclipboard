@@ -82,7 +82,7 @@ impl MPClipboard {
 
         let prev_connectivity = self.conn.connectivity();
         let text = if let Some(message) = self.drain(&polled)
-            && self.store.add(&message)
+            && self.store.add(message)
         {
             Some(message.text_as_str().to_string())
         } else {
@@ -139,11 +139,11 @@ impl MPClipboard {
             .unwrap_or_else(|_| unreachable!("non-empty text truncated to MAXLEN is always valid"));
         let message = Message::new(text);
 
-        if !self.store.add(&message) {
+        if !self.store.add(message) {
             return Ok(false);
         }
 
-        let pushed = self.conn.push(&message);
+        let pushed = self.conn.push(message);
         self.sync_event_loop()?;
 
         Ok(pushed)

@@ -1,18 +1,15 @@
-use crate::{
-    Buffer, Wants,
-    message::{Message, MessageSize},
-};
+use crate::{Buffer, Wants, message::Message};
 use core::num::NonZeroUsize;
 
 #[must_use]
 #[expect(clippy::large_enum_variant)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum MessageWriter {
     Empty,
 
     Some {
-        current: Buffer<MessageSize>,
-        next: Option<Buffer<MessageSize>>,
+        current: Buffer<{ Message::BYTESIZE }>,
+        next: Option<Buffer<{ Message::BYTESIZE }>>,
     },
 }
 
@@ -100,10 +97,7 @@ pub enum MessageWriterError {
 #[cfg(test)]
 mod tests {
     use super::{MessageWriter, MessageWriterError};
-    use crate::{
-        Message, NonEmptyInlineString, message::MessageSize, test_helpers::non_zero_usize,
-    };
-    use typenum::Unsigned;
+    use crate::{Message, NonEmptyInlineString, test_helpers::non_zero_usize};
 
     #[test]
     fn test_single() {
@@ -115,9 +109,9 @@ mod tests {
         writer.push(&msg);
         assert_eq!(writer.remainder(), Some(encoded.as_slice()));
         assert_eq!(writer.written(non_zero_usize(100)), Ok(()));
-        assert_eq!(writer.remainder(), Some(&encoded.as_slice()[100..]));
+        assert_eq!(writer.remainder(), Some(&encoded[100..]));
         assert_eq!(
-            writer.written(non_zero_usize(MessageSize::USIZE - 100)),
+            writer.written(non_zero_usize(Message::BYTESIZE - 100)),
             Ok(())
         );
         assert_eq!(writer.remainder(), None);
@@ -135,7 +129,7 @@ mod tests {
         writer.push(&msg3);
 
         assert_eq!(writer.remainder(), Some(msg1.encode().as_slice()));
-        assert_eq!(writer.written(non_zero_usize(MessageSize::USIZE)), Ok(()));
+        assert_eq!(writer.written(non_zero_usize(Message::BYTESIZE)), Ok(()));
         assert_eq!(writer.remainder(), Some(msg3.encode().as_slice()));
     }
 
@@ -150,15 +144,15 @@ mod tests {
         writer.push(&Message::new(NonEmptyInlineString::const_new("FOO")));
         assert_eq!(writer.written(non_zero_usize(100)), Ok(()));
         assert_eq!(
-            writer.written(non_zero_usize(MessageSize::USIZE)),
+            writer.written(non_zero_usize(Message::BYTESIZE)),
             Err(MessageWriterError::WrittenTooMuch {
-                written: MessageSize::USIZE,
-                remaining: MessageSize::USIZE - 100,
+                written: Message::BYTESIZE,
+                remaining: Message::BYTESIZE - 100,
             })
         );
         assert_eq!(
             writer.remainder().map(<[u8]>::len),
-            Some(MessageSize::USIZE - 100)
+            Some(Message::BYTESIZE - 100)
         );
     }
 }

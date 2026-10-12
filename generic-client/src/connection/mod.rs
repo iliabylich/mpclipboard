@@ -47,14 +47,14 @@ impl Connection {
         }
     }
 
-    pub(crate) fn push(&mut self, message: &Message) -> bool {
+    pub(crate) fn push(&mut self, message: Message) -> bool {
         let State::Tcp { state: active, .. } = &mut self.state else {
             return false;
         };
         let TcpState::Connected(_reader, writer) = active else {
             return false;
         };
-        writer.push(message);
+        writer.push(&message);
         true
     }
 

@@ -38,7 +38,7 @@ impl TcpState {
                 let state = if stream.is_tls() {
                     Self::TlsHandshake(now)
                 } else {
-                    let writer = UpgradeRequestWriter::new(&config.upgrade_request());
+                    let writer = UpgradeRequestWriter::new(config.update_request());
                     Self::WritingUpgradeRequest(now, writer)
                 };
                 (fd, stream, state)
@@ -100,7 +100,7 @@ impl TcpState {
                     return Ok(Pending(()));
                 };
 
-                let writer = UpgradeRequestWriter::new(&config.upgrade_request());
+                let writer = UpgradeRequestWriter::new(config.update_request());
                 *self = Self::WritingUpgradeRequest(now, writer);
                 Ok(Pending(()))
             }
@@ -142,7 +142,7 @@ impl TcpState {
                 *self = if stream.is_tls() {
                     Self::TlsHandshake(now)
                 } else {
-                    let writer = UpgradeRequestWriter::new(&config.upgrade_request());
+                    let writer = UpgradeRequestWriter::new(config.update_request());
                     Self::WritingUpgradeRequest(now, writer)
                 };
             }
@@ -153,7 +153,7 @@ impl TcpState {
                     return Ok(());
                 };
 
-                let writer = UpgradeRequestWriter::new(&config.upgrade_request());
+                let writer = UpgradeRequestWriter::new(config.update_request());
                 *self = Self::WritingUpgradeRequest(now, writer);
             }
 

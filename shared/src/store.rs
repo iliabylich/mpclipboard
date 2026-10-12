@@ -11,16 +11,16 @@ impl Store {
     }
 
     #[must_use]
-    pub const fn current(&self) -> Option<&Message> {
-        self.text.as_ref()
+    pub const fn current(&self) -> Option<Message> {
+        self.text
     }
 
     #[must_use]
-    pub fn add(&mut self, message: &Message) -> bool {
-        let do_update = self.text.as_ref() != Some(message);
+    pub fn add(&mut self, message: Message) -> bool {
+        let do_update = self.text != Some(message);
 
         if do_update {
-            self.text = Some(message.clone());
+            self.text = Some(message);
         }
 
         do_update
