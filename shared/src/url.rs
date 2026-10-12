@@ -2,7 +2,10 @@ use crate::{
     HostPort, MAX_HOST_LENGTH, MAX_HOST_PORT_LENGTH, NonEmptyInlineString,
     NonEmptyInlineStringError, array_writer::ArrayWriter,
 };
-use core::{fmt::Write, num::ParseIntError};
+use core::{
+    fmt::Write,
+    num::{IntErrorKind, ParseIntError},
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Url {
@@ -69,7 +72,7 @@ impl Url {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum UrlParseError {
     #[error("no :// separator in the URL")]
     NoSchemeSeparator,
@@ -79,15 +82,21 @@ pub enum UrlParseError {
     UnknownScheme,
     #[error("invalid host: {0}")]
     InvalidHost(#[from] NonEmptyInlineStringError),
-    #[error("invalid port: {0}")]
-    InvalidPort(#[from] ParseIntError),
+    #[error("invalid port: {0:?}")]
+    InvalidPort(IntErrorKind),
+}
+
+impl From<ParseIntError> for UrlParseError {
+    fn from(err: ParseIntError) -> Self {
+        Self::InvalidPort(*err.kind())
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::{Url, UrlParseError};
     use crate::{HostPort, NonEmptyInlineString, NonEmptyInlineStringError};
-    use core::assert_matches;
+    use core::num::IntErrorKind;
 
     #[test]
     fn test_parse() {
@@ -130,9 +139,9 @@ mod tests {
             Url::parse("http://:3000"),
             Err(UrlParseError::InvalidHost(NonEmptyInlineStringError::Empty))
         );
-        assert_matches!(
+        assert_eq!(
             Url::parse("http://localhost:99999"),
-            Err(UrlParseError::InvalidPort(_))
+            Err(UrlParseError::InvalidPort(IntErrorKind::PosOverflow))
         );
     }
 }

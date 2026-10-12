@@ -1,4 +1,4 @@
-use boml::{Toml, prelude::TomlErrorKind, table::TomlGetError, types::TomlValueType};
+use boml::{Toml, table::TomlGetError, types::TomlValueType};
 use core::{mem::MaybeUninit, str::Utf8Error};
 use rustix::{
     fs::{Mode, OFlags},
@@ -44,10 +44,10 @@ fn read_toml<'a>(
     }
     let text = core::str::from_utf8(bytes)?;
 
-    boml::parse(text).map_err(|err| ConfigParserError::MalformedToml(err.kind, err.src.start))
+    boml::parse(text).map_err(|err| ConfigParserError::MalformedToml(err.src.start))
 }
 
-#[derive(Debug, PartialEq, Eq, thiserror::Error)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum ConfigParserError {
     #[error("failed to open() config: {0:?}")]
     Open(Errno),
@@ -57,8 +57,8 @@ pub enum ConfigParserError {
     TooLarge(usize),
     #[error("config must be valid utf-8: {0}")]
     NonUtf8(#[from] Utf8Error),
-    #[error("failed to parse TOML config: {0:?} at byte {1}")]
-    MalformedToml(TomlErrorKind, usize),
+    #[error("failed to parse TOML config at byte {0}")]
+    MalformedToml(usize),
     #[error("key {0} is missing in toml")]
     MissingKey(&'static str),
     #[error("key {0} must be a string in toml, got {1:?}")]

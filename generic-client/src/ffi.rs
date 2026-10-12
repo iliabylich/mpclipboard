@@ -143,7 +143,7 @@ pub extern "C" fn mpclipboard_read(mpclipboard: &mut MPClipboard) -> Output {
 }
 
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum PushResult {
     Pushed,
     Dropped,

@@ -116,7 +116,10 @@ impl TcpState {
                 Ok(message)
             }
 
-            Self::Connected(reader, _writer) => read_message(reader, stream, fd),
+            Self::Connected(reader, _writer) => {
+                let message = read_message(reader, stream, fd)?;
+                Ok(message)
+            }
 
             Self::Connecting { .. } => {
                 unreachable!("can't read() in Connecting state")
@@ -137,7 +140,7 @@ impl TcpState {
     ) -> Result<(), ConnectionError> {
         match self {
             Self::Connecting(_) => {
-                finish_connecting(fd).map_err(ConnectionError::FailedToFinishConnecting)?;
+                finish_connecting(fd)?;
 
                 *self = if stream.is_tls() {
                     Self::TlsHandshake(now)
@@ -167,9 +170,7 @@ impl TcpState {
             }
 
             Self::ReadingUpgradeResponse(last_activity_at, _reader) => {
-                stream
-                    .flush(fd)
-                    .map_err(ConnectionError::FailedToFlushTls)?;
+                stream.flush(fd)?;
                 *last_activity_at = now;
             }
 

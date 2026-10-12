@@ -1,50 +1,34 @@
-use crate::connection::maybe_tls_stream::MaybeTlsStreamError;
-use mini_sansio_dns::DnsError;
-use mpclipboard_shared::{
-    MessageError, MessageWriterError, TcpKeepAliveError, UpgradeRequestWriterError,
-    UpgradeResponseReaderError,
+use crate::connection::{
+    actions::{
+        ConnectError, FinishConnectingError, FinishTlsHandshakeError, ReadDnsResponseError,
+        ReadMessageError, ReadUpgradeResponseError, StartResolvingError, WriteDnsRequestError,
+        WriteMessageError, WriteUpgradeRequestError,
+    },
+    maybe_tls_stream::MaybeTlsStreamError,
 };
-use rustix::io::Errno;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ConnectionError {
-    #[error("DNS error: {0}")]
-    Dns(#[from] DnsError),
-    #[error("failed to write DNS request: {0:?}")]
-    FailedToWriteDnsRequest(Errno),
-    #[error("failed to read DNS response: {0:?}")]
-    FailedToReadDnsResponse(Errno),
-    #[error("failed to create TLS stream: {0}")]
-    FailedToCreateTlsStream(MaybeTlsStreamError),
-    #[error("failed to socket(): {0:?}")]
-    FailedToSocket(Errno),
-    #[error("failed to fcntl(FD_CLOEXEC): {0:?}")]
-    FailedToSetCloexec(Errno),
-    #[cfg(target_os = "macos")]
-    #[error("failed to setsockopt(SO_NOSIGPIPE): {0:?}")]
-    FailedToSetNoSigPipe(Errno),
-    #[error("failed to ioctl(FIONBIO): {0:?}")]
-    FailedToSwitchToNonBlocking(Errno),
-    #[error("failed to connect(): {0:?}")]
-    FailedToConnect(Errno),
-    #[error("failed to finish connecting: {0:?}")]
-    FailedToFinishConnecting(Errno),
+    #[error("failed to start resolving: {0}")]
+    StartResolving(#[from] StartResolvingError),
+    #[error("failed to write DNS request: {0}")]
+    WriteDnsRequest(#[from] WriteDnsRequestError),
+    #[error("failed to read DNS response: {0}")]
+    ReadDnsResponse(#[from] ReadDnsResponseError),
+    #[error("failed to connect: {0}")]
+    Connect(#[from] ConnectError),
+    #[error("failed to finish connecting: {0}")]
+    FinishConnecting(#[from] FinishConnectingError),
     #[error("failed to finish TLS handshake: {0}")]
-    FailedToFinishTlsHandshake(MaybeTlsStreamError),
-    #[error("failed to write: {0}")]
-    FailedToWrite(MaybeTlsStreamError),
-    #[error("UpgradeRequestWriter error: {0}")]
-    UpgradeRequestWriterError(#[from] UpgradeRequestWriterError),
-    #[error("failed to read: {0}")]
-    FailedToRead(MaybeTlsStreamError),
-    #[error("UpgradeResponseReader error: {0}")]
-    UpgradeResponseReaderError(#[from] UpgradeResponseReaderError),
-    #[error("TCP keepalive error: {0}")]
-    TcpKeepAliveError(#[from] TcpKeepAliveError),
-    #[error("message error: {0}")]
-    MessageError(#[from] MessageError),
+    FinishTlsHandshake(#[from] FinishTlsHandshakeError),
+    #[error("failed to write upgrade request: {0}")]
+    WriteUpgradeRequest(#[from] WriteUpgradeRequestError),
+    #[error("failed to read upgrade response: {0}")]
+    ReadUpgradeResponse(#[from] ReadUpgradeResponseError),
+    #[error("failed to read message: {0}")]
+    ReadMessage(#[from] ReadMessageError),
+    #[error("failed to write message: {0}")]
+    WriteMessage(#[from] WriteMessageError),
     #[error("failed to flush TLS data: {0}")]
-    FailedToFlushTls(MaybeTlsStreamError),
-    #[error("MessageWriter error: {0}")]
-    MessageWriterError(#[from] MessageWriterError),
+    FlushTls(#[from] MaybeTlsStreamError),
 }

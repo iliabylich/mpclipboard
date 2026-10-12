@@ -64,7 +64,7 @@ impl Config {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, thiserror::Error)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum ConfigError {
     #[error("malformed url: {0}")]
     Url(#[from] UrlParseError),

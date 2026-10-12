@@ -10,7 +10,7 @@ use core::net::{Ipv4Addr, SocketAddr};
 use mpclipboard_shared::Wants;
 use rustix::fd::BorrowedFd;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct DisconnectedState(Option<u64>);
 
 impl DisconnectedState {
