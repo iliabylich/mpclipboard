@@ -19,7 +19,7 @@ use mpclipboard_shared::{
 use rustix::fd::OwnedFd;
 
 #[derive(Debug)]
-pub enum TcpState {
+pub(crate) enum TcpState {
     Connecting(u64),
     TlsHandshake(u64),
     WritingUpgradeRequest(u64, UpgradeRequestWriter),

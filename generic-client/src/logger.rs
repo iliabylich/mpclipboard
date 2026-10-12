@@ -1,4 +1,4 @@
-pub struct Logger;
+pub(crate) struct Logger;
 
 impl Logger {
     pub(crate) fn init() {

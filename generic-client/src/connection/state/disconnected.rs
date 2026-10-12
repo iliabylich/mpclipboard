@@ -11,7 +11,7 @@ use mpclipboard_shared::Wants;
 use rustix::fd::BorrowedFd;
 
 #[derive(Debug, Clone, Copy)]
-pub struct DisconnectedState(Option<u64>);
+pub(crate) struct DisconnectedState(Option<u64>);
 
 impl DisconnectedState {
     pub(crate) const fn new(disconnected_at: Option<u64>) -> Self {

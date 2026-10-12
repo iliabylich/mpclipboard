@@ -5,7 +5,7 @@ use std::sync::OnceLock;
 static CLIENT_CONFIG: OnceLock<Arc<ClientConfig>> = OnceLock::new();
 
 #[expect(clippy::upper_case_acronyms)]
-pub struct TLS;
+pub(crate) struct TLS;
 
 impl TLS {
     pub(crate) fn init() {

@@ -12,7 +12,7 @@ use mpclipboard_shared::{Wants, prelude::*};
 use rustix::fd::{AsFd, BorrowedFd, OwnedFd};
 
 #[derive(Debug)]
-pub struct DnsState {
+pub(crate) struct DnsState {
     fd: OwnedFd,
     dns: Dns,
     buf: [u8; MAX_DNS_PACKET_LEN],

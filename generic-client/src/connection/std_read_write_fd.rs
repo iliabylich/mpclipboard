@@ -2,7 +2,7 @@ use mpclipboard_shared::io::SEND_FLAGS;
 use rustix::fd::AsFd;
 use std::io::{Read, Write};
 
-pub struct StdReadWriteFd<'a, F>(pub &'a F);
+pub(crate) struct StdReadWriteFd<'a, F>(pub(crate) &'a F);
 
 impl<F> Read for StdReadWriteFd<'_, F>
 where

@@ -6,7 +6,7 @@ use mpclipboard_shared::{
 use std::path::{Path, PathBuf};
 
 #[derive(Clone, Copy)]
-pub struct Config {
+pub(crate) struct Config {
     pub(crate) url: Url,
     pub(crate) token: Token,
     pub(crate) id: ID,

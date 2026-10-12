@@ -5,7 +5,7 @@ use mpclipboard_shared::{
 };
 use rustix::fd::AsFd;
 
-pub fn read_upgrade_response(
+pub(crate) fn read_upgrade_response(
     fd: &impl AsFd,
     stream: &mut MaybeTlsStream,
     reader: &mut UpgradeResponseReader,
@@ -29,7 +29,7 @@ pub fn read_upgrade_response(
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum ReadUpgradeResponseError {
+pub(crate) enum ReadUpgradeResponseError {
     #[error("failed to read: {0}")]
     Read(#[from] MaybeTlsStreamError),
     #[error("UpgradeResponseReader error: {0}")]

@@ -14,7 +14,7 @@ mod state;
 use state::{DisconnectedState, Readable, State, TcpState};
 
 #[derive(Debug)]
-pub struct Connection {
+pub(crate) struct Connection {
     epoch: Epoch,
     state: State,
 }

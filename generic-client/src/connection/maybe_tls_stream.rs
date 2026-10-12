@@ -13,7 +13,7 @@ use rustls::{
 use std::io::{ErrorKind, Read, Write};
 
 #[derive(Debug)]
-pub enum MaybeTlsStream {
+pub(crate) enum MaybeTlsStream {
     Plain,
     Tls(Box<ClientConnection>),
 }
@@ -167,7 +167,7 @@ fn tls_write(
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum MaybeTlsStreamError {
+pub(crate) enum MaybeTlsStreamError {
     #[error("failed to build TLS server name: {0}")]
     ServerName(#[from] InvalidDnsNameError),
     #[error("failed to create TLS connection: {0}")]

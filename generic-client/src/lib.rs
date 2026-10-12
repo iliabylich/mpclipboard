@@ -1,21 +1,26 @@
-#![warn(trivial_casts)]
-#![warn(trivial_numeric_casts)]
-#![warn(unused_qualifications)]
-#![warn(deprecated_in_future)]
-#![warn(unused_lifetimes)]
-#![warn(clippy::unwrap_used)]
-#![warn(clippy::expect_used)]
-#![warn(clippy::panic)]
-#![warn(clippy::indexing_slicing)]
-#![warn(clippy::arithmetic_side_effects)]
-#![warn(clippy::pedantic)]
-#![warn(clippy::nursery)]
-#![expect(clippy::large_types_passed_by_value)]
-#![expect(clippy::missing_errors_doc)]
-#![expect(clippy::large_enum_variant)]
+#![warn(
+    trivial_casts,
+    trivial_numeric_casts,
+    unused_qualifications,
+    deprecated_in_future,
+    unused_lifetimes,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::pedantic,
+    clippy::nursery,
+    clippy::std_instead_of_alloc,
+    clippy::std_instead_of_core
+)]
+#![expect(
+    clippy::large_types_passed_by_value,
+    clippy::missing_errors_doc,
+    clippy::large_enum_variant,
+    clippy::redundant_pub_crate
+)]
 #![allow(clippy::option_if_let_else)]
-#![warn(clippy::std_instead_of_alloc)]
-#![warn(clippy::std_instead_of_core)]
 #![doc = include_str!("../README.md")]
 
 extern crate alloc;

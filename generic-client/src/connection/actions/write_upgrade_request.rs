@@ -2,7 +2,7 @@ use crate::connection::maybe_tls_stream::{MaybeTlsStream, MaybeTlsStreamError};
 use mpclipboard_shared::{UpgradeRequestWriter, UpgradeRequestWriterError, prelude::*};
 use rustix::fd::AsFd;
 
-pub fn write_upgrade_request(
+pub(crate) fn write_upgrade_request(
     fd: impl AsFd,
     stream: &mut MaybeTlsStream,
     writer: &mut UpgradeRequestWriter,
@@ -16,7 +16,7 @@ pub fn write_upgrade_request(
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum WriteUpgradeRequestError {
+pub(crate) enum WriteUpgradeRequestError {
     #[error("failed to write: {0}")]
     Write(#[from] MaybeTlsStreamError),
     #[error("UpgradeRequestWriter error: {0}")]

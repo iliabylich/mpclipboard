@@ -3,7 +3,7 @@ use mini_sansio_dns::{Dns, DnsError, DnsWants, MAX_DNS_PACKET_LEN};
 use mpclipboard_shared::prelude::*;
 use rustix::{fd::AsFd, io::Errno, net::RecvFlags};
 
-pub fn read_dns_response(
+pub(crate) fn read_dns_response(
     fd: &impl AsFd,
     dns: &mut Dns,
     buf: &mut [u8; MAX_DNS_PACKET_LEN],
@@ -23,7 +23,7 @@ pub fn read_dns_response(
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum ReadDnsResponseError {
+pub(crate) enum ReadDnsResponseError {
     #[error("DNS error: {0}")]
     Dns(#[from] DnsError),
     #[error("failed to recv(): {0:?}")]

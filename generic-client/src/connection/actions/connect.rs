@@ -12,7 +12,7 @@ use rustix::{
 
 type FdAndMaybeTlsStream = (OwnedFd, MaybeTlsStream);
 
-pub fn connect(
+pub(crate) fn connect(
     addr: SocketAddr,
     config: &Config,
 ) -> Result<Completion<FdAndMaybeTlsStream, FdAndMaybeTlsStream>, ConnectError> {
@@ -36,7 +36,7 @@ pub fn connect(
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum ConnectError {
+pub(crate) enum ConnectError {
     #[error("failed to create TLS stream: {0}")]
     CreateTlsStream(#[from] MaybeTlsStreamError),
     #[error("failed to socket(): {0:?}")]

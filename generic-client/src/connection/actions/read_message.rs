@@ -2,7 +2,7 @@ use crate::connection::maybe_tls_stream::{MaybeTlsStream, MaybeTlsStreamError};
 use mpclipboard_shared::{Message, MessageError, MessageReader, prelude::*};
 use rustix::fd::AsFd;
 
-pub fn read_message(
+pub(crate) fn read_message(
     reader: &mut MessageReader,
     stream: &mut MaybeTlsStream,
     fd: &impl AsFd,
@@ -27,7 +27,7 @@ pub fn read_message(
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum ReadMessageError {
+pub(crate) enum ReadMessageError {
     #[error("failed to read: {0}")]
     Read(#[from] MaybeTlsStreamError),
     #[error("message error: {0}")]

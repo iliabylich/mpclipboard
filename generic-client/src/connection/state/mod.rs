@@ -7,18 +7,18 @@ use mpclipboard_shared::{Message, Wants, prelude::*};
 use rustix::fd::{AsFd, BorrowedFd, OwnedFd};
 
 mod disconnected;
-pub use disconnected::DisconnectedState;
+pub(crate) use disconnected::DisconnectedState;
 
 mod dns;
 use dns::DnsState;
 
 mod tcp;
-pub use tcp::TcpState;
+pub(crate) use tcp::TcpState;
 
 const FREEZE_TIME_IN_SECS: u64 = 3;
 
 #[derive(Debug)]
-pub enum State {
+pub(crate) enum State {
     Disconnected(DisconnectedState),
     Dns(DnsState),
     Tcp {
@@ -110,7 +110,7 @@ impl State {
     }
 }
 
-pub enum Readable {
+pub(crate) enum Readable {
     NextState(State),
     Message(Message),
 }

@@ -9,7 +9,7 @@ use rustix::{
 
 const DNS_SERVER: SocketAddrV4 = SocketAddrV4::new(Ipv4Addr::new(8, 8, 8, 8), 53);
 
-pub fn start_resolving(
+pub(crate) fn start_resolving(
     url: &Url,
     buf: &mut [u8; MAX_DNS_PACKET_LEN],
 ) -> Result<(OwnedFd, Dns), StartResolvingError> {
@@ -28,7 +28,7 @@ pub fn start_resolving(
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum StartResolvingError {
+pub(crate) enum StartResolvingError {
     #[error("DNS error: {0}")]
     Dns(#[from] DnsError),
     #[error("failed to socket(): {0:?}")]

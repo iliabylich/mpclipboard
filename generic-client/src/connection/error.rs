@@ -8,7 +8,7 @@ use crate::connection::{
 };
 
 #[derive(Debug, thiserror::Error)]
-pub enum ConnectionError {
+pub(crate) enum ConnectionError {
     #[error("failed to start resolving: {0}")]
     StartResolving(#[from] StartResolvingError),
     #[error("failed to write DNS request: {0}")]

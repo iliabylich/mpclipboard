@@ -2,7 +2,7 @@ use crate::connection::maybe_tls_stream::{MaybeTlsStream, MaybeTlsStreamError};
 use mpclipboard_shared::{MessageWriter, MessageWriterError, prelude::*};
 use rustix::fd::AsFd;
 
-pub fn write_message(
+pub(crate) fn write_message(
     writer: &mut MessageWriter,
     stream: &mut MaybeTlsStream,
     fd: &impl AsFd,
@@ -27,7 +27,7 @@ pub fn write_message(
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum WriteMessageError {
+pub(crate) enum WriteMessageError {
     #[error("failed to flush TLS data: {0}")]
     FlushTls(MaybeTlsStreamError),
     #[error("failed to write: {0}")]

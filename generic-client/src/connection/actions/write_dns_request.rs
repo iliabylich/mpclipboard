@@ -1,7 +1,7 @@
 use mini_sansio_dns::{Dns, DnsError, DnsWants, MAX_DNS_PACKET_LEN};
 use rustix::{fd::AsFd, io::Errno, net::SendFlags};
 
-pub fn write_dns_request(
+pub(crate) fn write_dns_request(
     fd: &impl AsFd,
     dns: &mut Dns,
     buf: &mut [u8; MAX_DNS_PACKET_LEN],
@@ -21,7 +21,7 @@ pub fn write_dns_request(
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum WriteDnsRequestError {
+pub(crate) enum WriteDnsRequestError {
     #[error("DNS error: {0}")]
     Dns(#[from] DnsError),
     #[error("failed to send(): {0:?}")]
