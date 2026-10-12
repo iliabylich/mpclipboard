@@ -114,7 +114,7 @@ impl MPClipboard {
         if let Some(fd) = polled.fd {
             if fd.has_error && !self.conn.is_disconnected() {
                 log::error!("poll() returned connection error, disconnecting");
-                self.conn.force_disconnect(self.now);
+                self.conn.disconnect(self.now);
             }
 
             if fd.readable && !self.conn.is_disconnected() {

@@ -27,6 +27,8 @@ pub enum ConnectionError {
     FailedToSwitchToNonBlocking(Errno),
     #[error("failed to connect(): {0:?}")]
     FailedToConnect(Errno),
+    #[error("failed to finish connecting: {0:?}")]
+    FailedToFinishConnecting(Errno),
     #[error("failed to finish TLS handshake: {0}")]
     FailedToFinishTlsHandshake(MaybeTlsStreamError),
     #[error("failed to write: {0}")]
