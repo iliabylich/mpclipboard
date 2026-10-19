@@ -11,7 +11,6 @@
 #![warn(clippy::nursery)]
 #![warn(clippy::std_instead_of_alloc)]
 #![warn(clippy::std_instead_of_core)]
-#![doc = include_str!("../README.md")]
 
 use anyhow::Result;
 

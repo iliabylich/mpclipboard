@@ -13,7 +13,6 @@
 #![warn(clippy::nursery)]
 #![allow(clippy::redundant_pub_crate)]
 #![allow(clippy::future_not_send)]
-#![doc = include_str!("../README.md")]
 
 use anyhow::Result;
 use clipboard::LocalClipboared;

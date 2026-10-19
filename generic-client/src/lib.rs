@@ -21,7 +21,6 @@
     clippy::redundant_pub_crate
 )]
 #![allow(clippy::option_if_let_else)]
-#![doc = include_str!("../README.md")]
 
 extern crate alloc;
 

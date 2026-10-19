@@ -26,7 +26,6 @@
         clippy::arithmetic_side_effects
     )
 )]
-#![doc = include_str!("../README.md")]
 
 #[cfg(test)]
 extern crate alloc;
