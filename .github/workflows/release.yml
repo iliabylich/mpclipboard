@@ -98,14 +98,10 @@ jobs:
     runs-on: ubuntu-latest
     env:
       ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-      FDROID_KEYSTORE_PASSWORD: ${{ secrets.FDROID_KEYSTORE_PASSWORD }}
     steps:
       - run: |
           echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/android-keystore.jks" >> "$GITHUB_ENV"
-          echo "FDROID_KEYSTORE_PATH=$RUNNER_TEMP/fdroid-keystore.jks" >> "$GITHUB_ENV"
-
           echo "${{ secrets.ANDROID_KEYSTORE }}" | base64 -d > "$RUNNER_TEMP/android-keystore.jks"
-          echo "${{ secrets.FDROID_KEYSTORE }}"  | base64 -d > "$RUNNER_TEMP/fdroid-keystore.jks"
 
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
@@ -122,13 +118,26 @@ jobs:
           name: mpclipboard_${{ inputs.version }}_arm64.apk
           path: mpclipboard_${{ inputs.version }}_arm64.apk
 
-      - run: pipx install fdroidserver==2.4.5
-      - run: fdroid --version
-      - run: mise //android:fdroid:update --apk "$PWD/mpclipboard_${{ inputs.version }}_arm64.apk"
+  build-fdroid:
+    needs: build-android-client
+    runs-on: ubuntu-latest
+    env:
+      FDROID_KEYSTORE_PASSWORD: ${{ secrets.FDROID_KEYSTORE_PASSWORD }}
+    steps:
+      - run: |
+          echo "FDROID_KEYSTORE_PATH=$RUNNER_TEMP/fdroid-keystore.jks" >> "$GITHUB_ENV"
+          echo "${{ secrets.FDROID_KEYSTORE }}" | base64 -d > "$RUNNER_TEMP/fdroid-keystore.jks"
+
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with: { name: "mpclipboard_${{ inputs.version }}_arm64.apk" }
+      - uses: jdx/mise-action@v4
+        with:
+          working_directory: ./fdroid
+      - run: mise //fdroid:update --apk "$PWD/mpclipboard_${{ inputs.version }}_arm64.apk"
       - uses: actions/upload-pages-artifact@v4
         with:
-          path: android/fdroid
-
+          path: fdroid
 
   release:
     needs:
@@ -136,6 +145,7 @@ jobs:
       - build-linux-client
       - build-macos-client
       - build-android-client
+      - build-fdroid
     runs-on: ubuntu-latest
     env:
       DEB_DEPLOY_URL: ${{ secrets.DEB_DEPLOY_URL }}
@@ -173,7 +183,7 @@ jobs:
 
   deploy-pages:
     needs:
-      - build-android-client
+      - build-fdroid
       - release
     runs-on: ubuntu-latest
 

@@ -20,7 +20,7 @@ Additionally, there are:
 
 1. `mise install:{debug,release}` to install APK on the connected device using adb
 2. `mise logs` to view logs of the running app
-3. `mise fdroid:update` to update F-Droid index (server via GitHub Pages)
+3. `mise //fdroid:update --apk <absolute path>` to update F-Droid index (server via GitHub Pages)
 
 ### Integration
 

@@ -5,10 +5,6 @@ bindings.h
 .gradle
 .kotlin
 build
-fdroid/metadata
-fdroid/repo
-fdroid/srclibs
-fdroid/tmp
 .idea
 gradle/
 gradlew

@@ -1,0 +1,34 @@
+[task_config]
+shell = "bash -euo pipefail -c"
+
+[tools]
+java = "temurin-25"
+android-sdk = "17.0"
+"pipx:fdroidserver" = "2.4.5"
+
+[env]
+FDROID_KEY_ALIAS = "release"
+_.file = { path = ".env", redacted = true }
+
+[hooks]
+postinstall = { task = "setup" }
+
+[tasks.setup]
+hide = true
+run = """
+    (set +o pipefail; yes | sdkmanager --sdk_root="$ANDROID_HOME" --licenses > /dev/null)
+    sdkmanager --sdk_root="$ANDROID_HOME" "build-tools;$ANDROID_BUILD_TOOLS_VERSION"
+"""
+
+[tasks.update]
+usage = 'flag "--apk <apk>" required=#true help="Absolute path to the release .apk"'
+run = """
+    chmod 600 config.yml
+
+    rm -rf archive metadata repo srclibs tmp
+    mkdir -p repo
+
+    cp "${usage_apk}" repo/mpclipboard.apk
+
+    fdroid update --verbose --create-metadata
+"""
