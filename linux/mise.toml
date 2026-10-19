@@ -1,6 +1,10 @@
 [task_config]
 shell = "bash -euo pipefail -c"
 
+[tools]
+"cargo:cargo-deb" = "latest"
+imagemagick = "latest"
+
 [env]
 MPCLIPBOARD_URL = "https://127.0.0.1:8443"
 MPCLIPBOARD_ID = "linux-client"
@@ -24,14 +28,14 @@ flag "--out <out>" required=#true help="Absolute path to write the .deb to"
 '''
 depends = ["build:release"]
 run = """
-    cargo deb --no-build --deb-version "${usage_version}" -p mpclipboard-client
+    cargo-deb --no-build --deb-version "${usage_version}" -p mpclipboard-client
     mv "target/debian/mpclipboard-client_${usage_version}_amd64.deb" "${usage_out}"
 """
 
 [tasks.generate]
 run = """
     generate_icon() {
-        convert ../icon_512x512.png \
+        magick ../icon_512x512.png \
             -resize 32x32 \
             -alpha extract \
             -background "$2" \

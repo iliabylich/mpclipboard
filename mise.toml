@@ -13,6 +13,13 @@ config_roots = [
     "shared",
 ]
 
+[tools]
+cargo-binstall = "latest"
+
+[settings]
+cargo.binstall_quickinstall = true
+cargo.binstall_only = true
+
 [env]
 RUST_LOG = "{{ get_env(name='RUST_LOG', default='info') }}"
 RUST_LOG_STYLE = "always"

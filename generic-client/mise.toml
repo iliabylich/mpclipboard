@@ -1,6 +1,10 @@
 [task_config]
 shell = "bash -euo pipefail -c"
 
+[tools]
+"cargo:cargo-ndk" = "latest"
+"cargo:cbindgen" = "latest"
+
 [env]
 MACOSX_DEPLOYMENT_TARGET = "15.0"
 MPCLIPBOARD_URL = "https://127.0.0.1:8443"

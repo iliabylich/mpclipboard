@@ -5,6 +5,7 @@ shell = "bash -euo pipefail -c"
 java = "temurin-25"
 gradle = "9.8.0"
 android-sdk = "17.0"
+imagemagick = "latest"
 
 [env]
 GRADLE_USER_HOME = "{{config_root}}/.cache/gradle"
@@ -23,14 +24,6 @@ postinstall = { task = "setup" }
 hide = true
 run = """
     rustup target add aarch64-linux-android
-
-    if ! command -v cargo-binstall > /dev/null 2>&1; then
-        cargo install cargo-binstall --locked
-    fi
-
-    if ! command -v cargo-ndk >/dev/null 2>&1; then
-        cargo binstall --no-confirm cargo-ndk
-    fi
 
     (set +o pipefail; yes | sdkmanager --sdk_root="$ANDROID_HOME" --licenses > /dev/null)
     sdkmanager --sdk_root="$ANDROID_HOME" \

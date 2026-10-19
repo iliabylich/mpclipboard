@@ -4,9 +4,11 @@ shell = "bash -euo pipefail -c"
 [tools]
 java = "temurin-25"
 android-sdk = "17.0"
+uv = "latest"
 "pipx:fdroidserver" = "2.4.5"
 
 [env]
+UV_PYTHON_PREFERENCE = "only-managed"
 FDROID_KEY_ALIAS = "release"
 _.file = { path = ".env", redacted = true }
 

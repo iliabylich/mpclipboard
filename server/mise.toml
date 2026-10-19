@@ -2,6 +2,7 @@
 shell = "bash -euo pipefail -c"
 
 [tools]
+"cargo:cargo-deb" = "latest"
 caddy = "latest"
 
 [env]
@@ -40,7 +41,7 @@ flag "--version <version>" required=#true help="Release version in MAJOR.MINOR.P
 flag "--out <out>" required=#true help="Absolute path to write the .deb to"
 '''
 run = """
-    cargo deb --no-build --deb-version "${usage_version}" -p mpclipboard-server --target=x86_64-unknown-linux-musl
+    cargo-deb --no-build --deb-version "${usage_version}" -p mpclipboard-server --target=x86_64-unknown-linux-musl
     mv "target/debian/mpclipboard-server_${usage_version}_amd64.deb" "${usage_out}"
 """
 
