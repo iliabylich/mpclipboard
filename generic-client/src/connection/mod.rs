@@ -1,5 +1,6 @@
+use crate::event_loop::Epoch;
 use crate::{Connectivity, config::Config};
-use mpclipboard_shared::{Epoch, Message, Wants, prelude::*};
+use mpclipboard_shared::{Message, Wants, prelude::*};
 use rustix::fd::BorrowedFd;
 
 mod actions;

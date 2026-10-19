@@ -8,6 +8,3 @@ rustix = { version = "1", features = ["time", "fs", "event", "net"] }
 boml = "2"
 thiserror = { version = "2", default-features = false }
 polling = "3.11"
-
-[target.'cfg(target_os = "macos")'.dependencies]
-nix = { version = "0.31", features = ["event"] }

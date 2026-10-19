@@ -2,13 +2,11 @@ use crate::{
     Output,
     config::{Config, ConfigError},
     connection::Connection,
-    event_loop::EventLoop,
+    event_loop::{EventLoop, EventLoopResult},
     logger::Logger,
     tls::TLS,
 };
-use mpclipboard_shared::{
-    EventLoopResult, EventLoopWithTimerError, Message, NonEmptyInlineString, Store,
-};
+use mpclipboard_shared::{EventLoopWithTimerError, Message, NonEmptyInlineString, Store};
 use std::{
     os::fd::{AsFd, AsRawFd, BorrowedFd},
     sync::Once,

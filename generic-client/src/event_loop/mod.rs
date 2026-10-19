@@ -1,7 +1,14 @@
+mod epoch;
+pub(crate) use epoch::Epoch;
+
+mod fd_state;
+use fd_state::{Diff, FdState};
+
+mod result;
+pub(crate) use result::EventLoopResult;
+
 use core::time::Duration;
-use mpclipboard_shared::{
-    Diff, Epoch, EventLoopResult, EventLoopWithTimer, EventLoopWithTimerError, FdState, Wants,
-};
+use mpclipboard_shared::{EventLoopWithTimer, EventLoopWithTimerError, Wants};
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd, RawFd};
 
 pub(crate) struct EventLoop {

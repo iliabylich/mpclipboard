@@ -1,13 +1,13 @@
 #[must_use]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Epoch(u8);
+pub(crate) struct Epoch(u8);
 
 impl Epoch {
-    pub const fn new() -> Self {
+    pub(crate) const fn new() -> Self {
         Self(0)
     }
 
-    pub const fn bump(&mut self) {
+    pub(crate) const fn bump(&mut self) {
         self.0 = self.0.wrapping_add(1);
     }
 }

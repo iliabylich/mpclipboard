@@ -1,6 +1,6 @@
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::Timerfd;
-use crate::{Wants, event_loop::EventLoopFdResult};
+use crate::Wants;
 use alloc::rc::Rc;
 use core::time::Duration;
 use polling::{Event, Events, PollMode, Poller};
@@ -253,6 +253,13 @@ impl EventLoopWithTimerResult<'_> {
                 (event.key, fd)
             })
     }
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct EventLoopFdResult {
+    pub readable: bool,
+    pub writable: bool,
+    pub has_error: bool,
 }
 
 #[derive(Debug, thiserror::Error)]

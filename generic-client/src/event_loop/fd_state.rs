@@ -1,22 +1,23 @@
-use crate::{Wants, event_loop::Epoch};
+use crate::event_loop::Epoch;
+use mpclipboard_shared::Wants;
 use rustix::fd::{AsRawFd, BorrowedFd, RawFd};
 
 #[must_use]
 #[derive(Debug, Clone, Copy)]
-pub enum FdState {
+pub(crate) enum FdState {
     None,
     Some(RawFd, Epoch, Wants),
 }
 
 impl FdState {
-    pub const fn new() -> Self {
+    pub(crate) const fn new() -> Self {
         Self::None
     }
 
-    /// # Panics
-    ///
-    /// If `next` has the same epoch as the current state but a different fd.
-    pub fn transition<'fd>(&mut self, next: Option<(BorrowedFd<'fd>, Epoch, Wants)>) -> Diff<'fd> {
+    pub(crate) fn transition<'fd>(
+        &mut self,
+        next: Option<(BorrowedFd<'fd>, Epoch, Wants)>,
+    ) -> Diff<'fd> {
         match (*self, next) {
             (Self::None, None) => Diff::Empty,
             (Self::None, Some((fd, epoch, wants))) => {
@@ -46,15 +47,9 @@ impl FdState {
     }
 }
 
-impl Default for FdState {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 #[must_use]
 #[derive(Debug)]
-pub enum Diff<'fd> {
+pub(crate) enum Diff<'fd> {
     Add { fd: BorrowedFd<'fd>, wants: Wants },
     Modify { fd: BorrowedFd<'fd>, wants: Wants },
     Empty,
