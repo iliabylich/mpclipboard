@@ -1,8 +1,7 @@
-use crate::{as_poll_fd::AsPollFd, reaper::CanBeReaped};
-use rustix::event::PollFd;
+use crate::reaper::CanBeReaped;
 use std::{
     collections::HashMap,
-    os::fd::{AsFd, AsRawFd},
+    os::fd::{AsFd, AsRawFd, RawFd},
 };
 
 pub struct FdSet<const MAX: usize, T: AsFd> {
@@ -26,10 +25,6 @@ impl<const MAX: usize, T: AsFd> FdSet<MAX, T> {
         self.map.remove(&fd)
     }
 
-    pub(crate) fn fds(&self) -> impl Iterator<Item = &T> {
-        self.map.values()
-    }
-
     pub(crate) fn fds_mut(&mut self) -> impl Iterator<Item = &mut T> {
         self.map.values_mut()
     }
@@ -49,14 +44,17 @@ impl<const MAX: usize, T: AsFd + CanBeReaped> FdSet<MAX, T> {
     }
 }
 
-impl<const MAX: usize, T: AsFd + AsPollFd> FdSet<MAX, T> {
-    pub(crate) fn as_poll_fds(&self) -> impl Iterator<Item = PollFd<'_>> {
-        self.fds().map(|fd| fd.as_poll_fd())
-    }
-}
-
 impl<const MAX: usize, T: AsFd> Default for FdSet<MAX, T> {
     fn default() -> Self {
         Self::new()
     }
+}
+
+pub(crate) fn key(fd: &impl AsFd) -> usize {
+    usize::try_from(fd.as_fd().as_raw_fd())
+        .unwrap_or_else(|_| unreachable!("open fds are never negative"))
+}
+
+pub(crate) fn fd_from_key(key: usize) -> RawFd {
+    RawFd::try_from(key).unwrap_or_else(|_| unreachable!("keys are always created from fds"))
 }

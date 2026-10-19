@@ -11,13 +11,13 @@
 #![warn(clippy::nursery)]
 #![warn(clippy::std_instead_of_alloc)]
 #![warn(clippy::std_instead_of_core)]
+#![allow(clippy::redundant_pub_crate)]
 
 use anyhow::Result;
 
 mod config;
 use config::Config;
 
-mod as_poll_fd;
 mod client;
 mod fd_set;
 mod pre_sink;

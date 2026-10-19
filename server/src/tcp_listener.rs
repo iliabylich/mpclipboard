@@ -1,19 +1,16 @@
-use crate::as_poll_fd::AsPollFd;
-use anyhow::{Context, Result};
+use crate::fd_set::key;
+use anyhow::{Context, Result, ensure};
 use core::net::SocketAddrV4;
-use mpclipboard_shared::REvents;
-use rustix::{
-    event::{PollFd, PollFlags},
-    net::{AddressFamily, SocketType},
-};
+use mpclipboard_shared::{EventLoopFdResult, EventLoopWithTimer, RegisteredFd, Wants};
+use rustix::net::{AddressFamily, SocketType};
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd};
 
 pub struct TcpListener {
-    fd: OwnedFd,
+    fd: RegisteredFd,
 }
 
 impl TcpListener {
-    pub(crate) fn new(addr: SocketAddrV4) -> Result<Self> {
+    pub(crate) fn new(addr: SocketAddrV4, event_loop: &EventLoopWithTimer) -> Result<Self> {
         let fd = rustix::net::socket(AddressFamily::INET, SocketType::STREAM, None)
             .context("failed to socket()")?;
         rustix::net::sockopt::set_socket_reuseaddr(&fd, true)?;
@@ -22,11 +19,16 @@ impl TcpListener {
         rustix::net::listen(&fd, 256).context("failed to listen()")?;
         log::info!("Listening on http://{addr}");
 
+        let key = key(&fd);
+        let fd = event_loop
+            .register(fd, key, Wants::Read)
+            .context("failed to register listener")?;
+
         Ok(Self { fd })
     }
 
-    pub(crate) fn accept(&self, revents: PollFlags) -> Result<Option<OwnedFd>> {
-        let revents = REvents::new(revents)?;
+    pub(crate) fn accept(&self, revents: EventLoopFdResult) -> Result<Option<OwnedFd>> {
+        ensure!(!revents.has_error, "polling returned an error");
 
         if !revents.readable {
             return Ok(None);
@@ -47,11 +49,5 @@ impl AsFd for TcpListener {
 impl AsRawFd for TcpListener {
     fn as_raw_fd(&self) -> i32 {
         self.fd.as_raw_fd()
-    }
-}
-
-impl AsPollFd for TcpListener {
-    fn as_poll_fd(&self) -> PollFd<'_> {
-        PollFd::new(&self.fd, PollFlags::IN)
     }
 }

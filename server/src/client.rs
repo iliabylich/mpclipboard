@@ -1,42 +1,45 @@
-use crate::as_poll_fd::AsPollFd;
-use anyhow::{Context, Result};
-use mpclipboard_shared::{ID, Message, MessageReader, MessageWriter, REvents, prelude::*};
-use rustix::event::{PollFd, PollFlags};
-use std::os::fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd};
+use anyhow::{Context, Result, ensure};
+use mpclipboard_shared::{
+    EventLoopFdResult, ID, Message, MessageReader, MessageWriter, RegisteredFd, Wants, prelude::*,
+};
+use std::os::fd::{AsFd, AsRawFd, BorrowedFd};
 
 pub struct Client {
-    fd: OwnedFd,
+    fd: RegisteredFd,
     id: ID,
     reader: MessageReader,
     writer: MessageWriter,
 }
 
 impl Client {
-    pub(crate) const fn new(fd: OwnedFd, id: ID) -> Self {
-        Self {
+    pub(crate) fn new(fd: RegisteredFd, id: ID) -> Result<Self> {
+        let this = Self {
             fd,
             id,
             reader: MessageReader::empty(),
             writer: MessageWriter::new(),
-        }
+        };
+        this.sync_wants()?;
+        Ok(this)
     }
 
-    pub(crate) fn push(&mut self, message: &Message) {
+    pub(crate) fn push(&mut self, message: &Message) -> Result<()> {
         self.writer.push(message);
+        self.sync_wants()
     }
 
     pub(crate) fn on_poll_event(
         mut self,
-        revents: PollFlags,
+        revents: EventLoopFdResult,
     ) -> Result<Completion<(Message, Self), Self>> {
-        let revents =
-            REvents::new(revents).with_context(|| format!("[{self}] polling returned an error"))?;
+        ensure!(!revents.has_error, "[{self}] polling returned an error");
 
-        if revents.writable {
+        if revents.writable && !self.writer.is_empty() {
             log::trace!("[{self}] is writable");
             let _ = self
                 .write()
                 .with_context(|| format!("[{self}] write() failed"))?;
+            self.sync_wants()?;
         }
 
         if revents.readable {
@@ -76,6 +79,17 @@ impl Client {
     pub(crate) const fn id(&self) -> ID {
         self.id
     }
+
+    fn sync_wants(&self) -> Result<()> {
+        let wants = if self.writer.is_empty() {
+            Wants::Read
+        } else {
+            Wants::ReadWrite
+        };
+        self.fd
+            .modify(wants)
+            .with_context(|| format!("[{self}] failed to update interest"))
+    }
 }
 
 impl core::fmt::Display for Client {
@@ -93,15 +107,5 @@ impl AsFd for Client {
 impl AsRawFd for Client {
     fn as_raw_fd(&self) -> i32 {
         self.fd.as_raw_fd()
-    }
-}
-
-impl AsPollFd for Client {
-    fn as_poll_fd(&self) -> PollFd<'_> {
-        let mut events = PollFlags::IN;
-        if !self.writer.is_empty() {
-            events |= PollFlags::OUT;
-        }
-        PollFd::new(&self.fd, events)
     }
 }

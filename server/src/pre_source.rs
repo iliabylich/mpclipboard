@@ -1,17 +1,18 @@
-use crate::{as_poll_fd::AsPollFd, reaper::CanBeReaped};
-use anyhow::{Context, Result};
-use mpclipboard_shared::{REvents, UpgradeRequest, UpgradeRequestReader, prelude::*};
-use rustix::event::{PollFd, PollFlags};
-use std::os::fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd};
+use crate::reaper::CanBeReaped;
+use anyhow::{Context, Result, ensure};
+use mpclipboard_shared::{
+    EventLoopFdResult, RegisteredFd, UpgradeRequest, UpgradeRequestReader, prelude::*,
+};
+use std::os::fd::{AsFd, AsRawFd, BorrowedFd};
 
 pub struct PreSource {
-    fd: OwnedFd,
+    fd: RegisteredFd,
     reader: UpgradeRequestReader,
     created_at: u64,
 }
 
 impl PreSource {
-    pub(crate) const fn new(fd: OwnedFd, now: u64) -> Self {
+    pub(crate) const fn new(fd: RegisteredFd, now: u64) -> Self {
         Self {
             fd,
             reader: UpgradeRequestReader::new(),
@@ -21,14 +22,9 @@ impl PreSource {
 
     pub(crate) fn on_poll_event(
         mut self,
-        revents: PollFlags,
-    ) -> Result<Completion<(UpgradeRequest, OwnedFd), Self>> {
-        let revents =
-            REvents::new(revents).with_context(|| format!("[{self}] polling returned an error"))?;
-
-        if revents.writable {
-            unreachable!("[{self}] is writable but noone asked for it");
-        }
+        revents: EventLoopFdResult,
+    ) -> Result<Completion<(UpgradeRequest, RegisteredFd), Self>> {
+        ensure!(!revents.has_error, "[{self}] polling returned an error");
 
         if revents.readable {
             log::trace!("[{self}] is readable");
@@ -81,11 +77,5 @@ impl AsFd for PreSource {
 impl AsRawFd for PreSource {
     fn as_raw_fd(&self) -> i32 {
         self.fd.as_raw_fd()
-    }
-}
-
-impl AsPollFd for PreSource {
-    fn as_poll_fd(&self) -> PollFd<'_> {
-        PollFd::new(&self.fd, PollFlags::IN)
     }
 }

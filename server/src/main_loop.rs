@@ -1,20 +1,21 @@
 use crate::{
-    as_poll_fd::AsPollFd, client::Client, config::Config, fd_set::FdSet, pre_sink::PreSink,
-    pre_source::PreSource, tcp_listener::TcpListener, url_ext::UrlExt,
+    client::Client,
+    config::Config,
+    fd_set::{FdSet, fd_from_key, key},
+    pre_sink::PreSink,
+    pre_source::PreSource,
+    tcp_listener::TcpListener,
+    url_ext::UrlExt,
 };
 use anyhow::Result;
 use mpclipboard_shared::{
-    ID, Message, PROTOCOL_VERSION, REvents, Store, Timerfd, UpgradeRequest, enable_tcp_keep_alive,
-    prelude::*,
+    EventLoopFdResult, EventLoopWithTimer, ID, Message, PROTOCOL_VERSION, Store, UpgradeRequest,
+    Wants, enable_tcp_keep_alive, prelude::*,
 };
-use rustix::event::PollFlags;
-use std::{
-    collections::HashMap,
-    os::fd::{AsFd, AsRawFd},
-};
+use std::{collections::HashMap, os::fd::AsRawFd};
 
 pub struct MainLoop {
-    timer: Timerfd,
+    event_loop: EventLoopWithTimer,
     now: u64,
     config: Config,
     store: Store,
@@ -27,9 +28,8 @@ pub struct MainLoop {
 
 impl MainLoop {
     pub(crate) fn new(config: &Config) -> Result<Self> {
-        let listener = TcpListener::new(config.url.resolve()?)?;
-
-        let timer = Timerfd::new()?;
+        let event_loop = EventLoopWithTimer::new()?;
+        let listener = TcpListener::new(config.url.resolve()?, &event_loop)?;
 
         let pre_sources = FdSet::<20, PreSource>::new();
         let pre_sinks = FdSet::<20, PreSink>::new();
@@ -37,7 +37,7 @@ impl MainLoop {
 
         Ok(Self {
             listener,
-            timer,
+            event_loop,
             now: 0,
             config: *config,
             store: Store::empty(),
@@ -48,26 +48,25 @@ impl MainLoop {
         })
     }
 
-    fn poll(&self) -> HashMap<i32, PollFlags> {
-        let mut pollfds = core::iter::empty()
-            .chain(core::iter::once(self.timer.as_poll_fd()))
-            .chain(core::iter::once(self.listener.as_poll_fd()))
-            .chain(self.pre_sources.as_poll_fds())
-            .chain(self.pre_sinks.as_poll_fds())
-            .chain(self.clients.as_poll_fds())
-            .collect::<Vec<_>>();
-        rustix::event::poll(&mut pollfds, None)
-            .unwrap_or_else(|err| unreachable!("failed to poll: {err:?}"));
+    fn poll(&mut self) -> (Option<u64>, HashMap<i32, EventLoopFdResult>) {
+        let polled = self
+            .event_loop
+            .wait(None)
+            .unwrap_or_else(|err| unreachable!("failed to poll: {err}"));
 
-        pollfds
-            .into_iter()
-            .map(|pollfd| (pollfd.as_fd().as_raw_fd(), pollfd.revents()))
-            .collect()
+        let mut revents = HashMap::<i32, EventLoopFdResult>::new();
+        for (key, fd_revents) in polled.fds() {
+            let revents = revents.entry(fd_from_key(key)).or_default();
+            revents.readable |= fd_revents.readable;
+            revents.writable |= fd_revents.writable;
+            revents.has_error |= fd_revents.has_error;
+        }
+
+        (polled.time, revents)
     }
 
     pub(crate) fn poll_and_process_events(&mut self) {
-        let mut revents = self.poll();
-        let timer = revents.remove(&self.timer.as_raw_fd());
+        let (time, mut revents) = self.poll();
         let listener = revents.remove(&self.listener.as_raw_fd());
 
         for (fd, revents) in revents {
@@ -80,33 +79,23 @@ impl MainLoop {
             }
         }
 
-        if let Some(revents) = timer {
-            self.on_timer_event(revents);
+        if let Some(now) = time {
+            self.on_tick(now);
         }
         if let Some(revents) = listener {
             self.on_listener_event(revents);
         }
     }
 
-    fn on_timer_event(&mut self, revents: PollFlags) {
-        let revents = REvents::new(revents)
-            .unwrap_or_else(|err| unreachable!("failed to poll() timerfd: {err:?}"));
-
-        if !revents.readable {
-            return;
-        }
-
-        self.now = self
-            .timer
-            .read()
-            .unwrap_or_else(|err| unreachable!("failed to read timerfd: {err}"));
+    fn on_tick(&mut self, now: u64) {
+        self.now = now;
         log::trace!("tick {}", self.now);
 
         self.pre_sources.reap(self.now);
         self.pre_sinks.reap(self.now);
     }
 
-    fn on_listener_event(&mut self, revents: PollFlags) {
+    fn on_listener_event(&mut self, revents: EventLoopFdResult) {
         let fd = match self.listener.accept(revents) {
             Ok(Some(fd)) => fd,
             Ok(None) => return,
@@ -115,12 +104,20 @@ impl MainLoop {
                 return;
             }
         };
+        let key = key(&fd);
+        let fd = match self.event_loop.register(fd, key, Wants::Read) {
+            Ok(fd) => fd,
+            Err(err) => {
+                log::error!("failed to register accepted fd: {err}");
+                return;
+            }
+        };
         let source = PreSource::new(fd, self.now);
         log::trace!("[{source}] new source");
         self.pre_sources.insert(source);
     }
 
-    fn on_pre_source_event(&mut self, source: PreSource, revents: PollFlags) {
+    fn on_pre_source_event(&mut self, source: PreSource, revents: EventLoopFdResult) {
         match source.on_poll_event(revents) {
             Err(err) => log::error!("{err:?}"),
             Ok(Pending(source)) => self.pre_sources.insert(source),
@@ -140,35 +137,50 @@ impl MainLoop {
                     return;
                 }
 
-                let sink = PreSink::new(fd, id, self.now);
+                let sink = match PreSink::new(fd, id, self.now) {
+                    Ok(sink) => sink,
+                    Err(err) => {
+                        log::error!("{err:?}");
+                        return;
+                    }
+                };
                 log::info!("[{id}] promoting to {sink}");
                 self.pre_sinks.insert(sink);
             }
         }
     }
 
-    fn on_pre_sink_event(&mut self, sink: PreSink, revents: PollFlags) {
+    fn on_pre_sink_event(&mut self, sink: PreSink, revents: EventLoopFdResult) {
         match sink.on_poll_event(revents) {
             Err(err) => log::error!("{err:?}"),
             Ok(Pending(sink)) => self.pre_sinks.insert(sink),
             Ok(Done((id, fd))) => {
                 log::trace!("[{id}] Configuring TCP keepalive");
-                match enable_tcp_keep_alive(&fd) {
-                    Ok(()) => {
-                        let mut client = Client::new(fd, id);
-                        log::info!("[{id}] promoting to {client}");
-                        if let Some(message) = self.store.current() {
-                            client.push(&message);
-                        }
-                        self.clients.insert(client);
-                    }
-                    Err(err) => log::error!("[{id}] {err}"),
+                if let Err(err) = enable_tcp_keep_alive(&fd) {
+                    log::error!("[{id}] {err}");
+                    return;
                 }
+
+                let mut client = match Client::new(fd, id) {
+                    Ok(client) => client,
+                    Err(err) => {
+                        log::error!("{err:?}");
+                        return;
+                    }
+                };
+                log::info!("[{id}] promoting to {client}");
+                if let Some(message) = self.store.current()
+                    && let Err(err) = client.push(&message)
+                {
+                    log::error!("{err:?}");
+                    return;
+                }
+                self.clients.insert(client);
             }
         }
     }
 
-    fn on_client_event(&mut self, client: Client, revents: PollFlags) {
+    fn on_client_event(&mut self, client: Client, revents: EventLoopFdResult) {
         match client.on_poll_event(revents) {
             Err(err) => log::error!("{err:?}"),
             Ok(Pending(client)) => self.clients.insert(client),
@@ -184,9 +196,14 @@ impl MainLoop {
     }
 
     fn broadcast(&mut self, message: &Message, sender_id: ID) {
-        self.clients
+        for client in self
+            .clients
             .fds_mut()
             .filter(|client| client.id() != sender_id)
-            .for_each(|client| client.push(message));
+        {
+            if let Err(err) = client.push(message) {
+                log::error!("{err:?}");
+            }
+        }
     }
 }
