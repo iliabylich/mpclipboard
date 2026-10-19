@@ -3,7 +3,13 @@ cmake_minimum_required(VERSION 3.22)
 project(mpclipboard_android)
 
 set(ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../..")
-set(GENERIC_CLIENT_LIB "${ROOT_DIR}/../generic-client/target/aarch64-linux-android/release/libmpclipboard_generic_client.a")
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    set(GENERIC_CLIENT_PROFILE "debug")
+else()
+    set(GENERIC_CLIENT_PROFILE "release")
+endif()
+
+set(GENERIC_CLIENT_LIB "${ROOT_DIR}/../generic-client/target/aarch64-linux-android/${GENERIC_CLIENT_PROFILE}/libmpclipboard_generic_client.a")
 
 if(NOT EXISTS "${GENERIC_CLIENT_LIB}")
     message(FATAL_ERROR "Prebuilt generic-client library not found: ${GENERIC_CLIENT_LIB}")

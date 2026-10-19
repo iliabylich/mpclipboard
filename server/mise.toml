@@ -6,13 +6,13 @@ caddy = "latest"
 
 [env]
 MPCLIPBOARD_URL = "http://127.0.0.1:3000"
-MPCLIPBOARD_TOKEN = "sekret"
 
 [tasks.app]
-usage = 'arg "[log]" default="info"'
-run = 'RUST_LOG_STYLE=always RUST_LOG="${usage_log}" cargo run'
+hide = true
+run = 'cargo run'
 
 [tasks.caddy]
+hide = true
 run = '''
 caddy run --adapter caddyfile --config - <<'EOF'
 {
@@ -29,22 +29,24 @@ EOF
 [tasks.dev]
 depends = ["app", "caddy"]
 
-[tasks."build:musl"]
+[tasks."build:release"]
 hide = true
 run = "cargo build --target=x86_64-unknown-linux-musl --release"
 
 [tasks."release:deb"]
-depends = ["build:musl"]
-usage = 'arg "<version>" help="Release version in MAJOR.MINOR.PATCH format"'
+depends = ["build:release"]
+usage = '''
+flag "--version <version>" required=#true help="Release version in MAJOR.MINOR.PATCH format"
+flag "--out <out>" required=#true help="Absolute path to write the .deb to"
+'''
 run = """
-    cargo deb --deb-version "${usage_version}" -p mpclipboard-server --target=x86_64-unknown-linux-musl
-    mv "target/debian/mpclipboard-server_${usage_version}_amd64.deb" ..
-    mv target/x86_64-unknown-linux-musl/release/mpclipboard-server "../mpclipboard-server-bin-${usage_version}"
+    cargo deb --no-build --deb-version "${usage_version}" -p mpclipboard-server --target=x86_64-unknown-linux-musl
+    mv "target/debian/mpclipboard-server_${usage_version}_amd64.deb" "${usage_out}"
 """
 
 [tasks."release:container"]
-depends = ["build:musl"]
-usage = 'arg "<version>" help="Release version in MAJOR.MINOR.PATCH format"'
+depends = ["build:release"]
+usage = 'flag "--version <version>" required=#true help="Release version in MAJOR.MINOR.PATCH format"'
 run = """
     docker build -t "ghcr.io/iliabylich/mpclipboard:${usage_version}" .
     docker push "ghcr.io/iliabylich/mpclipboard:${usage_version}"
@@ -52,3 +54,7 @@ run = """
     docker tag "ghcr.io/iliabylich/mpclipboard:${usage_version}" ghcr.io/iliabylich/mpclipboard:latest
     docker push ghcr.io/iliabylich/mpclipboard:latest
 """
+
+[tasks.clippy]
+hide = true
+run = "cargo clippy"

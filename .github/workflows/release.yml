@@ -19,6 +19,9 @@ defaults:
   run:
     shell: bash
 
+env:
+  MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}
+
 jobs:
   validate:
     runs-on: ubuntu-latest
@@ -48,10 +51,8 @@ jobs:
         with: { tool: cargo-deb }
       - uses: jdx/mise-action@v4
         with:
-          install: false
           working_directory: ./server
-      - run: mise release:deb "${{ inputs.version }}"
-        working-directory: ./server
+      - run: mise //server:release:deb --version "${{ inputs.version }}" --out "$PWD/mpclipboard-server_${{ inputs.version }}_amd64.deb"
       - uses: actions/upload-artifact@v7
         with:
           name: mpclipboard-server_${{ inputs.version }}_amd64.deb
@@ -63,10 +64,12 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
-      - uses: extractions/setup-just@v4
       - uses: taiki-e/install-action@v2
         with: { tool: cargo-deb }
-      - run: just linux::release-deb "${{ inputs.version }}"
+      - uses: jdx/mise-action@v4
+        with:
+          working_directory: ./linux
+      - run: mise //linux:release:deb --version "${{ inputs.version }}" --out "$PWD/mpclipboard-client_${{ inputs.version }}_amd64.deb"
       - uses: actions/upload-artifact@v7
         with:
           name: mpclipboard-client_${{ inputs.version }}_amd64.deb
@@ -80,9 +83,11 @@ jobs:
       - run: sudo xcode-select -switch /Applications/Xcode_26.3.app/Contents/Developer
       - run: brew install xcodegen imagemagick
       - uses: actions/checkout@v7
-      - uses: extractions/setup-just@v4
       - uses: dtolnay/rust-toolchain@stable
-      - run: just macos::release-dmg "${{ inputs.version }}"
+      - uses: jdx/mise-action@v4
+        with:
+          working_directory: ./macos
+      - run: mise //macos:release:dmg --version "${{ inputs.version }}" --out "$PWD/mpclipboard_${{ inputs.version }}_arm64.dmg"
       - uses: actions/upload-artifact@v7
         with:
           name: mpclipboard_${{ inputs.version }}_arm64.dmg
@@ -110,16 +115,8 @@ jobs:
       - run: cargo binstall --no-confirm cargo-ndk
       - uses: jdx/mise-action@v4
         with:
-          install: true
           working_directory: ./android
-      - run: mise setup:android-sdk
-        working-directory: ./android
-      - run: mise build:generic-client
-        working-directory: ./android
-      - run: mise build:release "${{ inputs.version }}"
-        working-directory: ./android
-
-      - run: cp android/build/outputs/apk/release/mpclipboard-release.apk mpclipboard_${{ inputs.version }}_arm64.apk
+      - run: mise //android:release:apk --version "${{ inputs.version }}" --out "$PWD/mpclipboard_${{ inputs.version }}_arm64.apk"
       - uses: actions/upload-artifact@v7
         with:
           name: mpclipboard_${{ inputs.version }}_arm64.apk
@@ -127,8 +124,7 @@ jobs:
 
       - run: pipx install fdroidserver==2.4.5
       - run: fdroid --version
-      - run: mise fdroid:update
-        working-directory: ./android
+      - run: mise //android:fdroid:update --apk "$PWD/mpclipboard_${{ inputs.version }}_arm64.apk"
       - uses: actions/upload-pages-artifact@v4
         with:
           path: android/fdroid

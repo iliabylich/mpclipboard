@@ -1,0 +1,33 @@
+monorepo_root = true
+
+[monorepo]
+config_roots = [
+    "android",
+    "dev-certs",
+    "generic-client",
+    "linux",
+    "macos",
+    "poll-cli",
+    "server",
+    "shared",
+]
+
+[env]
+RUST_LOG = "{{ get_env(name='RUST_LOG', default='info') }}"
+RUST_LOG_STYLE = "always"
+MPCLIPBOARD_TOKEN = "sekret"
+ANDROID_HOME = "{{config_root}}/android/.cache/android-sdk"
+ANDROID_SDK_ROOT = "{{config_root}}/android/.cache/android-sdk"
+ANDROID_NDK_VERSION = "30.0.16248370"
+ANDROID_NDK_HOME = "{{config_root}}/android/.cache/android-sdk/ndk/{{env.ANDROID_NDK_VERSION}}"
+ANDROID_NDK_ROOT = "{{config_root}}/android/.cache/android-sdk/ndk/{{env.ANDROID_NDK_VERSION}}"
+
+[task_config]
+shell = "bash -euo pipefail -c"
+
+[tasks.clippy]
+depends = ["//shared:clippy", "//generic-client:clippy", "//server:clippy"]
+
+[tasks."github:release"]
+usage = 'flag "--version <version>" required=#true help="Release version in MAJOR.MINOR.PATCH format"'
+run = 'gh workflow run release --ref master -f version="${usage_version}"'

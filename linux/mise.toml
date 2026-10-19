@@ -1,4 +1,48 @@
+[task_config]
+shell = "bash -euo pipefail -c"
+
 [env]
 MPCLIPBOARD_URL = "https://127.0.0.1:8443"
-MPCLIPBOARD_TOKEN = "sekret"
 MPCLIPBOARD_ID = "linux-client"
+
+[tasks."build:debug"]
+hide = true
+run = "cargo build"
+
+[tasks."build:release"]
+hide = true
+run = "cargo build --release"
+
+[tasks.dev]
+depends = ["build:debug"]
+run = "target/debug/mpclipboard-client"
+
+[tasks."release:deb"]
+usage = '''
+flag "--version <version>" required=#true help="Release version in MAJOR.MINOR.PATCH format"
+flag "--out <out>" required=#true help="Absolute path to write the .deb to"
+'''
+depends = ["build:release"]
+run = """
+    cargo deb --no-build --deb-version "${usage_version}" -p mpclipboard-client
+    mv "target/debian/mpclipboard-client_${usage_version}_amd64.deb" "${usage_out}"
+"""
+
+[tasks.generate]
+run = """
+    generate_icon() {
+        convert ../icon_512x512.png \
+            -resize 32x32 \
+            -alpha extract \
+            -background "$2" \
+            -alpha shape \
+            -channel-fx "alpha=>red,red=>green,green=>blue,blue=>alpha" \
+            -define quantum:format=unsigned \
+            -depth 8 \
+            "rgba:$1"
+    }
+
+    generate_icon assets/green.argb32  "rgb(23, 199, 23)"
+    generate_icon assets/red.argb32    "rgb(195, 40, 40)"
+    generate_icon assets/yellow.argb32 "rgb(236, 223, 41)"
+"""

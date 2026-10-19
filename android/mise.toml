@@ -11,21 +11,20 @@ GRADLE_USER_HOME = "{{config_root}}/.cache/gradle"
 ANDROID_USER_HOME = "{{config_root}}/.cache/android"
 ANDROID_EMULATOR_HOME = "{{config_root}}/.cache/android"
 ANDROID_AVD_HOME = "{{config_root}}/.cache/android/avd"
-ANDROID_HOME = "{{config_root}}/.cache/android-sdk"
-ANDROID_SDK_ROOT = "{{config_root}}/.cache/android-sdk"
-ANDROID_NDK_VERSION = "30.0.16248370"
-ANDROID_NDK_HOME = "{{config_root}}/.cache/android-sdk/ndk/{{env.ANDROID_NDK_VERSION}}"
 ANDROID_CMAKE_VERSION = "4.1.2"
 _.path = ["{{config_root}}/.cache/android-sdk/platform-tools"]
 ANDROID_KEY_ALIAS = "release"
 FDROID_KEY_ALIAS = "release"
 _.file = { path = ".env", redacted = true }
 
-[tasks."setup:rust-target"]
-run = "rustup target add aarch64-linux-android"
+[hooks]
+postinstall = { task = "setup" }
 
-[tasks."setup:cargo-ndk"]
+[tasks.setup]
+hide = true
 run = """
+    rustup target add aarch64-linux-android
+
     if ! command -v cargo-binstall > /dev/null 2>&1; then
         cargo install cargo-binstall --locked
     fi
@@ -33,10 +32,7 @@ run = """
     if ! command -v cargo-ndk >/dev/null 2>&1; then
         cargo binstall --no-confirm cargo-ndk
     fi
-"""
 
-[tasks."setup:android-sdk"]
-run = """
     (set +o pipefail; yes | sdkmanager --sdk_root="$ANDROID_HOME" --licenses > /dev/null)
     sdkmanager --sdk_root="$ANDROID_HOME" \
         "platform-tools" \
@@ -44,36 +40,28 @@ run = """
         "build-tools;36.0.0" \
         "ndk;$ANDROID_NDK_VERSION" \
         "cmake;$ANDROID_CMAKE_VERSION"
+
+    echo "sdk.dir=$ANDROID_HOME" > local.properties
+
+    gradle --no-daemon wrapper --gradle-version "$(mise current gradle)"
 """
 
-[tasks."setup:local-properties"]
-run = 'echo "sdk.dir=$ANDROID_HOME" > local.properties'
-
-[tasks."setup:gradle-wrapper"]
-run = 'gradle --no-daemon wrapper --gradle-version "$(mise current gradle)"'
-
-[tasks."build:generic-client"]
-depends = ["setup:rust-target", "setup:cargo-ndk"]
-run = """
-    pushd ../generic-client
-        cargo ndk -t arm64-v8a build --release
-        ls -l target/aarch64-linux-android/release/libmpclipboard_generic_client.a bindings.h
-    popd
-"""
-
-[tasks."build:debug"]
-depends = ["setup:local-properties", "build:generic-client"]
+[tasks."debug:apk"]
+depends = ["//generic-client:build:android:debug"]
 run = """
     gradle --no-daemon assembleDebug
     ls -l build/outputs/apk/debug/mpclipboard-debug.apk
 """
 
-[tasks."build:release"]
-depends = ["setup:local-properties", "build:generic-client"]
-usage = 'arg "<version>" help="Release version in MAJOR.MINOR.PATCH format"'
+[tasks."release:apk"]
+depends = ["//generic-client:build:android:release"]
+usage = '''
+flag "--version <version>" required=#true help="Release version in MAJOR.MINOR.PATCH format"
+flag "--out <out>" required=#true help="Absolute path to write the .apk to"
+'''
 run = """
     gradle --no-daemon assembleRelease -PappVersion="${usage_version}"
-    ls -l build/outputs/apk/release/mpclipboard-release.apk
+    cp build/outputs/apk/release/mpclipboard-release.apk "${usage_out}"
 """
 
 [tasks."install:debug"]
@@ -88,6 +76,7 @@ run = """
 """
 
 [tasks."fdroid:update"]
+usage = 'flag "--apk <apk>" required=#true help="Absolute path to the release .apk"'
 run = """
     pushd fdroid
         chmod 600 config.yml
@@ -95,12 +84,24 @@ run = """
         rm -rf metadata repo srclibs tmp
         mkdir -p repo
 
-        cp ../build/outputs/apk/release/mpclipboard-release.apk repo/mpclipboard.apk
+        cp "${usage_apk}" repo/mpclipboard.apk
 
         fdroid update --verbose --create-metadata
     popd
 """
 
+[tasks.generate]
+run = """
+    mkdir -p src/main/res/drawable-nodpi
+    magick ../icon_512x512.png \
+        -resize 230x230 \
+        -background none \
+        -gravity center \
+        -extent 432x432 \
+        -strip \
+        -define png:exclude-chunks=date,time \
+        src/main/res/drawable-nodpi/icon.png
+"""
+
 [tasks."macos:androidstudio"]
-depends = ["setup:local-properties", "setup:gradle-wrapper"]
 run = '"/Applications/Android Studio.app/Contents/MacOS/studio" "$PWD"'

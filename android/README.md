@@ -14,7 +14,7 @@ ANDROID_KEYSTORE_PATH
 ANDROID_KEYSTORE_PASSWORD
 ```
 
-Use `mise build:debug` or `mise build:release` from the `android/` directory.
+Use `mise debug:apk` or `mise release:apk --version <version> --out <absolute path>` from the `android/` directory.
 
 Additionally, there are:
 

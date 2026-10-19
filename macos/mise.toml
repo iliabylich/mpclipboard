@@ -1,0 +1,48 @@
+[task_config]
+shell = "bash -euo pipefail -c"
+
+[env]
+MPCLIPBOARD_URL = "https://127.0.0.1:8443"
+MPCLIPBOARD_ID = "macos-client"
+
+[tasks.clean]
+hide = true
+run = "rm -rf build mpclipboard.xcodeproj"
+
+[tasks.generate]
+wait_for = ["clean"]
+run = """
+    ./scripts/generate-assets.py
+    xcodegen generate
+"""
+
+[tasks."build:debug"]
+hide = true
+depends = ["generate", "//generic-client:build:debug"]
+run = "xcodebuild -quiet -configuration Debug"
+
+[tasks."build:release"]
+hide = true
+depends = ["generate", "//generic-client:build:release"]
+run = "xcodebuild -quiet -configuration Release"
+
+[tasks.dev]
+depends = ["build:debug"]
+run = "./build/Debug/mpclipboard.app/Contents/MacOS/mpclipboard"
+
+[tasks."release:dmg"]
+usage = '''
+flag "--version <version>" required=#true help="Release version in MAJOR.MINOR.PATCH format"
+flag "--out <out>" required=#true help="Absolute path to write the .dmg to"
+'''
+depends = ["clean", "build:release"]
+run = """
+    pushd build/Release
+        mkdir -p dmg-root
+        cp -R mpclipboard.app dmg-root/
+        ln -s /Applications dmg-root/Applications
+        hdiutil create -volname mpclipboard -srcfolder dmg-root -ov -format UDZO mpclipboard.dmg
+    popd
+
+    mv build/Release/mpclipboard.dmg "${usage_out}"
+"""

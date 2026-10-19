@@ -20,10 +20,9 @@ id = "macos-client"
 ### Building
 
 ```sh
-just build Release # or Debug
+mise dev                             # builds and runs a debug app from build/Debug/mpclipboard.app
+mise release:dmg --version <version> --out <absolute path> # builds a release app and packs it into a .dmg
 ```
-
-The app will be in `build/Release/mpclipboard.app` (or `build/Debug/mpclipboard.app`).
 
 ### Other notes
 

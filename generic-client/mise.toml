@@ -1,4 +1,49 @@
+[task_config]
+shell = "bash -euo pipefail -c"
+
 [env]
+MACOSX_DEPLOYMENT_TARGET = "15.0"
 MPCLIPBOARD_URL = "https://127.0.0.1:8443"
-MPCLIPBOARD_TOKEN = "sekret"
 MPCLIPBOARD_ID = "generic-client"
+
+[tasks.cbindgen]
+run = "cbindgen --output bindings.h"
+
+[tasks."build:debug"]
+hide = true
+run = "cargo build"
+
+[tasks."build:release"]
+hide = true
+run = "cargo build --release"
+
+[tasks."build:android:debug"]
+hide = true
+run = """
+    cargo ndk -t arm64-v8a build
+    ls -l target/aarch64-linux-android/debug/libmpclipboard_generic_client.a bindings.h
+"""
+
+[tasks."build:android:release"]
+hide = true
+run = """
+    cargo ndk -t arm64-v8a build --release
+    ls -l target/aarch64-linux-android/release/libmpclipboard_generic_client.a bindings.h
+"""
+
+[tasks."build:cli:debug"]
+hide = true
+run = "cargo build --example cli"
+
+[tasks.dev]
+usage = 'arg "<id>"'
+depends = ["build:cli:debug"]
+run = 'MPCLIPBOARD_ID="${usage_id}" target/debug/examples/cli'
+
+[tasks.valgrind]
+depends = ["build:cli:debug"]
+run = "valgrind --leak-check=full target/debug/examples/cli"
+
+[tasks.clippy]
+hide = true
+run = "cargo clippy"
