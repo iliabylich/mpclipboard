@@ -101,8 +101,8 @@ pub use wants::{OptionWantsExt, Wants};
 
 mod event_loop;
 pub use event_loop::{
-    Epoch, EventLoop, EventLoopError, EventLoopFdResult, EventLoopResult, EventLoopWithTimer,
-    EventLoopWithTimerError, EventLoopWithTimerResult, RegisteredFd,
+    Diff, Epoch, EventLoop, EventLoopError, EventLoopFdResult, EventLoopResult, EventLoopWithTimer,
+    EventLoopWithTimerError, EventLoopWithTimerResult, FdState, RegisteredFd,
 };
 
 mod revents;

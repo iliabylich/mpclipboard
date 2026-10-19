@@ -27,12 +27,13 @@ extern crate alloc;
 pub use config::ConfigError;
 pub use connectivity::Connectivity;
 pub use mpclipboard::{MPClipboard, MPClipboardError};
-pub use mpclipboard_shared::EventLoopError;
+pub use mpclipboard_shared::EventLoopWithTimerError;
 pub use output::Output;
 
 mod config;
 mod connection;
 mod connectivity;
+mod event_loop;
 mod ffi;
 mod logger;
 mod mpclipboard;

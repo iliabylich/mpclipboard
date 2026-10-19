@@ -8,6 +8,7 @@ mod result;
 pub use result::{EventLoopFdResult, EventLoopResult};
 
 mod fd_state;
+pub use fd_state::{Diff, FdState};
 
 mod new;
 pub use new::{

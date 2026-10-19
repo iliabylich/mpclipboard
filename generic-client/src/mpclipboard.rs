@@ -2,11 +2,12 @@ use crate::{
     Output,
     config::{Config, ConfigError},
     connection::Connection,
+    event_loop::EventLoop,
     logger::Logger,
     tls::TLS,
 };
 use mpclipboard_shared::{
-    EventLoop, EventLoopError, EventLoopResult, Message, NonEmptyInlineString, Store,
+    EventLoopResult, EventLoopWithTimerError, Message, NonEmptyInlineString, Store,
 };
 use std::{
     os::fd::{AsFd, AsRawFd, BorrowedFd},
@@ -167,5 +168,5 @@ pub enum MPClipboardError {
     #[error("config error: {0}")]
     ConfigError(#[from] ConfigError),
     #[error("event loop error: {0}")]
-    EventLoopError(#[from] EventLoopError),
+    EventLoopError(#[from] EventLoopWithTimerError),
 }
