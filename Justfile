@@ -7,6 +7,7 @@ mod server         'server'
 mod poll-cli       'poll-cli'
 mod macos          'macos'
 mod linux          'linux'
+mod dev-certs      'dev-certs'
 
 clippy:
     cd shared && cargo clippy
