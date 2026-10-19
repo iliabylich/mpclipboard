@@ -58,17 +58,9 @@ final class MPClipboard {
     private let handle: OpaquePointer
 
     init() {
-#if DEBUG
-        log.notice("Debug build, using local config")
-        guard let handle = mpclipboard_new_with_local_config() else {
+        guard let handle = mpclipboard_new_from_file() else {
             fatalError("NULL mpclipboard")
         }
-#else
-        log.notice("Release build, using config from XDG dir")
-        guard let handle = mpclipboard_new_with_xdg_config() else {
-            fatalError("NULL mpclipboard")
-        }
-#endif
 
         self.handle = handle
     }

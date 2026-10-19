@@ -1,6 +1,5 @@
 use anyhow::{Context, Result, ensure};
-use core::mem::MaybeUninit;
-use mpclipboard_shared::{ConfigParser, Token, Url};
+use mpclipboard_shared::{ConfigReader, Token, Url};
 
 #[derive(Clone, Copy)]
 pub struct Config {
@@ -8,28 +7,16 @@ pub struct Config {
     pub(crate) token: Token,
 }
 
-const PATH: &[u8] = if cfg!(debug_assertions) {
-    b"config.toml"
-} else {
-    b"/etc/mpclipboard-server/config.toml"
-};
-
 impl Config {
     pub(crate) fn read() -> Result<Self> {
-        ConfigParser::parse(
-            PATH,
-            &mut [MaybeUninit::uninit(); 1_024],
-            ["url", "token"],
-            |[url, token]| {
-                let url = Url::parse(url).context("malformed url")?;
-                ensure!(!url.is_tls(), "url must have http scheme");
+        let reader = ConfigReader::new().context("failed to read config")?;
 
-                let token = Token::new(token).context("token is too long")?;
+        let url = reader.get_url()?;
+        ensure!(!url.is_tls(), "url must have http scheme");
 
-                Ok(Self { url, token })
-            },
-        )
-        .context("failed to parse config")?
+        let token = reader.get_token()?;
+
+        Ok(Self { url, token })
     }
 }
 

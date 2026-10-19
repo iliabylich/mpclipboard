@@ -22,7 +22,7 @@ static char *INFO = "\n\nThis is a demo of MPClipboard.\n"
 int main() {
   printf("%s%s%s\n", GREEN, INFO, NC);
 
-  mpclipboard_MPClipboard *mpclipboard = mpclipboard_new_with_local_config();
+  mpclipboard_MPClipboard *mpclipboard = mpclipboard_new_from_file();
   assert(mpclipboard != NULL);
 
   int mpclipboard_fd = mpclipboard_get_fd(mpclipboard);

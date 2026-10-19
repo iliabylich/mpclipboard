@@ -3,26 +3,8 @@ use mpclipboard_shared::REvents;
 use rustix::event::{PollFd, PollFlags};
 use std::io::BufRead;
 
-const HELP: &str = "Usage:
-cargo run --example cli -- <periodically sent text>
-
-Example:
-
-RUST_LOG=info cargo run --example cli -- <id>
-";
-fn print_help_and_exit() -> ! {
-    eprintln!("{HELP}");
-    std::process::exit(1);
-}
-
 fn main() {
-    let [_, id] = std::env::args()
-        .collect::<Vec<_>>()
-        .try_into()
-        .unwrap_or_else(|_| print_help_and_exit());
-
-    let mut mpclipboard = MPClipboard::new_with_local_config_and_id_override(&id).unwrap();
-    // let mut mpclipboard = MPClipboard::new_with_xdg_config().unwrap();
+    let mut mpclipboard = MPClipboard::new_from_file().unwrap();
     let mut stdin = std::io::stdin().lock();
 
     loop {

@@ -27,7 +27,7 @@ The app will be in `build/Release/mpclipboard.app` (or `build/Debug/mpclipboard.
 
 ### Other notes
 
-1. Debug build of the app always reads local config file from `config.toml`, Release build always reads from `$HOME/.config/mpclipboard/config.toml`.
+1. Each config value can be overridden with `MPCLIPBOARD_URL`, `MPCLIPBOARD_TOKEN` and `MPCLIPBOARD_ID` environment variables.
 2. The app is not signed, so you need to manually approve running it locally (or take the binary manually out of the quarantine with `xattr -r -d com.apple.quarantine /Applications/mpclipboard.app`).
 3. There's no API in macOS to subscribe to clipboard changes, so we poll it manually every 1.0s. If you know a better way to track clipboard updates please open an issue.
 

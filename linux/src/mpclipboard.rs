@@ -8,11 +8,7 @@ pub(crate) struct MPClipboard {
 
 impl MPClipboard {
     pub(crate) fn new() -> Result<Self> {
-        let mpclipboard = if cfg!(debug_assertions) {
-            mpclipboard_generic_client::MPClipboard::new_with_local_config()?
-        } else {
-            mpclipboard_generic_client::MPClipboard::new_with_xdg_config()?
-        };
+        let mpclipboard = mpclipboard_generic_client::MPClipboard::new_from_file()?;
 
         Ok(Self { mpclipboard })
     }

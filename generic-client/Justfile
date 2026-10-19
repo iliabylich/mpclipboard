@@ -4,7 +4,7 @@ cbindgen:
 
 # Runs a "cli" example using a local server
 dev id log="info":
-    RUST_LOG_STYLE=always RUST_LOG={{log}} cargo run --example cli -- {{id}}
+    MPCLIPBOARD_ID={{id}} RUST_LOG_STYLE=always RUST_LOG={{log}} cargo run --example cli
 
 # Runs a "cli" example with valgrind
 valgrind:

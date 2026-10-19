@@ -1,9 +1,7 @@
-use core::mem::MaybeUninit;
 use mpclipboard_shared::{
-    ConfigParser, ConfigParserError, ID, NonEmptyInlineStringError, PROTOCOL_VERSION, Token,
-    UpgradeRequest, Url, UrlParseError,
+    ConfigIdError, ConfigReader, ConfigReaderError, ConfigTokenError, ConfigUrlError, ID,
+    PROTOCOL_VERSION, Token, UpgradeRequest, Url,
 };
-use std::path::{Path, PathBuf};
 
 #[derive(Clone, Copy)]
 pub(crate) struct Config {
@@ -24,34 +22,21 @@ impl core::fmt::Debug for Config {
 
 impl Config {
     pub(crate) fn new(url: &str, token: &str, id: &str) -> Result<Self, ConfigError> {
-        let url = Url::parse(url)?;
-        let token = Token::new(token).map_err(ConfigError::Token)?;
-        let id = ID::new(id).map_err(ConfigError::Id)?;
+        let url = Url::parse(url).map_err(ConfigUrlError::Parse)?;
+        let token = Token::new(token).map_err(ConfigTokenError::Invalid)?;
+        let id = ID::new(id).map_err(ConfigIdError::Invalid)?;
 
         Ok(Self { url, token, id })
     }
 
-    fn read(path: impl AsRef<Path>) -> Result<Self, ConfigError> {
-        ConfigParser::parse(
-            path.as_ref().as_os_str().as_encoded_bytes(),
-            &mut [MaybeUninit::uninit(); 1_024],
-            ["url", "token", "id"],
-            |[url, token, id]| Self::new(url, token, id),
-        )?
-    }
+    pub(crate) fn new_from_file() -> Result<Self, ConfigError> {
+        let reader = ConfigReader::new()?;
 
-    pub(crate) fn read_local_file() -> Result<Self, ConfigError> {
-        Self::read("config.toml")
-    }
+        let url = reader.get_url()?;
+        let token = reader.get_token()?;
+        let id = reader.get_id()?;
 
-    pub(crate) fn read_in_xdg_config_dir() -> Result<Self, ConfigError> {
-        let config_dir = std::env::var_os("XDG_CONFIG_HOME")
-            .map(PathBuf::from)
-            .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".config")))
-            .ok_or(ConfigError::NoConfigDir)?;
-
-        let path = config_dir.join("mpclipboard").join("config.toml");
-        Self::read(path)
+        Ok(Self { url, token, id })
     }
 
     pub(crate) const fn update_request(&self) -> UpgradeRequest {
@@ -66,14 +51,12 @@ impl Config {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum ConfigError {
-    #[error("malformed url: {0}")]
-    Url(#[from] UrlParseError),
-    #[error("malformed token: {0}")]
-    Token(NonEmptyInlineStringError),
-    #[error("malformed id: {0}")]
-    Id(NonEmptyInlineStringError),
-    #[error("failed to parse config: {0}")]
-    Parse(#[from] ConfigParserError),
-    #[error("neither $XDG_CONFIG_HOME nor $HOME is set")]
-    NoConfigDir,
+    #[error("failed to read config: {0}")]
+    Read(#[from] ConfigReaderError),
+    #[error("invalid url: {0}")]
+    Url(#[from] ConfigUrlError),
+    #[error("invalid token: {0}")]
+    Token(#[from] ConfigTokenError),
+    #[error("invalid id: {0}")]
+    Id(#[from] ConfigIdError),
 }

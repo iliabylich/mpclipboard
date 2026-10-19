@@ -39,9 +39,7 @@ mpclipboard_MPClipboard *mpclipboard_new_inline(mpclipboard_BorrowedString url,
                                                 mpclipboard_BorrowedString token,
                                                 mpclipboard_BorrowedString id);
 
-mpclipboard_MPClipboard *mpclipboard_new_with_local_config(void);
-
-mpclipboard_MPClipboard *mpclipboard_new_with_xdg_config(void);
+mpclipboard_MPClipboard *mpclipboard_new_from_file(void);
 
 int32_t mpclipboard_get_fd(const mpclipboard_MPClipboard *mpclipboard);
 

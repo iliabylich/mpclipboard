@@ -4,6 +4,10 @@ shell = "bash -euo pipefail -c"
 [tools]
 caddy = "latest"
 
+[env]
+MPCLIPBOARD_URL = "http://127.0.0.1:3000"
+MPCLIPBOARD_TOKEN = "sekret"
+
 [tasks.app]
 usage = 'arg "[log]" default="info"'
 run = 'RUST_LOG_STYLE=always RUST_LOG="${usage_log}" cargo run'

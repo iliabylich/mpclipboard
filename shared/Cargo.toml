@@ -7,4 +7,5 @@ edition = "2024"
 rustix = { version = "1", features = ["time", "fs", "event", "net"] }
 boml = "2"
 thiserror = { version = "2", default-features = false }
+log = "0.4"
 polling = "3.11"

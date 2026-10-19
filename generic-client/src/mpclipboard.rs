@@ -57,22 +57,9 @@ impl MPClipboard {
         Self::new(config)
     }
 
-    pub fn new_with_local_config() -> Result<Self, MPClipboardError> {
+    pub fn new_from_file() -> Result<Self, MPClipboardError> {
         Self::init_once();
-        let config = Config::read_local_file()?;
-        Self::new(config)
-    }
-
-    pub fn new_with_local_config_and_id_override(id: &str) -> Result<Self, MPClipboardError> {
-        Self::init_once();
-        let mut config = Config::read_local_file()?;
-        config.id = NonEmptyInlineString::new(id).map_err(ConfigError::Id)?;
-        Self::new(config)
-    }
-
-    pub fn new_with_xdg_config() -> Result<Self, MPClipboardError> {
-        Self::init_once();
-        let config = Config::read_in_xdg_config_dir()?;
+        let config = Config::new_from_file()?;
         Self::new(config)
     }
 

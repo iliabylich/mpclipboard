@@ -76,14 +76,8 @@ pub extern "C" fn mpclipboard_new_inline(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn mpclipboard_new_with_local_config() -> Option<Box<MPClipboard>> {
-    let mpclipboard = try_or_null!(MPClipboard::new_with_local_config());
-    Some(Box::new(mpclipboard))
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn mpclipboard_new_with_xdg_config() -> Option<Box<MPClipboard>> {
-    let mpclipboard = try_or_null!(MPClipboard::new_with_xdg_config());
+pub extern "C" fn mpclipboard_new_from_file() -> Option<Box<MPClipboard>> {
+    let mpclipboard = try_or_null!(MPClipboard::new_from_file());
     Some(Box::new(mpclipboard))
 }
 

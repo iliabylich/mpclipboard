@@ -28,7 +28,9 @@
 extern crate alloc;
 
 mod config;
-pub use config::{ConfigParser, ConfigParserError};
+pub use config::{
+    ConfigIdError, ConfigReader, ConfigReaderError, ConfigTokenError, ConfigUrlError,
+};
 
 mod array_writer;
 mod line_reader;
