@@ -73,8 +73,6 @@ pub enum LineReaderError {
 mod tests {
     use super::{LineReader, LineReaderError};
     use crate::prelude::*;
-    use alloc::string::String;
-    use alloc::{string::ToString, vec, vec::Vec};
 
     fn lines(input: &[u8]) -> Result<Vec<String>, LineReaderError> {
         let mut reader = LineReader::<5>::new();

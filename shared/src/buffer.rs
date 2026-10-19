@@ -129,7 +129,6 @@ pub enum PushResult<'a, const MAXLEN: usize> {
 #[cfg(test)]
 mod tests {
     use super::{Buffer, PushResult};
-    use alloc::vec;
     use core::ops::ControlFlow::{Break, Continue};
 
     #[test]

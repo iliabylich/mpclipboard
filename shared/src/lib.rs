@@ -1,5 +1,3 @@
-#![no_std]
-#![forbid(unsafe_code)]
 #![warn(
     trivial_casts,
     trivial_numeric_casts,
@@ -27,7 +25,6 @@
     )
 )]
 
-#[cfg(test)]
 extern crate alloc;
 
 mod config;
@@ -103,7 +100,10 @@ mod wants;
 pub use wants::{OptionWantsExt, Wants};
 
 mod event_loop;
-pub use event_loop::{Epoch, EventLoop, EventLoopError, EventLoopFdResult, EventLoopResult};
+pub use event_loop::{
+    Epoch, EventLoop, EventLoopError, EventLoopFdResult, EventLoopResult, EventLoopWithTimer,
+    EventLoopWithTimerError, EventLoopWithTimerResult, RegisteredFd,
+};
 
 mod revents;
 pub use revents::{REvents, REventsError};

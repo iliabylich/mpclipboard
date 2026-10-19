@@ -124,8 +124,6 @@ pub enum UpgradeResponseReaderError {
 
 #[cfg(test)]
 mod tests {
-    use alloc::{format, string::String};
-
     use super::{UpgradeResponseReader, UpgradeResponseReaderError};
     use crate::{
         Buffer,
