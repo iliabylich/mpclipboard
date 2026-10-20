@@ -12,6 +12,7 @@
 #![warn(clippy::std_instead_of_alloc)]
 #![warn(clippy::std_instead_of_core)]
 #![allow(clippy::redundant_pub_crate)]
+#![allow(clippy::option_if_let_else)]
 #![cfg_attr(test, allow(clippy::unwrap_used))]
 
 use anyhow::Result;
