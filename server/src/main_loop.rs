@@ -9,8 +9,7 @@ use crate::{
 };
 use anyhow::Result;
 use mpclipboard_shared::{
-    EventLoopFdResult, EventLoopWithTimer, ID, Message, PROTOCOL_VERSION, Request, Store, Wants,
-    prelude::*,
+    EventLoopFdResult, EventLoopWithTimer, ID, Message, Request, Store, Wants, prelude::*,
 };
 use std::{collections::HashMap, os::fd::AsRawFd};
 
@@ -121,18 +120,7 @@ impl MainLoop {
         match source.on_poll_event(revents) {
             Err(err) => log::error!("{err:?}"),
             Ok(Pending(source)) => self.pre_sources.insert(source),
-            Ok(Done((
-                Request {
-                    token, id, version, ..
-                },
-                leftover,
-                fd,
-            ))) => {
-                if version != PROTOCOL_VERSION {
-                    log::info!("[{id}] bad version: given={version}, expected={PROTOCOL_VERSION}");
-                    return;
-                }
-
+            Ok(Done((Request { token, id }, leftover, fd))) => {
                 let verdict = if token == self.config.token {
                     Verdict::Accepted { id, leftover }
                 } else {

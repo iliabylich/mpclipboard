@@ -1,9 +1,7 @@
-use crate::{HostPort, ID, Token, Version};
+use crate::{ID, Token};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Request {
-    pub host: HostPort,
     pub token: Token,
     pub id: ID,
-    pub version: Version,
 }

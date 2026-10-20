@@ -68,9 +68,6 @@ pub type Token = NonEmptyInlineString<MAX_TOKEN_LENGTH>;
 pub(crate) const MAX_ID_LENGTH: usize = 100;
 pub type ID = NonEmptyInlineString<MAX_ID_LENGTH>;
 
-const MAX_VERSION_LENGTH: usize = 50;
-pub type Version = NonEmptyInlineString<MAX_VERSION_LENGTH>;
-
 mod non_empty_inline_string;
 pub use non_empty_inline_string::{NonEmptyInlineString, NonEmptyInlineStringError};
 
@@ -107,4 +104,4 @@ pub mod prelude {
     pub use crate::Completion::{self, *};
 }
 
-pub const PROTOCOL_VERSION: Version = Version::const_new("5");
+pub const PROTOCOL_VERSION: &str = "5";
