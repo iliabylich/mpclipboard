@@ -1,31 +1,36 @@
-use crate::{Buffer, Message, MessageError, PushResult, message::Frame, prelude::*};
+use crate::{Message, MessageError, message::Frame, prelude::*};
+use bytes::BytesMut;
 
 #[must_use]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct MessageReader {
-    buf: Buffer<{ Message::BYTESIZE - 1 }>,
+    buf: BytesMut,
 }
 
 impl MessageReader {
-    pub const fn empty() -> Self {
+    pub fn empty() -> Self {
         Self {
-            buf: Buffer::empty(),
+            buf: BytesMut::new(),
         }
     }
 
-    pub const fn new(partial: Buffer<{ Message::BYTESIZE - 1 }>) -> Self {
-        Self { buf: partial }
+    pub fn new(partial: &[u8]) -> Self {
+        Self {
+            buf: BytesMut::from(partial),
+        }
     }
 
     pub fn received(&mut self, bytes: &[u8]) -> Result<Completion<Message, ()>, MessageError> {
+        self.buf.extend_from_slice(bytes);
         let mut message = None;
 
-        for &byte in bytes {
-            if let PushResult::Full(buffered) = self.buf.push(byte) {
-                if let Frame::Message(decoded) = Frame::decode(&concat(buffered, byte))? {
-                    message = Some(decoded);
-                }
-                self.buf.clear();
+        while self.buf.len() >= Message::BYTESIZE {
+            let frame = self.buf.split_to(Message::BYTESIZE);
+            let frame = frame
+                .as_array::<{ Message::BYTESIZE }>()
+                .unwrap_or_else(|| unreachable!("frame is split at Message::BYTESIZE"));
+            if let Frame::Message(decoded) = Frame::decode(frame)? {
+                message = Some(decoded);
             }
         }
 
@@ -41,16 +46,6 @@ impl Default for MessageReader {
     fn default() -> Self {
         Self::empty()
     }
-}
-
-fn concat<const N: usize, const M: usize>(head: &[u8; N], last: u8) -> [u8; M] {
-    const { assert!(N + 1 == M, "M must be N + 1") };
-
-    let mut out = [0; M];
-    for (dst, src) in out.iter_mut().zip(head.iter().copied().chain([last])) {
-        *dst = src;
-    }
-    out
 }
 
 #[cfg(test)]

@@ -1,4 +1,5 @@
-use crate::{Buffer, prelude::*};
+use crate::prelude::*;
+use bytes::BytesMut;
 use core::num::NonZeroUsize;
 use rustix::{fd::AsFd, io::Errno, net::SendFlags};
 
@@ -7,14 +8,11 @@ pub const SEND_FLAGS: SendFlags = SendFlags::empty();
 #[cfg(not(target_os = "macos"))]
 pub const SEND_FLAGS: SendFlags = SendFlags::NOSIGNAL;
 
-pub fn read<const N: usize>(fd: impl AsFd) -> Result<Completion<Buffer<N>, ()>, ReadError> {
-    let mut buf = [0; N];
-    match rustix::io::read(fd, &mut buf).map(NonZeroUsize::new) {
+pub fn read<const N: usize>(fd: impl AsFd) -> Result<Completion<BytesMut, ()>, ReadError> {
+    let mut buf = BytesMut::zeroed(N);
+    match rustix::io::read(fd, buf.as_mut()).map(NonZeroUsize::new) {
         Ok(Some(len)) => {
-            let buf = buf
-                .get(..len.get())
-                .and_then(Buffer::from_slice)
-                .unwrap_or_else(|| unreachable!("read() can't return more than N bytes"));
+            buf.truncate(len.get());
             Ok(Done(buf))
         }
         Err(Errno::AGAIN) => Ok(Pending(())),

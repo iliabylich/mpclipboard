@@ -53,9 +53,12 @@ impl PreSource {
     fn read(
         &mut self,
     ) -> Result<Completion<(Request, Buffer<{ RequestReader::BUFFER_SIZE }>), ()>> {
-        let Done(buf) = mpclipboard_shared::io::read(&self.fd)? else {
+        let Done(buf) = mpclipboard_shared::io::read::<{ RequestReader::BUFFER_SIZE }>(&self.fd)?
+        else {
             return Ok(Pending(()));
         };
+        let buf = Buffer::from_slice(&buf)
+            .unwrap_or_else(|| unreachable!("read() can't return more than BUFFER_SIZE bytes"));
 
         let received = self.reader.received(buf)?;
         Ok(received)

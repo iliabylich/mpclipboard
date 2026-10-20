@@ -24,14 +24,12 @@ impl Client {
         let partial = decoder
             .decode(leftover.as_slice())
             .with_context(|| format!("[{id}] failed to decode leftover"))?;
-        let partial = Buffer::from_slice(&partial)
-            .unwrap_or_else(|| unreachable!("decoded data is never longer than encoded data"));
 
         let this = Self {
             fd,
             id,
             decoder,
-            reader: MessageReader::new(partial),
+            reader: MessageReader::new(&partial),
             writer: MessageWriter::new(),
         };
         this.sync_wants()?;
@@ -87,7 +85,7 @@ impl Client {
             return Ok(Pending(()));
         };
 
-        let buf = self.decoder.decode(buf.as_slice())?;
+        let buf = self.decoder.decode(&buf)?;
         let received = self.reader.received(&buf)?;
         Ok(received)
     }
