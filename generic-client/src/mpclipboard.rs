@@ -13,7 +13,6 @@ use std::{
 
 pub struct MPClipboard {
     event_loop: EventLoop,
-    now: u64,
     conn: Connection,
     store: Store,
     config: Config,
@@ -33,7 +32,6 @@ impl MPClipboard {
 
         let mut this = Self {
             event_loop,
-            now: 0,
             conn,
             store: Store::empty(),
             config,
@@ -43,7 +41,7 @@ impl MPClipboard {
     }
 
     fn sync_event_loop(&mut self) -> Result<(), MPClipboardError> {
-        self.conn.flush(self.now);
+        self.conn.flush(self.event_loop.now());
         let deadline = self.conn.time_until_next_timer();
         let wants = self.conn.wants();
         self.event_loop.sync(wants, deadline)?;
@@ -88,30 +86,30 @@ impl MPClipboard {
     }
 
     fn drain(&mut self, polled: &EventLoopResult) -> Option<Message> {
+        let now = self.event_loop.now();
         let mut out = None;
 
-        if let Some(time) = polled.time {
-            self.now = time;
-            log::trace!("tick {}", self.now);
-            self.conn.tick(self.now, &self.config);
+        if polled.ticked {
+            log::trace!("tick {now}");
+            self.conn.tick(now, &self.config);
         }
 
         if let Some(fd) = polled.fd {
             if fd.has_error && !self.conn.is_disconnected() {
                 log::error!("poll() returned connection error, disconnecting");
-                self.conn.disconnect(self.now);
+                self.conn.disconnect(now);
             }
 
             if fd.readable && !self.conn.is_disconnected() {
-                out = self.conn.on_readable(self.now, &self.config);
+                out = self.conn.on_readable(now, &self.config);
             }
 
             if fd.writable && !self.conn.is_disconnected() {
-                self.conn.on_writable(self.now);
+                self.conn.on_writable(now);
             }
         }
 
-        self.conn.process_expired_timers(self.now);
+        self.conn.process_expired_timers(now);
 
         out
     }
@@ -129,7 +127,7 @@ impl MPClipboard {
             return Ok(false);
         }
 
-        let pushed = self.conn.push(&message, self.now);
+        let pushed = self.conn.push(&message, self.event_loop.now());
         self.sync_event_loop()?;
 
         Ok(pushed)

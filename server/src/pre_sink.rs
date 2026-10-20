@@ -1,7 +1,7 @@
 use crate::reaper::CanBeReaped;
 use anyhow::{Context, Result, ensure};
 use bytes::BytesMut;
-use mpclipboard_shared::{EventLoopFdResult, ID, RegisteredFd, Wants, prelude::*};
+use mpclipboard_shared::{EventLoopFdResult, ID, Now, Past, RegisteredFd, Wants, prelude::*};
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd};
 
 pub(crate) enum Verdict {
@@ -28,11 +28,11 @@ pub struct PreSink {
     fd: RegisteredFd,
     verdict: Verdict,
     remainder: &'static [u8],
-    created_at: u64,
+    created_at: Past,
 }
 
 impl PreSink {
-    pub(crate) fn new(fd: RegisteredFd, verdict: Verdict, now: u64) -> Result<Self> {
+    pub(crate) fn new(fd: RegisteredFd, verdict: Verdict, now: Now) -> Result<Self> {
         fd.modify(Wants::Write)
             .with_context(|| format!("[{}] failed to wait for writability", verdict.id()))?;
 
@@ -40,7 +40,7 @@ impl PreSink {
             fd,
             remainder: verdict.response(),
             verdict,
-            created_at: now,
+            created_at: now.as_past(),
         })
     }
 
@@ -90,7 +90,7 @@ impl PreSink {
 }
 
 impl CanBeReaped for PreSink {
-    fn created_at(&self) -> u64 {
+    fn created_at(&self) -> Past {
         self.created_at
     }
 }

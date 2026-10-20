@@ -1,23 +1,25 @@
 use crate::reaper::CanBeReaped;
 use anyhow::{Context, Result, ensure};
 use bytes::BytesMut;
-use mpclipboard_shared::{EventLoopFdResult, RegisteredFd, Request, RequestReader, prelude::*};
+use mpclipboard_shared::{
+    EventLoopFdResult, Now, Past, RegisteredFd, Request, RequestReader, prelude::*,
+};
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd};
 
 pub struct PreSource {
     fd: RegisteredFd,
     reader: RequestReader,
-    created_at: u64,
+    created_at: Past,
 }
 
 impl PreSource {
     const READ_SIZE: usize = 8192;
 
-    pub(crate) fn new(fd: RegisteredFd, now: u64) -> Self {
+    pub(crate) fn new(fd: RegisteredFd, now: Now) -> Self {
         Self {
             fd,
             reader: RequestReader::new(),
-            created_at: now,
+            created_at: now.as_past(),
         }
     }
 
@@ -53,7 +55,7 @@ impl PreSource {
 }
 
 impl CanBeReaped for PreSource {
-    fn created_at(&self) -> u64 {
+    fn created_at(&self) -> Past {
         self.created_at
     }
 }

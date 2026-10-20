@@ -6,19 +6,19 @@ use crate::{
     },
 };
 use core::num::NonZeroUsize;
-use mpclipboard_shared::{Message, MessageReader, MessageWriter, prelude::*};
+use mpclipboard_shared::{Message, MessageReader, MessageWriter, Now, Past, prelude::*};
 
 pub(crate) enum Http3State {
     Handshaking {
-        since: u64,
+        since: Past,
     },
     AwaitingResponse {
-        since: u64,
+        since: Past,
     },
     Streaming {
         reader: MessageReader,
         writer: MessageWriter,
-        last_sent_at: u64,
+        last_sent_at: Past,
     },
 }
 
@@ -38,20 +38,16 @@ impl Http3State {
         }
     }
 
-    pub(crate) fn is_stuck(&self, now: u64) -> bool {
+    pub(crate) fn is_stuck(&self, now: Now) -> bool {
         let since = match self {
             Self::Handshaking { since } | Self::AwaitingResponse { since } => *since,
             Self::Streaming { .. } => return false,
         };
 
-        let seconds_passed = now
-            .checked_sub(since)
-            .unwrap_or_else(|| unreachable!("time goes backwards"));
-
-        seconds_passed > FREEZE_TIME_IN_SECS
+        now.seconds_since(since) > FREEZE_TIME_IN_SECS
     }
 
-    pub(crate) fn on_tick(&mut self, now: u64) {
+    pub(crate) fn on_tick(&mut self, now: Now) {
         let Self::Streaming {
             writer,
             last_sent_at,
@@ -61,17 +57,13 @@ impl Http3State {
             return;
         };
 
-        let seconds_passed = now
-            .checked_sub(*last_sent_at)
-            .unwrap_or_else(|| unreachable!("time goes backwards"));
-
-        if seconds_passed >= HEARTBEAT_INTERVAL_IN_SECS {
+        if now.seconds_since(*last_sent_at) >= HEARTBEAT_INTERVAL_IN_SECS {
             writer.push_heartbeat();
-            *last_sent_at = now;
+            *last_sent_at = now.as_past();
         }
     }
 
-    pub(crate) fn push(&mut self, message: &Message, now: u64) -> bool {
+    pub(crate) fn push(&mut self, message: &Message, now: Now) -> bool {
         let Self::Streaming {
             writer,
             last_sent_at,
@@ -81,14 +73,14 @@ impl Http3State {
             return false;
         };
         writer.push(message);
-        *last_sent_at = now;
+        *last_sent_at = now.as_past();
         true
     }
 
     pub(crate) fn on_event(
         &mut self,
         event: Http3Event<'_>,
-        now: u64,
+        now: Now,
         message: &mut Option<Message>,
     ) -> Result<Option<State>, Http3StateError> {
         match self {
@@ -99,7 +91,7 @@ impl Http3State {
                     *self = Self::Streaming {
                         reader: MessageReader::empty(),
                         writer: MessageWriter::new(),
-                        last_sent_at: now,
+                        last_sent_at: now.as_past(),
                     };
                     Ok(None)
                 }

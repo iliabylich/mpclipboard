@@ -1,7 +1,7 @@
 use crate::event_loop::Epoch;
 use crate::{Connectivity, config::Config};
 use core::time::Duration;
-use mpclipboard_shared::{Message, Wants, prelude::*};
+use mpclipboard_shared::{Message, Now, Wants, prelude::*};
 use rustix::fd::BorrowedFd;
 
 mod actions;
@@ -32,8 +32,8 @@ impl Connection {
         })
     }
 
-    pub(crate) fn disconnect(&mut self, now: u64) {
-        self.state = State::Disconnected(DisconnectedState::new(Some(now)));
+    pub(crate) fn disconnect(&mut self, now: Now) {
+        self.state = State::Disconnected(DisconnectedState::new(Some(now.as_past())));
         self.epoch.bump();
     }
 
@@ -45,18 +45,18 @@ impl Connection {
         matches!(self.state, State::Disconnected { .. } | State::Stopped)
     }
 
-    pub(crate) fn tick(&mut self, now: u64, config: &Config) {
+    pub(crate) fn tick(&mut self, now: Now, config: &Config) {
         if let Some(next) = self.state.tick(now, config, &self.quic_config) {
             self.state = next;
             self.epoch.bump();
         }
     }
 
-    pub(crate) fn push(&mut self, message: &Message, now: u64) -> bool {
+    pub(crate) fn push(&mut self, message: &Message, now: Now) -> bool {
         self.state.push(message, now)
     }
 
-    pub(crate) fn on_readable(&mut self, now: u64, config: &Config) -> Option<Message> {
+    pub(crate) fn on_readable(&mut self, now: Now, config: &Config) -> Option<Message> {
         log::trace!("{self:?} reading...");
 
         match self.state.on_readable(now, config, &self.quic_config) {
@@ -75,7 +75,7 @@ impl Connection {
         }
     }
 
-    pub(crate) fn on_writable(&mut self, now: u64) {
+    pub(crate) fn on_writable(&mut self, now: Now) {
         log::trace!("{self:?} writing...");
 
         if let Err(err) = self.state.on_writable(now) {
@@ -84,14 +84,14 @@ impl Connection {
         }
     }
 
-    pub(crate) fn process_expired_timers(&mut self, now: u64) {
+    pub(crate) fn process_expired_timers(&mut self, now: Now) {
         if let Err(err) = self.state.process_expired_timers() {
             log::error!("{err}");
             self.disconnect(now);
         }
     }
 
-    pub(crate) fn flush(&mut self, now: u64) {
+    pub(crate) fn flush(&mut self, now: Now) {
         if let Err(err) = self.state.flush() {
             log::error!("{err}");
             self.disconnect(now);

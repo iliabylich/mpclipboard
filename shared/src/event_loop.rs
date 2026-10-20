@@ -1,4 +1,4 @@
-use crate::Wants;
+use crate::{Now, Wants};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::{Timerfd, timerfd::OneshotTimerfd};
 use alloc::rc::Rc;
@@ -187,6 +187,16 @@ impl EventLoopWithTimer {
         Ok(())
     }
 
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    pub const fn now(&self) -> Now {
+        Now::new(self.timer.time())
+    }
+
+    #[cfg(target_os = "macos")]
+    pub const fn now(&self) -> Now {
+        Now::new(self.time)
+    }
+
     pub fn wait(
         &mut self,
         timeout: Option<Duration>,
@@ -196,17 +206,16 @@ impl EventLoopWithTimer {
             .wait(&mut self.events, timeout)
             .map_err(EventLoopWithTimerError::Wait)?;
 
-        let mut time = None;
+        let mut ticked = false;
 
         for event in self.events.iter() {
             match event.key {
                 #[cfg(any(target_os = "linux", target_os = "android"))]
                 Self::TIMER_KEY => {
-                    let now = self
-                        .timer
+                    self.timer
                         .read()
                         .map_err(EventLoopWithTimerError::ReadTimer)?;
-                    time = Some(now);
+                    ticked = true;
                 }
 
                 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -222,12 +231,12 @@ impl EventLoopWithTimer {
                         .time
                         .checked_add(1)
                         .unwrap_or_else(|| unreachable!("seconds of uptime never overflow u64"));
-                    time = Some(self.time);
+                    ticked = true;
                 }
 
                 #[cfg(target_os = "macos")]
                 Self::INITIAL_TIMER_KEY => {
-                    time = Some(self.time);
+                    ticked = true;
                 }
 
                 _ => {}
@@ -235,7 +244,7 @@ impl EventLoopWithTimer {
         }
 
         Ok(EventLoopWithTimerResult {
-            time,
+            ticked,
             events: &self.events,
         })
     }
@@ -309,7 +318,7 @@ impl AsRawFd for RegisteredFd {
 }
 
 pub struct EventLoopWithTimerResult<'a> {
-    pub time: Option<u64>,
+    pub ticked: bool,
     events: &'a Events,
 }
 

@@ -75,6 +75,9 @@ pub use revents::{REvents, REventsError};
 mod store;
 pub use store::Store;
 
+mod time;
+pub use time::{Now, Past};
+
 mod url;
 pub use url::{Url, UrlParseError};
 

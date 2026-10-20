@@ -9,7 +9,7 @@ use crate::{
     },
 };
 use mini_sansio_dns::{Dns, DnsWants, MAX_DNS_PACKET_LEN};
-use mpclipboard_shared::{Wants, prelude::*};
+use mpclipboard_shared::{Now, Past, Wants, prelude::*};
 use rustix::fd::{AsFd, BorrowedFd, OwnedFd};
 
 #[derive(Debug)]
@@ -17,14 +17,14 @@ pub(crate) struct DnsState {
     fd: OwnedFd,
     dns: Dns,
     buf: [u8; MAX_DNS_PACKET_LEN],
-    last_activity_at: u64,
+    last_activity_at: Past,
 }
 
 impl DnsState {
     pub(crate) const NAME: &str = "Dns";
     pub(crate) const CONNECTIVITY: Connectivity = Connectivity::Connecting;
 
-    pub(crate) fn start(now: u64, config: &Config) -> Result<Self, ConnectionError> {
+    pub(crate) fn start(now: Now, config: &Config) -> Result<Self, ConnectionError> {
         let mut buf = [0; MAX_DNS_PACKET_LEN];
         let (fd, dns) = start_resolving(&config.url, &mut buf)?;
 
@@ -32,26 +32,22 @@ impl DnsState {
             fd,
             dns,
             buf,
-            last_activity_at: now,
+            last_activity_at: now.as_past(),
         })
     }
 
-    pub(crate) fn is_stuck(&self, now: u64) -> bool {
-        let seconds_passed = now
-            .checked_sub(self.last_activity_at)
-            .unwrap_or_else(|| unreachable!("time goes backwards"));
-
-        seconds_passed > FREEZE_TIME_IN_SECS
+    pub(crate) fn is_stuck(&self, now: Now) -> bool {
+        now.seconds_since(self.last_activity_at) > FREEZE_TIME_IN_SECS
     }
 
     pub(crate) fn on_readable(
         &mut self,
-        now: u64,
+        now: Now,
         config: &Config,
         quic_config: &QuicConfig,
     ) -> Result<Completion<State, ()>, ConnectionError> {
         let Done(mut addr) = read_dns_response(&self.fd, &mut self.dns, &mut self.buf)? else {
-            self.last_activity_at = now;
+            self.last_activity_at = now.as_past();
             return Ok(Pending(()));
         };
 
@@ -60,9 +56,9 @@ impl DnsState {
         Ok(Done(State::Http3(next)))
     }
 
-    pub(crate) fn on_writable(&mut self, now: u64) -> Result<(), ConnectionError> {
+    pub(crate) fn on_writable(&mut self, now: Now) -> Result<(), ConnectionError> {
         write_dns_request(&self.fd, &mut self.dns, &mut self.buf)?;
-        self.last_activity_at = now;
+        self.last_activity_at = now.as_past();
         Ok(())
     }
 

@@ -15,7 +15,6 @@ use std::{collections::HashMap, os::fd::AsRawFd};
 
 pub struct MainLoop {
     event_loop: EventLoopWithTimer,
-    now: u64,
     config: Config,
     store: Store,
 
@@ -37,7 +36,6 @@ impl MainLoop {
         Ok(Self {
             listener,
             event_loop,
-            now: 0,
             config,
             store: Store::empty(),
 
@@ -47,7 +45,7 @@ impl MainLoop {
         })
     }
 
-    fn poll(&mut self) -> (Option<u64>, HashMap<i32, EventLoopFdResult>) {
+    fn poll(&mut self) -> (bool, HashMap<i32, EventLoopFdResult>) {
         let polled = self
             .event_loop
             .wait(None)
@@ -61,11 +59,11 @@ impl MainLoop {
             revents.has_error |= fd_revents.has_error;
         }
 
-        (polled.time, revents)
+        (polled.ticked, revents)
     }
 
     pub(crate) fn poll_and_process_events(&mut self) {
-        let (time, mut revents) = self.poll();
+        let (ticked, mut revents) = self.poll();
         let listener = revents.remove(&self.listener.as_raw_fd());
 
         for (fd, revents) in revents {
@@ -78,20 +76,20 @@ impl MainLoop {
             }
         }
 
-        if let Some(now) = time {
-            self.on_tick(now);
+        if ticked {
+            self.on_tick();
         }
         if let Some(revents) = listener {
             self.on_listener_event(revents);
         }
     }
 
-    fn on_tick(&mut self, now: u64) {
-        self.now = now;
-        log::trace!("tick {}", self.now);
+    fn on_tick(&mut self) {
+        let now = self.event_loop.now();
+        log::trace!("tick {now}");
 
-        self.pre_sources.reap(self.now);
-        self.pre_sinks.reap(self.now);
+        self.pre_sources.reap(now);
+        self.pre_sinks.reap(now);
     }
 
     fn on_listener_event(&mut self, revents: EventLoopFdResult) {
@@ -111,7 +109,7 @@ impl MainLoop {
                 return;
             }
         };
-        let source = PreSource::new(fd, self.now);
+        let source = PreSource::new(fd, self.event_loop.now());
         log::trace!("[{source}] new source");
         self.pre_sources.insert(source);
     }
@@ -128,7 +126,7 @@ impl MainLoop {
                     Verdict::Unauthorized { id }
                 };
 
-                let sink = match PreSink::new(fd, verdict, self.now) {
+                let sink = match PreSink::new(fd, verdict, self.event_loop.now()) {
                     Ok(sink) => sink,
                     Err(err) => {
                         log::error!("{err:?}");

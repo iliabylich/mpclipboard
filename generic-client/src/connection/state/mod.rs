@@ -4,7 +4,7 @@ use crate::{
     connection::{error::ConnectionError, quic_config::QuicConfig},
 };
 use core::time::Duration;
-use mpclipboard_shared::{Message, Wants, prelude::*};
+use mpclipboard_shared::{Message, Now, Wants, prelude::*};
 use rustix::fd::BorrowedFd;
 
 mod disconnected;
@@ -47,7 +47,7 @@ impl State {
 
     pub(crate) fn tick(
         &mut self,
-        now: u64,
+        now: Now,
         config: &Config,
         quic_config: &QuicConfig,
     ) -> Option<Self> {
@@ -57,7 +57,9 @@ impl State {
                     Ok(next) => next,
                     Err(err) => {
                         log::error!("failed to reconnect: {err}");
-                        Some(Self::Disconnected(DisconnectedState::new(Some(now))))
+                        Some(Self::Disconnected(DisconnectedState::new(Some(
+                            now.as_past(),
+                        ))))
                     }
                 };
             }
@@ -75,12 +77,14 @@ impl State {
         }
 
         log::error!("Stuck in {}, disconnecting...", self.name());
-        Some(Self::Disconnected(DisconnectedState::new(Some(now))))
+        Some(Self::Disconnected(DisconnectedState::new(Some(
+            now.as_past(),
+        ))))
     }
 
     pub(crate) fn on_readable(
         &mut self,
-        now: u64,
+        now: Now,
         config: &Config,
         quic_config: &QuicConfig,
     ) -> Result<Completion<Readable, ()>, ConnectionError> {
@@ -102,7 +106,7 @@ impl State {
         }
     }
 
-    pub(crate) fn on_writable(&mut self, now: u64) -> Result<(), ConnectionError> {
+    pub(crate) fn on_writable(&mut self, now: Now) -> Result<(), ConnectionError> {
         match self {
             Self::Disconnected(_) => unreachable!("can't write() in Disconnected state"),
             Self::Stopped => unreachable!("can't write() in Stopped state"),
@@ -132,7 +136,7 @@ impl State {
         }
     }
 
-    pub(crate) fn push(&mut self, message: &Message, now: u64) -> bool {
+    pub(crate) fn push(&mut self, message: &Message, now: Now) -> bool {
         match self {
             Self::Http3(state) => state.push(message, now),
             Self::Disconnected(_) | Self::Dns(_) | Self::Stopped => false,

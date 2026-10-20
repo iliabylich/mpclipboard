@@ -8,7 +8,7 @@ mod result;
 pub(crate) use result::EventLoopResult;
 
 use core::time::Duration;
-use mpclipboard_shared::{EventLoopWithTimer, EventLoopWithTimerError, Wants};
+use mpclipboard_shared::{EventLoopWithTimer, EventLoopWithTimerError, Now, Wants};
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd, RawFd};
 
 pub(crate) struct EventLoop {
@@ -62,7 +62,7 @@ impl EventLoop {
         let polled = self.inner.wait(Some(Duration::ZERO))?;
 
         let mut out = EventLoopResult {
-            time: polled.time,
+            ticked: polled.ticked,
             fd: None,
         };
 
@@ -74,6 +74,10 @@ impl EventLoop {
         }
 
         Ok(out)
+    }
+
+    pub(crate) const fn now(&self) -> Now {
+        self.inner.now()
     }
 
     fn forget_registered(&mut self) {

@@ -14,7 +14,7 @@ use crate::{
 };
 use core::{net::SocketAddr, time::Duration};
 use h3wire::FieldRef;
-use mpclipboard_shared::{Message, PROTOCOL_VERSION, Wants, prelude::*};
+use mpclipboard_shared::{Message, Now, PROTOCOL_VERSION, Wants, prelude::*};
 use rustix::{
     fd::{AsFd, BorrowedFd, OwnedFd},
     io::Errno,
@@ -30,7 +30,7 @@ pub(crate) struct Http3 {
 
 impl Http3 {
     pub(crate) fn connect(
-        now: u64,
+        now: Now,
         peer: SocketAddr,
         config: &Config,
         quic_config: &QuicConfig,
@@ -45,7 +45,9 @@ impl Http3 {
             fd,
             connection: http3_conn,
             recv_buf,
-            state: Http3State::Handshaking { since: now },
+            state: Http3State::Handshaking {
+                since: now.as_past(),
+            },
         })
     }
 
@@ -57,17 +59,17 @@ impl Http3 {
         self.state.connectivity()
     }
 
-    pub(crate) fn is_stuck(&self, now: u64) -> bool {
+    pub(crate) fn is_stuck(&self, now: Now) -> bool {
         self.state.is_stuck(now)
     }
 
-    pub(crate) fn on_tick(&mut self, now: u64) {
+    pub(crate) fn on_tick(&mut self, now: Now) {
         self.state.on_tick(now);
     }
 
     pub(crate) fn on_readable(
         &mut self,
-        now: u64,
+        now: Now,
         config: &Config,
     ) -> Result<Completion<Readable, ()>, Http3StateError> {
         self.recv()?;
@@ -99,7 +101,7 @@ impl Http3 {
         self.connection.time_until_next_timer()
     }
 
-    pub(crate) fn push(&mut self, message: &Message, now: u64) -> bool {
+    pub(crate) fn push(&mut self, message: &Message, now: Now) -> bool {
         self.state.push(message, now)
     }
 
@@ -142,7 +144,7 @@ impl Http3 {
         }
     }
 
-    fn open_request(&mut self, now: u64, config: &Config) -> Result<(), Http3StateError> {
+    fn open_request(&mut self, now: Now, config: &Config) -> Result<(), Http3StateError> {
         let authority = config.url.header();
         let headers = [
             FieldRef::new(b":method", b"POST"),
@@ -155,7 +157,9 @@ impl Http3 {
         ];
         self.connection.open_request_and_enqueue_headers(&headers)?;
 
-        self.state = Http3State::AwaitingResponse { since: now };
+        self.state = Http3State::AwaitingResponse {
+            since: now.as_past(),
+        };
         Ok(())
     }
 }

@@ -8,32 +8,29 @@ use crate::{
     },
 };
 use core::net::{Ipv4Addr, SocketAddr};
+use mpclipboard_shared::{Now, Past};
 
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct DisconnectedState(Option<u64>);
+pub(crate) struct DisconnectedState(Option<Past>);
 
 impl DisconnectedState {
     pub(crate) const NAME: &str = "Disconnected";
     pub(crate) const CONNECTIVITY: Connectivity = Connectivity::Disconnected;
 
-    pub(crate) const fn new(disconnected_at: Option<u64>) -> Self {
+    pub(crate) const fn new(disconnected_at: Option<Past>) -> Self {
         Self(disconnected_at)
     }
 
     pub(crate) fn tick(
         &self,
-        now: u64,
+        now: Now,
         config: &Config,
         quic_config: &QuicConfig,
     ) -> Result<Option<State>, ConnectionError> {
-        if let Some(disconnected_at) = self.0 {
-            let seconds_passed = now
-                .checked_sub(disconnected_at)
-                .unwrap_or_else(|| unreachable!("time goes backwards"));
-
-            if seconds_passed <= FREEZE_TIME_IN_SECS {
-                return Ok(None);
-            }
+        if let Some(disconnected_at) = self.0
+            && now.seconds_since(disconnected_at) <= FREEZE_TIME_IN_SECS
+        {
+            return Ok(None);
         }
 
         let state = Self::reconnect(now, config, quic_config)?;
@@ -41,7 +38,7 @@ impl DisconnectedState {
     }
 
     fn reconnect(
-        now: u64,
+        now: Now,
         config: &Config,
         quic_config: &QuicConfig,
     ) -> Result<State, ConnectionError> {

@@ -1,4 +1,5 @@
 use crate::reaper::CanBeReaped;
+use mpclipboard_shared::Now;
 use std::{
     collections::HashMap,
     os::fd::{AsFd, AsRawFd, RawFd},
@@ -31,7 +32,7 @@ impl<const MAX: usize, T: AsFd> FdSet<MAX, T> {
 }
 
 impl<const MAX: usize, T: AsFd + CanBeReaped> FdSet<MAX, T> {
-    pub(crate) fn reap(&mut self, now: u64) {
+    pub(crate) fn reap(&mut self, now: Now) {
         let mut fds_to_drop = vec![];
         for (fd, stranger_source) in &self.map {
             if stranger_source.must_be_reaped(now) {
