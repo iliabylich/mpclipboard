@@ -1,51 +1,41 @@
-use crate::{
-    Buffer, ID, Message, NonEmptyStringError, PROTOCOL_VERSION, PushResult, Request, Token,
-    prelude::*,
-};
+use crate::{ID, NonEmptyStringError, PROTOCOL_VERSION, Request, Token, prelude::*};
 use alloc::string::String;
+use bytes::BytesMut;
 use core::str::Utf8Error;
 
 #[must_use]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct RequestReader {
-    buf: Buffer<{ Self::MAX_REQUEST_SIZE }>,
+    buf: BytesMut,
 }
 
 impl RequestReader {
-    pub const BUFFER_SIZE: usize = Message::BYTESIZE - 1;
     const MAX_REQUEST_SIZE: usize = 8192;
     const MAX_HEADERS: usize = 32;
 
-    pub const fn new() -> Self {
+    pub fn new() -> Self {
         Self {
-            buf: Buffer::empty(),
+            buf: BytesMut::new(),
         }
     }
 
     pub fn received(
         &mut self,
-        buf: Buffer<{ Self::BUFFER_SIZE }>,
-    ) -> Result<Completion<(Request, Buffer<{ Self::BUFFER_SIZE }>), ()>, RequestReaderError> {
-        for &byte in buf.as_slice() {
-            if let PushResult::Full(_) = self.buf.push(byte) {
-                return Err(RequestReaderError::TooLarge);
-            }
-        }
+        bytes: &[u8],
+    ) -> Result<Completion<(Request, BytesMut), ()>, RequestReaderError> {
+        self.buf.extend_from_slice(bytes);
 
         let mut headers = [httparse::EMPTY_HEADER; Self::MAX_HEADERS];
         let mut req = httparse::Request::new(&mut headers);
-        let httparse::Status::Complete(len) = req.parse(self.buf.as_slice())? else {
+        let httparse::Status::Complete(len) = req.parse(&self.buf)? else {
+            if self.buf.len() > Self::MAX_REQUEST_SIZE {
+                return Err(RequestReaderError::TooLarge);
+            }
             return Ok(Pending(()));
         };
 
-        let request = parse_request(&req);
-        let leftover = self.buf.as_slice().get(len..).and_then(Buffer::from_slice);
-        self.buf.clear();
-
-        let request = request?;
-        let leftover = leftover.unwrap_or_else(|| {
-            unreachable!("headers end within the last received chunk, which fits into BUFFER_SIZE")
-        });
+        let request = parse_request(&req)?;
+        let leftover = self.buf.split_off(len);
         Ok(Done((request, leftover)))
     }
 }
@@ -125,12 +115,11 @@ pub enum RequestReaderError {
 #[cfg(test)]
 mod tests {
     use super::{RequestReader, RequestReaderError};
-    use crate::{
-        Buffer, ID, Request, Token,
-        prelude::*,
-        test_helpers::{as_chunks_with_guaranteed_trailer, buffer},
-    };
+    use crate::{ID, Request, Token, prelude::*};
+    use bytes::BytesMut;
     use core::assert_matches;
+
+    const CHUNK_SIZE: usize = 20;
 
     fn req() -> Request {
         Request {
@@ -153,15 +142,11 @@ X-Forwarded-Proto: https\r\n\
 Accept-Encoding: gzip\r\n\
 \r\n";
 
-    fn read_all(
-        bytes: &[u8],
-    ) -> Result<Completion<(Request, Buffer<{ RequestReader::BUFFER_SIZE }>), ()>, RequestReaderError>
-    {
-        let (chunks, trailer) =
-            as_chunks_with_guaranteed_trailer::<{ RequestReader::BUFFER_SIZE }>(bytes);
+    fn read_all(bytes: &[u8]) -> Result<Completion<(Request, BytesMut), ()>, RequestReaderError> {
+        let (head, trailer) = bytes.split_at(bytes.len() - CHUNK_SIZE);
         let mut reader = RequestReader::new();
-        for buf in chunks {
-            assert_eq!(reader.received(buf), Ok(Pending(())));
+        for chunk in head.chunks(CHUNK_SIZE) {
+            assert_eq!(reader.received(chunk), Ok(Pending(())));
         }
         reader.received(trailer)
     }
@@ -170,7 +155,7 @@ Accept-Encoding: gzip\r\n\
     fn test_no_leftover() {
         assert_eq!(
             read_all(REQUEST.as_bytes()),
-            Ok(Done((req(), Buffer::empty())))
+            Ok(Done((req(), BytesMut::new())))
         );
     }
 
@@ -179,7 +164,7 @@ Accept-Encoding: gzip\r\n\
         let bytes = format!("{REQUEST}abc");
         assert_eq!(
             read_all(bytes.as_bytes()),
-            Ok(Done((req(), buffer(b"abc"))))
+            Ok(Done((req(), BytesMut::from(&b"abc"[..]))))
         );
     }
 
@@ -223,7 +208,7 @@ Accept-Encoding: gzip\r\n\
     fn test_err() {
         let mut reader = RequestReader::new();
         assert_matches!(
-            reader.received(buffer(b"boo\r\n\r\n")),
+            reader.received(b"boo\r\n\r\n"),
             Err(RequestReaderError::Parse(_))
         );
     }
@@ -237,7 +222,7 @@ Accept-Encoding: gzip\r\n\
         );
         assert_eq!(
             read_all(bytes.as_bytes()),
-            Ok(Done((req(), Buffer::empty())))
+            Ok(Done((req(), BytesMut::new())))
         );
     }
 
@@ -251,10 +236,12 @@ Accept-Encoding: gzip\r\n\
             ),
             1,
         );
-        let (chunks, _trailer) =
-            as_chunks_with_guaranteed_trailer::<{ RequestReader::BUFFER_SIZE }>(bytes.as_bytes());
         let mut reader = RequestReader::new();
-        let res = chunks.map(|buf| reader.received(buf)).find(Result::is_err);
+        let res = bytes
+            .as_bytes()
+            .chunks(CHUNK_SIZE)
+            .map(|chunk| reader.received(chunk))
+            .find(Result::is_err);
         assert_eq!(res, Some(Err(RequestReaderError::TooLarge)));
     }
 }

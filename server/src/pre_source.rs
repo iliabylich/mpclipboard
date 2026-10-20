@@ -1,8 +1,7 @@
 use crate::reaper::CanBeReaped;
 use anyhow::{Context, Result, ensure};
-use mpclipboard_shared::{
-    Buffer, EventLoopFdResult, RegisteredFd, Request, RequestReader, prelude::*,
-};
+use bytes::BytesMut;
+use mpclipboard_shared::{EventLoopFdResult, RegisteredFd, Request, RequestReader, prelude::*};
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd};
 
 pub struct PreSource {
@@ -12,7 +11,9 @@ pub struct PreSource {
 }
 
 impl PreSource {
-    pub(crate) const fn new(fd: RegisteredFd, now: u64) -> Self {
+    const READ_SIZE: usize = 8192;
+
+    pub(crate) fn new(fd: RegisteredFd, now: u64) -> Self {
         Self {
             fd,
             reader: RequestReader::new(),
@@ -23,16 +24,7 @@ impl PreSource {
     pub(crate) fn on_poll_event(
         mut self,
         revents: EventLoopFdResult,
-    ) -> Result<
-        Completion<
-            (
-                Request,
-                Buffer<{ RequestReader::BUFFER_SIZE }>,
-                RegisteredFd,
-            ),
-            Self,
-        >,
-    > {
+    ) -> Result<Completion<(Request, BytesMut, RegisteredFd), Self>> {
         ensure!(!revents.has_error, "[{self}] polling returned an error");
 
         if revents.readable {
@@ -50,17 +42,12 @@ impl PreSource {
         Ok(Pending(self))
     }
 
-    fn read(
-        &mut self,
-    ) -> Result<Completion<(Request, Buffer<{ RequestReader::BUFFER_SIZE }>), ()>> {
-        let Done(buf) = mpclipboard_shared::io::read::<{ RequestReader::BUFFER_SIZE }>(&self.fd)?
-        else {
+    fn read(&mut self) -> Result<Completion<(Request, BytesMut), ()>> {
+        let Done(buf) = mpclipboard_shared::io::read::<{ Self::READ_SIZE }>(&self.fd)? else {
             return Ok(Pending(()));
         };
-        let buf = Buffer::from_slice(&buf)
-            .unwrap_or_else(|| unreachable!("read() can't return more than BUFFER_SIZE bytes"));
 
-        let received = self.reader.received(buf)?;
+        let received = self.reader.received(&buf)?;
         Ok(received)
     }
 }

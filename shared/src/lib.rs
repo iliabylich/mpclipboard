@@ -60,9 +60,6 @@ pub type ID = NonEmptyString;
 mod non_empty_string;
 pub use non_empty_string::{NonEmptyString, NonEmptyStringError};
 
-mod buffer;
-pub use buffer::{Buffer, PushResult};
-
 mod wants;
 pub use wants::{OptionWantsExt, Wants};
 

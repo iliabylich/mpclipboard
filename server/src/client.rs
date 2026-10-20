@@ -1,8 +1,7 @@
 use crate::chunked_decoder::ChunkedDecoder;
 use anyhow::{Context, Result, ensure};
 use mpclipboard_shared::{
-    Buffer, EventLoopFdResult, ID, Message, MessageReader, MessageWriter, RegisteredFd,
-    RequestReader, Wants, prelude::*,
+    EventLoopFdResult, ID, Message, MessageReader, MessageWriter, RegisteredFd, Wants, prelude::*,
 };
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd};
 
@@ -15,14 +14,12 @@ pub struct Client {
 }
 
 impl Client {
-    pub(crate) fn new(
-        fd: RegisteredFd,
-        id: ID,
-        leftover: &Buffer<{ RequestReader::BUFFER_SIZE }>,
-    ) -> Result<Self> {
+    const READ_SIZE: usize = 8192;
+
+    pub(crate) fn new(fd: RegisteredFd, id: ID, leftover: &[u8]) -> Result<Self> {
         let mut decoder = ChunkedDecoder::new();
         let partial = decoder
-            .decode(leftover.as_slice())
+            .decode(leftover)
             .with_context(|| format!("[{id}] failed to decode leftover"))?;
 
         let this = Self {
@@ -81,7 +78,7 @@ impl Client {
     }
 
     fn read(&mut self) -> Result<Completion<Message, ()>> {
-        let Done(buf) = mpclipboard_shared::io::read::<{ Message::BYTESIZE }>(&self.fd)? else {
+        let Done(buf) = mpclipboard_shared::io::read::<{ Self::READ_SIZE }>(&self.fd)? else {
             return Ok(Pending(()));
         };
 

@@ -1,19 +1,12 @@
 use crate::reaper::CanBeReaped;
 use anyhow::{Context, Result, ensure};
-use mpclipboard_shared::{
-    Buffer, EventLoopFdResult, ID, RegisteredFd, RequestReader, Wants, prelude::*,
-};
+use bytes::BytesMut;
+use mpclipboard_shared::{EventLoopFdResult, ID, RegisteredFd, Wants, prelude::*};
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd};
 
-#[expect(clippy::large_enum_variant)]
 pub(crate) enum Verdict {
-    Accepted {
-        id: ID,
-        leftover: Buffer<{ RequestReader::BUFFER_SIZE }>,
-    },
-    Unauthorized {
-        id: ID,
-    },
+    Accepted { id: ID, leftover: BytesMut },
+    Unauthorized { id: ID },
 }
 
 impl Verdict {

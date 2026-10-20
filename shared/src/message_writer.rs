@@ -1,18 +1,18 @@
 use crate::{
-    Buffer, Wants,
+    Wants,
     message::{Frame, Message},
 };
+use bytes::{Buf, Bytes};
 use core::num::NonZeroUsize;
 
 #[must_use]
-#[expect(clippy::large_enum_variant)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub enum MessageWriter {
     Empty,
 
     Some {
-        current: Buffer<{ Message::BYTESIZE }>,
-        next: Option<Buffer<{ Message::BYTESIZE }>>,
+        current: Bytes,
+        next: Option<Message>,
     },
 }
 
@@ -25,7 +25,7 @@ impl MessageWriter {
     pub fn remainder(&self) -> Option<&[u8]> {
         match self {
             Self::Empty => None,
-            Self::Some { current, .. } => Some(current.as_slice()),
+            Self::Some { current, .. } => Some(current),
         }
     }
 
@@ -34,16 +34,17 @@ impl MessageWriter {
             Self::Empty => return Err(MessageWriterError::Empty),
 
             Self::Some { current, next } => {
-                current.drop_n_front_bytes(n.get()).map_err(|remaining| {
-                    MessageWriterError::WrittenTooMuch {
+                if n.get() > current.len() {
+                    return Err(MessageWriterError::WrittenTooMuch {
                         written: n.get(),
-                        remaining,
-                    }
-                })?;
+                        remaining: current.len(),
+                    });
+                }
+                current.advance(n.get());
 
-                if current.as_slice().is_empty() {
+                if current.is_empty() {
                     if let Some(next) = next.take() {
-                        *current = next;
+                        *current = Bytes::copy_from_slice(&next.encode());
                     } else {
                         *self = Self::new();
                     }
@@ -55,23 +56,21 @@ impl MessageWriter {
     }
 
     pub fn push(&mut self, data: &Message) {
-        let item = Buffer::new(data.encode());
-
         match self {
             Self::Empty => {
                 *self = Self::Some {
-                    current: item,
+                    current: Bytes::copy_from_slice(&data.encode()),
                     next: None,
                 }
             }
-            Self::Some { next, .. } => *next = Some(item),
+            Self::Some { next, .. } => *next = Some(data.clone()),
         }
     }
 
     pub fn push_heartbeat(&mut self) {
         if matches!(self, Self::Empty) {
             *self = Self::Some {
-                current: Buffer::new(Frame::Heartbeat.encode()),
+                current: Bytes::copy_from_slice(&Frame::Heartbeat.encode()),
                 next: None,
             };
         }
