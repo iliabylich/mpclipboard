@@ -17,9 +17,9 @@ pub(crate) enum Verdict {
 }
 
 impl Verdict {
-    const fn id(&self) -> ID {
+    const fn id(&self) -> &ID {
         match self {
-            Self::Accepted { id, .. } | Self::Unauthorized { id } => *id,
+            Self::Accepted { id, .. } | Self::Unauthorized { id } => id,
         }
     }
 
@@ -49,6 +49,10 @@ impl PreSink {
             verdict,
             created_at: now,
         })
+    }
+
+    pub(crate) const fn id(&self) -> &ID {
+        self.verdict.id()
     }
 
     pub(crate) fn on_poll_event(

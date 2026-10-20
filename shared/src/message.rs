@@ -1,12 +1,12 @@
-use crate::NonEmptyInlineString;
+use crate::{NonEmptyString, NonEmptyStringError};
 use core::{num::NonZeroUsize, str::Utf8Error};
 
 const MAX_TEXT_LEN: usize = 255;
 
 #[must_use]
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Message {
-    pub(crate) string: NonEmptyInlineString<MAX_TEXT_LEN>,
+    text: NonEmptyString,
 }
 
 impl Message {
@@ -16,35 +16,41 @@ impl Message {
         size
     };
 
-    pub const fn new(string: NonEmptyInlineString<MAX_TEXT_LEN>) -> Self {
-        Self { string }
+    pub fn truncate(text: &str) -> Result<Self, NonEmptyStringError> {
+        let (head, _tail) = text.split_at(text.floor_char_boundary(MAX_TEXT_LEN));
+        let text = NonEmptyString::new(head)?;
+        Ok(Self { text })
     }
 
     #[must_use]
-    pub fn text_as_bytes(&self) -> &[u8] {
-        self.string.as_bytes()
+    pub const fn text_as_bytes(&self) -> &[u8] {
+        self.text.as_bytes()
     }
 
     #[must_use]
-    pub fn text_as_str(&self) -> &str {
-        self.string.as_str()
+    pub const fn text_as_str(&self) -> &str {
+        self.text.as_str()
     }
 
     #[must_use]
     pub(crate) fn encode(&self) -> [u8; Self::BYTESIZE] {
-        let len = self.string.len().get();
+        let text = self.text_as_bytes();
+        let len = u8::try_from(text.len())
+            .unwrap_or_else(|_| unreachable!("text never exceeds MAX_TEXT_LEN"));
 
         let mut buf = [0; Self::BYTESIZE];
-        buf[0] = len;
-        buf[1..Self::BYTESIZE].copy_from_slice(self.string.as_fixed_size_bytes());
+        let [len_slot, rest @ ..] = &mut buf;
+        *len_slot = len;
+        rest.get_mut(..text.len())
+            .unwrap_or_else(|| unreachable!("text never exceeds MAX_TEXT_LEN"))
+            .copy_from_slice(text);
 
         buf
     }
 }
 
 #[must_use]
-#[expect(clippy::large_enum_variant)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Frame {
     Message(Message),
     Heartbeat,
@@ -68,10 +74,9 @@ impl Frame {
             .get(..len.get())
             .unwrap_or_else(|| unreachable!("len is a u8, so it never exceeds MAX_TEXT_LEN"));
         let text = core::str::from_utf8(text)?;
-        let string = NonEmptyInlineString::new(text)
-            .unwrap_or_else(|_| unreachable!("text is non-empty and never exceeds MAX_TEXT_LEN"));
+        let text = NonEmptyString::new(text).unwrap_or_else(|_| unreachable!("len is non-zero"));
 
-        Ok(Self::Message(Message { string }))
+        Ok(Self::Message(Message { text }))
     }
 }
 
@@ -92,11 +97,15 @@ mod tests {
     use super::*;
     use core::assert_matches;
 
-    type S = NonEmptyInlineString<MAX_TEXT_LEN>;
-
     #[test]
     fn test_encode_decode() {
-        let text = Frame::Message(Message::new(S::const_new("aaaaaaaaaa")));
+        let text = Frame::Message(Message::truncate("aaaaaaaaaa").unwrap());
+        assert_eq!(Frame::decode(&text.encode()), Ok(text));
+    }
+
+    #[test]
+    fn test_encode_decode_max_len() {
+        let text = Frame::Message(Message::truncate(&"a".repeat(MAX_TEXT_LEN)).unwrap());
         assert_eq!(Frame::decode(&text.encode()), Ok(text));
     }
 
@@ -115,5 +124,43 @@ mod tests {
             Frame::decode(&[b'\xC8'; Message::BYTESIZE]),
             Err(MessageError::NonUtf8(_))
         );
+    }
+
+    #[test]
+    fn test_truncate_short() {
+        assert_eq!(
+            Message::truncate("abcde")
+                .as_ref()
+                .map(Message::text_as_str),
+            Ok("abcde")
+        );
+    }
+
+    #[test]
+    fn test_truncate_long() {
+        let text = "a".repeat(MAX_TEXT_LEN + 1);
+        assert_eq!(
+            Message::truncate(&text).as_ref().map(Message::text_as_str),
+            Ok(&text[..MAX_TEXT_LEN])
+        );
+
+        assert_eq!('Ⴀ'.len_utf8(), 3);
+        let text = "Ⴀ".repeat(86);
+        assert_eq!(
+            Message::truncate(&text).as_ref().map(Message::text_as_str),
+            Ok("Ⴀ".repeat(85).as_str())
+        );
+
+        assert_eq!('🦴'.len_utf8(), 4);
+        let text = "🦴".repeat(64);
+        assert_eq!(
+            Message::truncate(&text).as_ref().map(Message::text_as_str),
+            Ok("🦴".repeat(63).as_str())
+        );
+    }
+
+    #[test]
+    fn test_truncate_empty() {
+        assert_eq!(Message::truncate(""), Err(NonEmptyStringError::Empty));
     }
 }

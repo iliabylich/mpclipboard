@@ -90,8 +90,8 @@ impl Client {
         Ok(received)
     }
 
-    pub(crate) const fn id(&self) -> ID {
-        self.id
+    pub(crate) const fn id(&self) -> &ID {
+        &self.id
     }
 
     fn sync_wants(&self) -> Result<()> {

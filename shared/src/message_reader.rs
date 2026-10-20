@@ -56,21 +56,21 @@ fn concat<const N: usize, const M: usize>(head: &[u8; N], last: u8) -> [u8; M] {
 #[cfg(test)]
 mod tests {
     use super::MessageReader;
-    use crate::{Message, MessageError, NonEmptyInlineString, message::Frame, prelude::*};
+    use crate::{Message, MessageError, message::Frame, prelude::*};
     use core::assert_matches;
 
     #[test]
     fn test_receive_full() {
         let mut reader = MessageReader::empty();
 
-        let message = Message::new(NonEmptyInlineString::const_new("BOO"));
+        let message = Message::truncate("BOO").unwrap();
         assert_eq!(reader.received(&message.encode()), Ok(Done(message)));
     }
 
     #[test]
     fn test_receive_step_by_step() {
-        let one = Message::new(NonEmptyInlineString::const_new("one"));
-        let two = Message::new(NonEmptyInlineString::const_new("twotwo"));
+        let one = Message::truncate("one").unwrap();
+        let two = Message::truncate("twotwo").unwrap();
         let stream = [one.encode(), two.encode()].concat();
 
         let (first, rest) = stream.split_at(100);
@@ -85,9 +85,9 @@ mod tests {
 
     #[test]
     fn test_receive_many_at_once() {
-        let one = Message::new(NonEmptyInlineString::const_new("one"));
-        let two = Message::new(NonEmptyInlineString::const_new("twotwo"));
-        let three = Message::new(NonEmptyInlineString::const_new("three"));
+        let one = Message::truncate("one").unwrap();
+        let two = Message::truncate("twotwo").unwrap();
+        let three = Message::truncate("three").unwrap();
         let stream = [one.encode(), two.encode(), three.encode()].concat();
 
         let (head, tail) = stream.split_at(Message::BYTESIZE * 2 + 10);
@@ -100,7 +100,7 @@ mod tests {
 
     #[test]
     fn test_receive_heartbeat() {
-        let one = Message::new(NonEmptyInlineString::const_new("one"));
+        let one = Message::truncate("one").unwrap();
         let stream = [Frame::Heartbeat.encode(), one.encode()].concat();
         let (heartbeat, message) = stream.split_at(Message::BYTESIZE);
 

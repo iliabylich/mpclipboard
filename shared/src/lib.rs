@@ -32,8 +32,6 @@ pub use config::{
     ConfigIdError, ConfigReader, ConfigReaderError, ConfigTokenError, ConfigUrlError,
 };
 
-mod array_writer;
-
 mod request;
 mod request_reader;
 pub use self::{
@@ -55,21 +53,12 @@ mod timerfd;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub use timerfd::Timerfd;
 
-pub(crate) const MAX_HOST_LENGTH: usize = 249;
-const MAX_PORT_LENGTH: usize = 5;
-pub(crate) const MAX_HOST_PORT_LENGTH: usize = MAX_HOST_LENGTH + 1 + MAX_PORT_LENGTH;
-const _: () = assert!(MAX_HOST_PORT_LENGTH == 255);
+pub type Token = NonEmptyString;
 
-pub type HostPort = NonEmptyInlineString<MAX_HOST_PORT_LENGTH>;
+pub type ID = NonEmptyString;
 
-const MAX_TOKEN_LENGTH: usize = 100;
-pub type Token = NonEmptyInlineString<MAX_TOKEN_LENGTH>;
-
-pub(crate) const MAX_ID_LENGTH: usize = 100;
-pub type ID = NonEmptyInlineString<MAX_ID_LENGTH>;
-
-mod non_empty_inline_string;
-pub use non_empty_inline_string::{NonEmptyInlineString, NonEmptyInlineStringError};
+mod non_empty_string;
+pub use non_empty_string::{NonEmptyString, NonEmptyStringError};
 
 mod buffer;
 pub use buffer::{Buffer, PushResult};

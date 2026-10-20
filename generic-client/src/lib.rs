@@ -15,7 +15,6 @@
     clippy::std_instead_of_core
 )]
 #![expect(
-    clippy::large_types_passed_by_value,
     clippy::missing_errors_doc,
     clippy::large_enum_variant,
     clippy::redundant_pub_crate

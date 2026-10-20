@@ -1,18 +1,13 @@
-use crate::{
-    HostPort, MAX_HOST_LENGTH, MAX_HOST_PORT_LENGTH, NonEmptyInlineString,
-    NonEmptyInlineStringError, array_writer::ArrayWriter,
-};
-use core::{
-    fmt::Write,
-    num::{IntErrorKind, ParseIntError},
-};
+use crate::{NonEmptyString, NonEmptyStringError};
+use alloc::format;
+use core::num::{IntErrorKind, ParseIntError};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Url {
     tls: bool,
-    host: NonEmptyInlineString<MAX_HOST_LENGTH>,
+    host: NonEmptyString,
     port: u16,
-    header: HostPort,
+    header: NonEmptyString,
 }
 
 impl Url {
@@ -27,22 +22,11 @@ impl Url {
             "https" => true,
             _ => return Err(UrlParseError::UnknownScheme),
         };
-        let host = NonEmptyInlineString::new(host)?;
+        let host = NonEmptyString::new(host)?;
         let port = port.parse::<u16>()?;
 
-        let mut buf = [0; MAX_HOST_PORT_LENGTH];
-        let mut writer = ArrayWriter::new(&mut buf);
-        write!(writer, "{}:{port}", host.as_str()).unwrap_or_else(|_| {
-            unreachable!(
-                "host (<= MAX_HOST_LENGTH) + ':' + port (<= 5 digits) fits into MAX_HOST_PORT_LENGTH"
-            )
-        });
-        let header = core::str::from_utf8(writer.as_bytes()).unwrap_or_else(|_| {
-            unreachable!("concatenation of valid utf8 strings is a valid utf8 string")
-        });
-        let header = NonEmptyInlineString::new(header).unwrap_or_else(|_| {
-            unreachable!("header is non-empty and fits into MAX_HOST_PORT_LENGTH")
-        });
+        let header = NonEmptyString::new(format!("{host}:{port}"))
+            .unwrap_or_else(|_| unreachable!("header always contains ':'"));
 
         Ok(Self {
             tls,
@@ -58,7 +42,7 @@ impl Url {
     }
 
     #[must_use]
-    pub fn host(&self) -> &str {
+    pub const fn host(&self) -> &str {
         self.host.as_str()
     }
 
@@ -67,8 +51,9 @@ impl Url {
         self.port
     }
 
-    pub const fn header(&self) -> HostPort {
-        self.header
+    #[must_use]
+    pub const fn header(&self) -> &NonEmptyString {
+        &self.header
     }
 }
 
@@ -81,7 +66,7 @@ pub enum UrlParseError {
     #[error("unknown URL scheme")]
     UnknownScheme,
     #[error("invalid host: {0}")]
-    InvalidHost(#[from] NonEmptyInlineStringError),
+    InvalidHost(#[from] NonEmptyStringError),
     #[error("invalid port: {0:?}")]
     InvalidPort(IntErrorKind),
 }
@@ -95,7 +80,7 @@ impl From<ParseIntError> for UrlParseError {
 #[cfg(test)]
 mod tests {
     use super::{Url, UrlParseError};
-    use crate::{HostPort, NonEmptyInlineString, NonEmptyInlineStringError};
+    use crate::{NonEmptyString, NonEmptyStringError};
     use core::num::IntErrorKind;
 
     #[test]
@@ -104,9 +89,9 @@ mod tests {
             Url::parse("http://localhost:3000"),
             Ok(Url {
                 tls: false,
-                host: NonEmptyInlineString::const_new("localhost"),
+                host: NonEmptyString::new("localhost").unwrap(),
                 port: 3000,
-                header: HostPort::const_new("localhost:3000"),
+                header: NonEmptyString::new("localhost:3000").unwrap(),
             })
         );
 
@@ -114,9 +99,9 @@ mod tests {
             Url::parse("https://google.com:443"),
             Ok(Url {
                 tls: true,
-                host: NonEmptyInlineString::const_new("google.com"),
+                host: NonEmptyString::new("google.com").unwrap(),
                 port: 443,
-                header: HostPort::const_new("google.com:443"),
+                header: NonEmptyString::new("google.com:443").unwrap(),
             })
         );
     }
@@ -137,7 +122,7 @@ mod tests {
         );
         assert_eq!(
             Url::parse("http://:3000"),
-            Err(UrlParseError::InvalidHost(NonEmptyInlineStringError::Empty))
+            Err(UrlParseError::InvalidHost(NonEmptyStringError::Empty))
         );
         assert_eq!(
             Url::parse("http://localhost:99999"),

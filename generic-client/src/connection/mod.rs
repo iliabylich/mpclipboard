@@ -52,8 +52,8 @@ impl Connection {
         }
     }
 
-    pub(crate) fn push(&mut self, message: Message, now: u64) -> bool {
-        self.state.push(&message, now)
+    pub(crate) fn push(&mut self, message: &Message, now: u64) -> bool {
+        self.state.push(message, now)
     }
 
     pub(crate) fn on_readable(&mut self, now: u64, config: &Config) -> Option<Message> {

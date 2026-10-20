@@ -109,14 +109,14 @@ pub enum MessageWriterError {
 #[cfg(test)]
 mod tests {
     use super::{MessageWriter, MessageWriterError};
-    use crate::{Message, NonEmptyInlineString, message::Frame, test_helpers::non_zero_usize};
+    use crate::{Message, message::Frame, test_helpers::non_zero_usize};
 
     #[test]
     fn test_single() {
         let mut writer = MessageWriter::new();
         assert_eq!(writer.remainder(), None);
 
-        let msg = Message::new(NonEmptyInlineString::const_new("FOO"));
+        let msg = Message::truncate("FOO").unwrap();
         let encoded = msg.encode();
         writer.push(&msg);
         assert_eq!(writer.remainder(), Some(encoded.as_slice()));
@@ -133,11 +133,11 @@ mod tests {
     fn test_fixed_size_queue_like_with_tail_replacement() {
         let mut writer = MessageWriter::new();
 
-        let msg1 = Message::new(NonEmptyInlineString::const_new("msg1"));
+        let msg1 = Message::truncate("msg1").unwrap();
         writer.push(&msg1);
-        let msg2 = Message::new(NonEmptyInlineString::const_new("msg2"));
+        let msg2 = Message::truncate("msg2").unwrap();
         writer.push(&msg2);
-        let msg3 = Message::new(NonEmptyInlineString::const_new("msg3"));
+        let msg3 = Message::truncate("msg3").unwrap();
         writer.push(&msg3);
 
         assert_eq!(writer.remainder(), Some(msg1.encode().as_slice()));
@@ -154,7 +154,7 @@ mod tests {
             Some(Frame::Heartbeat.encode().as_slice())
         );
 
-        let msg = Message::new(NonEmptyInlineString::const_new("msg"));
+        let msg = Message::truncate("msg").unwrap();
         writer.push(&msg);
         writer.push_heartbeat();
         assert_eq!(writer.written(non_zero_usize(Message::BYTESIZE)), Ok(()));
@@ -171,7 +171,7 @@ mod tests {
             Err(MessageWriterError::Empty)
         );
 
-        writer.push(&Message::new(NonEmptyInlineString::const_new("FOO")));
+        writer.push(&Message::truncate("FOO").unwrap());
         assert_eq!(writer.written(non_zero_usize(100)), Ok(()));
         assert_eq!(
             writer.written(non_zero_usize(Message::BYTESIZE)),

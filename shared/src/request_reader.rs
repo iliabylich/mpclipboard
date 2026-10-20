@@ -1,5 +1,5 @@
 use crate::{
-    Buffer, ID, Message, NonEmptyInlineStringError, PROTOCOL_VERSION, PushResult, Request, Token,
+    Buffer, ID, Message, NonEmptyStringError, PROTOCOL_VERSION, PushResult, Request, Token,
     prelude::*,
 };
 use alloc::string::String;
@@ -111,9 +111,9 @@ pub enum RequestReaderError {
     #[error("non-utf8 header: {0}")]
     NonUtf8(#[from] Utf8Error),
     #[error("malformed token: {0}")]
-    InvalidToken(NonEmptyInlineStringError),
+    InvalidToken(NonEmptyStringError),
     #[error("malformed id: {0}")]
-    InvalidID(NonEmptyInlineStringError),
+    InvalidID(NonEmptyStringError),
     #[error("unsupported protocol version: given={0}, expected={PROTOCOL_VERSION}")]
     UnsupportedVersion(String),
     #[error("missing {0} header")]
@@ -126,16 +126,18 @@ pub enum RequestReaderError {
 mod tests {
     use super::{RequestReader, RequestReaderError};
     use crate::{
-        Buffer, ID, NonEmptyInlineStringError, Request, Token,
+        Buffer, ID, Request, Token,
         prelude::*,
         test_helpers::{as_chunks_with_guaranteed_trailer, buffer},
     };
     use core::assert_matches;
 
-    const REQ: Request = Request {
-        token: Token::const_new("sekret"),
-        id: ID::const_new("test-client"),
-    };
+    fn req() -> Request {
+        Request {
+            token: Token::new("sekret").unwrap(),
+            id: ID::new("test-client").unwrap(),
+        }
+    }
 
     const REQUEST: &str = "POST / HTTP/1.1\r\n\
 Host: localhost:8443\r\n\
@@ -168,14 +170,17 @@ Accept-Encoding: gzip\r\n\
     fn test_no_leftover() {
         assert_eq!(
             read_all(REQUEST.as_bytes()),
-            Ok(Done((REQ, Buffer::empty())))
+            Ok(Done((req(), Buffer::empty())))
         );
     }
 
     #[test]
     fn test_leftover() {
         let bytes = format!("{REQUEST}abc");
-        assert_eq!(read_all(bytes.as_bytes()), Ok(Done((REQ, buffer(b"abc")))));
+        assert_eq!(
+            read_all(bytes.as_bytes()),
+            Ok(Done((req(), buffer(b"abc"))))
+        );
     }
 
     #[test]
@@ -230,17 +235,9 @@ Accept-Encoding: gzip\r\n\
             &format!("\r\nX-Long: {}\r\n\r\n", "a".repeat(300)),
             1,
         );
-        assert_eq!(read_all(bytes.as_bytes()), Ok(Done((REQ, Buffer::empty()))));
-    }
-
-    #[test]
-    fn test_long_known_header() {
-        let bytes = REQUEST.replace("Token: sekret", &format!("Token: {}", "a".repeat(300)));
         assert_eq!(
             read_all(bytes.as_bytes()),
-            Err(RequestReaderError::InvalidToken(
-                NonEmptyInlineStringError::TooLong
-            ))
+            Ok(Done((req(), Buffer::empty())))
         );
     }
 

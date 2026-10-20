@@ -5,7 +5,7 @@ use crate::{
     event_loop::{EventLoop, EventLoopResult},
     logger::Logger,
 };
-use mpclipboard_shared::{EventLoopWithTimerError, Message, NonEmptyInlineString, Store};
+use mpclipboard_shared::{EventLoopWithTimerError, Message, Store};
 use std::{
     os::fd::{AsFd, AsRawFd, BorrowedFd},
     sync::Once,
@@ -67,7 +67,7 @@ impl MPClipboard {
 
         let prev_connectivity = self.conn.connectivity();
         let text = if let Some(message) = self.drain(&polled)
-            && self.store.add(message)
+            && self.store.add(&message)
         {
             Some(message.text_as_str().to_string())
         } else {
@@ -122,15 +122,14 @@ impl MPClipboard {
             return Ok(false);
         }
 
-        let text = NonEmptyInlineString::truncate(text)
+        let message = Message::truncate(text)
             .unwrap_or_else(|_| unreachable!("non-empty text truncated to MAXLEN is always valid"));
-        let message = Message::new(text);
 
-        if !self.store.add(message) {
+        if !self.store.add(&message) {
             return Ok(false);
         }
 
-        let pushed = self.conn.push(message, self.now);
+        let pushed = self.conn.push(&message, self.now);
         self.sync_event_loop()?;
 
         Ok(pushed)

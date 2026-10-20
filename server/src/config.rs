@@ -1,7 +1,7 @@
 use anyhow::{Context, Result, ensure};
 use mpclipboard_shared::{ConfigReader, Token, Url};
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct Config {
     pub(crate) url: Url,
     pub(crate) token: Token,

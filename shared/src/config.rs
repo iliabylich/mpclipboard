@@ -1,4 +1,4 @@
-use crate::{ID, NonEmptyInlineStringError, Token, Url, UrlParseError};
+use crate::{ID, NonEmptyStringError, Token, Url, UrlParseError};
 use boml::{table::TomlGetError, types::TomlValueType};
 use core::{mem::MaybeUninit, str::Utf8Error};
 use rustix::{
@@ -39,13 +39,13 @@ impl ConfigReader {
 
     pub fn get_token(&self) -> Result<Token, ConfigTokenError> {
         let token = self.get("MPCLIPBOARD_TOKEN", "token")?;
-        let token = Token::new(&token)?;
+        let token = Token::new(token)?;
         Ok(token)
     }
 
     pub fn get_id(&self) -> Result<ID, ConfigIdError> {
         let id = self.get("MPCLIPBOARD_ID", "id")?;
-        let id = ID::new(&id)?;
+        let id = ID::new(id)?;
         Ok(id)
     }
 
@@ -151,7 +151,7 @@ pub enum ConfigTokenError {
     #[error("token must be a string in toml, got {0:?}")]
     NotAString(TomlValueType),
     #[error("malformed token: {0}")]
-    Invalid(#[from] NonEmptyInlineStringError),
+    Invalid(#[from] NonEmptyStringError),
 }
 
 impl From<LookupError> for ConfigTokenError {
@@ -173,7 +173,7 @@ pub enum ConfigIdError {
     #[error("id must be a string in toml, got {0:?}")]
     NotAString(TomlValueType),
     #[error("malformed id: {0}")]
-    Invalid(#[from] NonEmptyInlineStringError),
+    Invalid(#[from] NonEmptyStringError),
 }
 
 impl From<LookupError> for ConfigIdError {

@@ -26,7 +26,7 @@ pub struct MainLoop {
 }
 
 impl MainLoop {
-    pub(crate) fn new(config: &Config) -> Result<Self> {
+    pub(crate) fn new(config: Config) -> Result<Self> {
         let event_loop = EventLoopWithTimer::new()?;
         let listener = TcpListener::new(config.url.resolve()?, &event_loop)?;
 
@@ -38,7 +38,7 @@ impl MainLoop {
             listener,
             event_loop,
             now: 0,
-            config: *config,
+            config,
             store: Store::empty(),
 
             pre_sources,
@@ -135,7 +135,7 @@ impl MainLoop {
                         return;
                     }
                 };
-                log::info!("[{id}] promoting to {sink}");
+                log::info!("[{}] promoting to {sink}", sink.id());
                 self.pre_sinks.insert(sink);
             }
         }
@@ -156,9 +156,9 @@ impl MainLoop {
                         return;
                     }
                 };
-                log::info!("[{id}] promoting to {client}");
+                log::info!("[{}] promoting to {client}", client.id());
                 if let Some(message) = self.store.current()
-                    && let Err(err) = client.push(&message)
+                    && let Err(err) = client.push(message)
                 {
                     log::error!("{err:?}");
                     return;
@@ -173,7 +173,7 @@ impl MainLoop {
             Err(err) => log::error!("{err:?}"),
             Ok(Pending(client)) => self.clients.insert(client),
             Ok(Done((message, client))) => {
-                if self.store.add(message) {
+                if self.store.add(&message) {
                     log::info!("broadcasting {message:?}");
                     self.broadcast(&message, client.id());
                 }
@@ -183,7 +183,7 @@ impl MainLoop {
         }
     }
 
-    fn broadcast(&mut self, message: &Message, sender_id: ID) {
+    fn broadcast(&mut self, message: &Message, sender_id: &ID) {
         for client in self
             .clients
             .fds_mut()

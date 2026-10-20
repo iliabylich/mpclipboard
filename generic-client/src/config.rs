@@ -3,7 +3,7 @@ use mpclipboard_shared::{
     Url,
 };
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub(crate) struct Config {
     pub(crate) url: Url,
     pub(crate) token: Token,
@@ -39,7 +39,7 @@ impl Config {
         Self::validated(url, token, id)
     }
 
-    const fn validated(url: Url, token: Token, id: ID) -> Result<Self, ConfigError> {
+    fn validated(url: Url, token: Token, id: ID) -> Result<Self, ConfigError> {
         if !url.is_tls() {
             return Err(ConfigError::NotHttps);
         }
