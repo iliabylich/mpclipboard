@@ -10,12 +10,6 @@ pub struct FdSet<const MAX: usize, T: AsFd> {
 }
 
 impl<const MAX: usize, T: AsFd> FdSet<MAX, T> {
-    pub(crate) fn new() -> Self {
-        Self {
-            map: HashMap::new(),
-        }
-    }
-
     pub(crate) fn insert(&mut self, value: T) {
         if self.map.len() < MAX {
             self.map.insert(value.as_fd().as_raw_fd(), value);
@@ -47,7 +41,9 @@ impl<const MAX: usize, T: AsFd + CanBeReaped> FdSet<MAX, T> {
 
 impl<const MAX: usize, T: AsFd> Default for FdSet<MAX, T> {
     fn default() -> Self {
-        Self::new()
+        Self {
+            map: HashMap::new(),
+        }
     }
 }
 

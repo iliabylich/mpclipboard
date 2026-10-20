@@ -43,7 +43,7 @@ mod message;
 mod message_reader;
 mod message_writer;
 pub use self::{
-    message::{Message, MessageError},
+    message::{Message, MessageDecodeError},
     message_reader::MessageReader,
     message_writer::{MessageWriter, MessageWriterError},
 };

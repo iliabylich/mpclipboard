@@ -4,21 +4,23 @@ use crate::{
     connection::{
         error::ConnectionError,
         quic_config::QuicConfig,
-        state::{DnsState, FREEZE_TIME_IN_SECS, Http3, State},
+        state::{Dns, FREEZE_TIME_IN_SECS, Http3, State},
     },
 };
 use core::net::{Ipv4Addr, SocketAddr};
 use mpclipboard_shared::{Now, Past};
 
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct DisconnectedState(Option<Past>);
+pub(crate) struct Disconnected {
+    disconnected_at: Option<Past>,
+}
 
-impl DisconnectedState {
+impl Disconnected {
     pub(crate) const NAME: &str = "Disconnected";
     pub(crate) const CONNECTIVITY: Connectivity = Connectivity::Disconnected;
 
     pub(crate) const fn new(disconnected_at: Option<Past>) -> Self {
-        Self(disconnected_at)
+        Self { disconnected_at }
     }
 
     pub(crate) fn tick(
@@ -27,7 +29,7 @@ impl DisconnectedState {
         config: &Config,
         quic_config: &QuicConfig,
     ) -> Result<Option<State>, ConnectionError> {
-        if let Some(disconnected_at) = self.0
+        if let Some(disconnected_at) = self.disconnected_at
             && now.seconds_since(disconnected_at) <= FREEZE_TIME_IN_SECS
         {
             return Ok(None);
@@ -47,7 +49,7 @@ impl DisconnectedState {
             let state = Http3::connect(now, addr, config, quic_config)?;
             Ok(State::Http3(state))
         } else {
-            let state = DnsState::start(now, config)?;
+            let state = Dns::start(now, config)?;
             Ok(State::Dns(state))
         }
     }

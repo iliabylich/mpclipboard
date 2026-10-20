@@ -2,35 +2,48 @@ use crate::{
     Connectivity,
     config::Config,
     connection::{
-        actions::{read_dns_response, start_resolving, write_dns_request},
         error::ConnectionError,
         quic_config::QuicConfig,
         state::{FREEZE_TIME_IN_SECS, Http3, State},
     },
 };
-use mini_sansio_dns::{Dns, DnsWants, MAX_DNS_PACKET_LEN};
+use core::net::{Ipv4Addr, SocketAddrV4};
+use mini_sansio_dns::{Dns as DnsConn, DnsRecordType, DnsWants, MAX_DNS_PACKET_LEN};
 use mpclipboard_shared::{Now, Past, Wants, prelude::*};
-use rustix::fd::{AsFd, BorrowedFd, OwnedFd};
+use rustix::{
+    fd::{AsFd, BorrowedFd, OwnedFd},
+    io::{Errno, FdFlags},
+    net::{AddressFamily, RecvFlags, SendFlags, SocketType},
+};
 
 #[derive(Debug)]
-pub(crate) struct DnsState {
+pub(crate) struct Dns {
     fd: OwnedFd,
-    dns: Dns,
+    conn: DnsConn,
     buf: [u8; MAX_DNS_PACKET_LEN],
     last_activity_at: Past,
 }
 
-impl DnsState {
+const DNS_SERVER: SocketAddrV4 = SocketAddrV4::new(Ipv4Addr::new(8, 8, 8, 8), 53);
+
+impl Dns {
     pub(crate) const NAME: &str = "Dns";
     pub(crate) const CONNECTIVITY: Connectivity = Connectivity::Connecting;
 
     pub(crate) fn start(now: Now, config: &Config) -> Result<Self, ConnectionError> {
         let mut buf = [0; MAX_DNS_PACKET_LEN];
-        let (fd, dns) = start_resolving(&config.url, &mut buf)?;
+
+        let dns = DnsConn::new(config.url.host(), DnsRecordType::A, &mut buf)?;
+
+        let fd = rustix::net::socket(AddressFamily::INET, SocketType::DGRAM, None)
+            .map_err(ConnectionError::OpenSocket)?;
+        rustix::io::fcntl_setfd(&fd, FdFlags::CLOEXEC).map_err(ConnectionError::SetCloexec)?;
+        rustix::io::ioctl_fionbio(&fd, true).map_err(ConnectionError::SwitchToNonBlocking)?;
+        rustix::net::connect(&fd, &DNS_SERVER).map_err(ConnectionError::ConnectToDns)?;
 
         Ok(Self {
             fd,
-            dns,
+            conn: dns,
             buf,
             last_activity_at: now.as_past(),
         })
@@ -46,24 +59,44 @@ impl DnsState {
         config: &Config,
         quic_config: &QuicConfig,
     ) -> Result<Completion<State, ()>, ConnectionError> {
-        let Done(mut addr) = read_dns_response(&self.fd, &mut self.dns, &mut self.buf)? else {
-            self.last_activity_at = now.as_past();
-            return Ok(Pending(()));
+        let Some(DnsWants::Read { buf: response, .. }) = self.conn.wants(&mut self.buf)? else {
+            unreachable!("Dns::on_readable() is called only when Dns wants read()")
         };
 
-        addr.set_port(config.url.port());
-        let next = Http3::connect(now, addr, config, quic_config)?;
-        Ok(Done(State::Http3(next)))
+        match rustix::net::recv(&self.fd, response, RecvFlags::empty()) {
+            Ok((len, _)) => {
+                let (mut addr, _seq) = self.conn.satisfy_read(len, &self.buf)?;
+
+                addr.set_port(config.url.port());
+                let next = Http3::connect(now, addr, config, quic_config)?;
+                Ok(Done(State::Http3(next)))
+            }
+            Err(Errno::AGAIN) => {
+                self.last_activity_at = now.as_past();
+                Ok(Pending(()))
+            }
+            Err(errno) => Err(ConnectionError::ReadDnsResponse(errno)),
+        }
     }
 
     pub(crate) fn on_writable(&mut self, now: Now) -> Result<(), ConnectionError> {
-        write_dns_request(&self.fd, &mut self.dns, &mut self.buf)?;
+        let Some(DnsWants::Write { buf: request, .. }) = self.conn.wants(&mut self.buf)? else {
+            unreachable!("Dns::on_writable() is called only when Dns wants write()")
+        };
+
+        match rustix::net::send(&self.fd, request, SendFlags::empty()) {
+            Ok(len) => self.conn.satisfy_write(len, &mut self.buf)?,
+            Err(Errno::AGAIN) => {}
+            Err(errno) => return Err(ConnectionError::WriteDnsRequest(errno)),
+        }
+
         self.last_activity_at = now.as_past();
+
         Ok(())
     }
 
     pub(crate) fn wants(&mut self) -> (BorrowedFd<'_>, Wants) {
-        let wants = match self.dns.wants(&mut self.buf) {
+        let wants = match self.conn.wants(&mut self.buf) {
             Ok(Some(DnsWants::Write { .. })) => Wants::Write,
             Ok(Some(DnsWants::Read { .. })) => Wants::Read,
             Ok(None) => unreachable!("DnsState never holds a finished Dns"),

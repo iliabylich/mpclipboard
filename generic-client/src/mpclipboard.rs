@@ -33,7 +33,7 @@ impl MPClipboard {
         let mut this = Self {
             event_loop,
             conn,
-            store: Store::empty(),
+            store: Store::default(),
             config,
         };
         this.sync_event_loop()?;

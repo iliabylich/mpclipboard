@@ -1,4 +1,4 @@
-use crate::connection::http3_connection::{Http3Error, StreamId};
+use crate::connection::{error::ConnectionError, http3_connection::StreamId};
 use core::ops::Range;
 use h3wire::{H3Code, Recv};
 use quinn_proto::{ReadError, ReadableError};
@@ -25,7 +25,7 @@ impl QuinnH3WireRecvAdapter {
     pub(crate) fn read_quinn(
         &mut self,
         quic_conn: &mut quinn_proto::Connection,
-    ) -> Result<ReadQuinn, Http3Error> {
+    ) -> Result<ReadQuinn, ConnectionError> {
         if self.fin || self.done {
             return Ok(ReadQuinn::Open);
         }
@@ -34,7 +34,7 @@ impl QuinnH3WireRecvAdapter {
         let mut chunks = match stream.read(true) {
             Ok(chunks) => chunks,
             Err(ReadableError::ClosedStream) => return Ok(ReadQuinn::Open),
-            Err(err) => return Err(Http3Error::Readable(err)),
+            Err(err) => return Err(ConnectionError::Readable(err)),
         };
 
         let mut reset = None;
@@ -64,7 +64,7 @@ impl QuinnH3WireRecvAdapter {
     pub(crate) fn feed_h3wire(
         &mut self,
         h3_conn: &mut h3wire::Connection,
-    ) -> Result<FeedH3Wire, Http3Error> {
+    ) -> Result<FeedH3Wire, ConnectionError> {
         self.buf.drain(..self.consumed);
         self.consumed = 0;
 

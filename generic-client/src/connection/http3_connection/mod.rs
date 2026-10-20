@@ -1,6 +1,3 @@
-mod error;
-pub(crate) use error::Http3Error;
-
 mod quinn_h3wire_recv_adapter;
 use quinn_h3wire_recv_adapter::{FeedH3Wire, QuinnH3WireRecvAdapter, ReadQuinn};
 
@@ -10,7 +7,7 @@ use stream_id::StreamId;
 mod var_int_ext;
 use var_int_ext::VarIntExt;
 
-use crate::connection::quic_config::QuicConfig;
+use crate::connection::{error::ConnectionError, quic_config::QuicConfig};
 use alloc::{collections::VecDeque, sync::Arc};
 use bytes::{Bytes, BytesMut};
 use core::{net::SocketAddr, time::Duration};
@@ -44,7 +41,7 @@ impl Http3Connection {
         peer: SocketAddr,
         host: &str,
         quic_config: &QuicConfig,
-    ) -> Result<Self, Http3Error> {
+    ) -> Result<Self, ConnectionError> {
         let mut endpoint = Endpoint::new(Arc::clone(&quic_config.endpoint), None, true, None);
         let (handle, quic_conn) =
             endpoint.connect(Instant::now(), quic_config.client.clone(), peer, host)?;
@@ -66,7 +63,10 @@ impl Http3Connection {
         self.quic_conn.is_handshaking()
     }
 
-    pub(crate) fn process_incoming_datagram(&mut self, datagram: &[u8]) -> Result<(), Http3Error> {
+    pub(crate) fn process_incoming_datagram(
+        &mut self,
+        datagram: &[u8],
+    ) -> Result<(), ConnectionError> {
         let mut response = vec![];
         match self.endpoint.handle(
             Instant::now(),
@@ -90,7 +90,7 @@ impl Http3Connection {
         self.process_quinn_request_stream()
     }
 
-    pub(crate) fn process_expired_timers(&mut self) -> Result<(), Http3Error> {
+    pub(crate) fn process_expired_timers(&mut self) -> Result<(), ConnectionError> {
         self.quic_conn.handle_timeout(Instant::now());
         self.process_quinn_events_and_forward_to_h3wire()
     }
@@ -103,9 +103,9 @@ impl Http3Connection {
     pub(crate) fn open_request_and_enqueue_headers(
         &mut self,
         headers: &[FieldRef<'_>],
-    ) -> Result<(), Http3Error> {
+    ) -> Result<(), ConnectionError> {
         if self.request.is_some() {
-            return Err(Http3Error::RequestAlreadySent);
+            return Err(ConnectionError::RequestAlreadySent);
         }
 
         let id = open_quinn_stream(&mut self.quic_conn, Dir::Bi)?;
@@ -115,27 +115,29 @@ impl Http3Connection {
         Ok(())
     }
 
-    pub(crate) fn enqueue_request_body(&mut self, body: &[u8]) -> Result<bool, Http3Error> {
-        let (recv, outgoing) = self.request.as_mut().ok_or(Http3Error::NoRequest)?;
+    pub(crate) fn enqueue_request_body(&mut self, body: &[u8]) -> Result<bool, ConnectionError> {
+        let (recv, outgoing) = self.request.as_mut().ok_or(ConnectionError::NoRequest)?;
         if !outgoing.is_empty() {
             return Ok(false);
         }
 
         let stream = recv.id.into();
-        let frame = match self
-            .h3_conn
-            .send_data(stream, u64::try_from(body.len())?, false)
-        {
+        let frame = match self.h3_conn.send_data(
+            stream,
+            u64::try_from(body.len())
+                .unwrap_or_else(|_| unreachable!("usize is never wider than u64")),
+            false,
+        ) {
             Ok(frame) => frame,
             Err(UsageError::Blocked) => return Ok(false),
-            Err(err) => return Err(Http3Error::H3Usage(err)),
+            Err(err) => return Err(ConnectionError::H3Usage(err)),
         };
         outgoing.extend_from_slice(frame.prefix());
         outgoing.extend_from_slice(body);
         Ok(true)
     }
 
-    pub(crate) fn next_event(&mut self) -> Result<Option<Http3Event<'_>>, Http3Error> {
+    pub(crate) fn next_event(&mut self) -> Result<Option<Http3Event<'_>>, ConnectionError> {
         let Some((recv, _)) = &mut self.request else {
             return Ok(None);
         };
@@ -155,7 +157,7 @@ impl Http3Connection {
         }
     }
 
-    pub(crate) fn flush(&mut self) -> Result<(), Http3Error> {
+    pub(crate) fn flush(&mut self) -> Result<(), ConnectionError> {
         if !self.quic_conn.is_handshaking() {
             loop {
                 let mut moved = self.process_h3wire_actions_and_forward_to_quinn()?;
@@ -192,14 +194,14 @@ impl Http3Connection {
         Some(datagram)
     }
 
-    fn process_quinn_events_and_forward_to_h3wire(&mut self) -> Result<(), Http3Error> {
+    fn process_quinn_events_and_forward_to_h3wire(&mut self) -> Result<(), ConnectionError> {
         while let Some(event) = self.quic_conn.poll() {
             match event {
                 quinn_proto::Event::ConnectionLost {
                     reason: quinn_proto::ConnectionError::TimedOut,
-                } => return Err(Http3Error::IdleTimeout),
+                } => return Err(ConnectionError::IdleTimeout),
                 quinn_proto::Event::ConnectionLost { reason } => {
-                    return Err(Http3Error::ConnectionLost(reason));
+                    return Err(ConnectionError::ConnectionLost(reason));
                 }
                 quinn_proto::Event::Stream(StreamEvent::Stopped { id, error_code }) => {
                     self.h3_conn.stop_sending_received(
@@ -219,7 +221,7 @@ impl Http3Connection {
         }
     }
 
-    fn process_quinn_uni_streams_and_forward_to_h3wire(&mut self) -> Result<(), Http3Error> {
+    fn process_quinn_uni_streams_and_forward_to_h3wire(&mut self) -> Result<(), ConnectionError> {
         for adapter in &mut self.peer_uni {
             if let ReadQuinn::Reset(code) = adapter.read_quinn(&mut self.quic_conn)? {
                 self.h3_conn
@@ -231,7 +233,7 @@ impl Http3Connection {
         Ok(())
     }
 
-    fn process_quinn_request_stream(&mut self) -> Result<(), Http3Error> {
+    fn process_quinn_request_stream(&mut self) -> Result<(), ConnectionError> {
         if let Some((recv, _)) = &mut self.request
             && let ReadQuinn::Reset(code) = recv.read_quinn(&mut self.quic_conn)?
         {
@@ -240,7 +242,7 @@ impl Http3Connection {
         Ok(())
     }
 
-    fn process_h3wire_actions_and_forward_to_quinn(&mut self) -> Result<bool, Http3Error> {
+    fn process_h3wire_actions_and_forward_to_quinn(&mut self) -> Result<bool, ConnectionError> {
         let mut moved = false;
         while let Some(action) = self.h3_conn.poll_action() {
             moved = true;
@@ -268,14 +270,14 @@ impl Http3Connection {
                         VarInt::from_h3_code(code),
                         Bytes::from_static(reason.as_bytes()),
                     );
-                    return Err(Http3Error::Closed(code.0));
+                    return Err(ConnectionError::Closed(code.0));
                 }
             }
         }
         Ok(moved)
     }
 
-    fn copy_h3wire_bytes_to_quinn(&mut self) -> Result<bool, Http3Error> {
+    fn copy_h3wire_bytes_to_quinn(&mut self) -> Result<bool, ConnectionError> {
         let mut moved = false;
         let streams = self.h3_conn.sendable().collect::<Vec<_>>();
         for stream in streams {
@@ -293,7 +295,7 @@ impl Http3Connection {
         Ok(moved)
     }
 
-    fn copy_request_body_to_quinn(&mut self) -> Result<bool, Http3Error> {
+    fn copy_request_body_to_quinn(&mut self) -> Result<bool, ConnectionError> {
         let Some((recv, outgoing)) = &mut self.request else {
             return Ok(false);
         };
@@ -312,25 +314,25 @@ impl Http3Connection {
 
 fn next_h3wire_event(
     h3_conn: &mut h3wire::Connection,
-) -> Result<Option<Http3Event<'static>>, Http3Error> {
+) -> Result<Option<Http3Event<'static>>, ConnectionError> {
     while let Some(event) = h3_conn.poll_event() {
         match event {
             Event::Headers { block, .. } => {
                 let status = h3_conn.headers(block)?.pseudo().status;
                 h3_conn.release(block);
 
-                let status = status.ok_or(Http3Error::MissingStatus)?;
+                let status = status.ok_or(ConnectionError::MissingStatus)?;
                 return Ok(Some(Http3Event::Status(status)));
             }
-            Event::Finished(_) => return Err(Http3Error::ResponseFinished),
+            Event::Finished(_) => return Err(ConnectionError::ResponseFinished),
             Event::StreamAborted { code, .. } => {
-                return Err(Http3Error::ResponseReset(code.0));
+                return Err(ConnectionError::ResponseReset(code.0));
             }
             Event::SendStopped { code, .. } => {
                 return Ok(Some(Http3Event::SendStopped(code.0)));
             }
-            Event::GoAway { .. } => return Err(Http3Error::GoAway),
-            Event::Closed { code } => return Err(Http3Error::Closed(code.0)),
+            Event::GoAway { .. } => return Err(ConnectionError::GoAway),
+            Event::Closed { code } => return Err(ConnectionError::Closed(code.0)),
             Event::PeerSettings | Event::UniStream { .. } => {}
         }
     }
@@ -341,21 +343,21 @@ fn write_quinn_stream(
     quic_conn: &mut quinn_proto::Connection,
     id: StreamId,
     bytes: &[u8],
-) -> Result<Option<usize>, Http3Error> {
+) -> Result<Option<usize>, ConnectionError> {
     match quic_conn.send_stream(id.into()).write(bytes) {
         Ok(written) => Ok(Some(written)),
         Err(WriteError::Blocked) => Ok(None),
-        Err(err) => Err(Http3Error::Write(err)),
+        Err(err) => Err(ConnectionError::Write(err)),
     }
 }
 
 fn open_quinn_stream(
     quic_conn: &mut quinn_proto::Connection,
     dir: Dir,
-) -> Result<StreamId, Http3Error> {
+) -> Result<StreamId, ConnectionError> {
     let id = quic_conn
         .streams()
         .open(dir)
-        .ok_or(Http3Error::NoStreamsAvailable)?;
+        .ok_or(ConnectionError::NoStreamsAvailable)?;
     Ok(StreamId::from(id))
 }

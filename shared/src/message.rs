@@ -64,7 +64,7 @@ impl Frame {
         }
     }
 
-    pub(crate) fn decode(buf: &[u8; Message::BYTESIZE]) -> Result<Self, MessageError> {
+    pub(crate) fn decode(buf: &[u8; Message::BYTESIZE]) -> Result<Self, MessageDecodeError> {
         let [len, text @ ..] = buf;
 
         let Some(len) = NonZeroUsize::new(usize::from(*len)) else {
@@ -87,7 +87,7 @@ impl core::fmt::Debug for Message {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
-pub enum MessageError {
+pub enum MessageDecodeError {
     #[error("non-utf8 message text: {0}")]
     NonUtf8(#[from] Utf8Error),
 }
@@ -122,7 +122,7 @@ mod tests {
     fn test_decode_invalid() {
         assert_matches!(
             Frame::decode(&[b'\xC8'; Message::BYTESIZE]),
-            Err(MessageError::NonUtf8(_))
+            Err(MessageDecodeError::NonUtf8(_))
         );
     }
 

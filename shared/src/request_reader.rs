@@ -4,7 +4,7 @@ use bytes::BytesMut;
 use core::str::Utf8Error;
 
 #[must_use]
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
 pub struct RequestReader {
     buf: BytesMut,
 }
@@ -12,12 +12,6 @@ pub struct RequestReader {
 impl RequestReader {
     const MAX_REQUEST_SIZE: usize = 8192;
     const MAX_HEADERS: usize = 32;
-
-    pub fn new() -> Self {
-        Self {
-            buf: BytesMut::new(),
-        }
-    }
 
     pub fn received(
         &mut self,
@@ -37,12 +31,6 @@ impl RequestReader {
         let request = parse_request(&req)?;
         let leftover = self.buf.split_off(len);
         Ok(Done((request, leftover)))
-    }
-}
-
-impl Default for RequestReader {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -144,7 +132,7 @@ Accept-Encoding: gzip\r\n\
 
     fn read_all(bytes: &[u8]) -> Result<Completion<(Request, BytesMut), ()>, RequestReaderError> {
         let (head, trailer) = bytes.split_at(bytes.len() - CHUNK_SIZE);
-        let mut reader = RequestReader::new();
+        let mut reader = RequestReader::default();
         for chunk in head.chunks(CHUNK_SIZE) {
             assert_eq!(reader.received(chunk), Ok(Pending(())));
         }
@@ -206,7 +194,7 @@ Accept-Encoding: gzip\r\n\
 
     #[test]
     fn test_err() {
-        let mut reader = RequestReader::new();
+        let mut reader = RequestReader::default();
         assert_matches!(
             reader.received(b"boo\r\n\r\n"),
             Err(RequestReaderError::Parse(_))
@@ -236,7 +224,7 @@ Accept-Encoding: gzip\r\n\
             ),
             1,
         );
-        let mut reader = RequestReader::new();
+        let mut reader = RequestReader::default();
         let res = bytes
             .as_bytes()
             .chunks(CHUNK_SIZE)

@@ -1,15 +1,12 @@
 use crate::message::Message;
 
 #[must_use]
+#[derive(Debug, Default)]
 pub struct Store {
     text: Option<Message>,
 }
 
 impl Store {
-    pub const fn empty() -> Self {
-        Self { text: None }
-    }
-
     #[must_use]
     pub const fn current(&self) -> Option<&Message> {
         self.text.as_ref()

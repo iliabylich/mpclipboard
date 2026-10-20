@@ -3,14 +3,15 @@ use bytes::{Buf, BytesMut};
 use core::num::NonZeroUsize;
 
 #[must_use]
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Default, PartialEq, Eq)]
 pub(crate) struct ChunkedDecoder {
     buf: BytesMut,
     state: State,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 enum State {
+    #[default]
     Size,
     Data(NonZeroUsize),
     DataCRLF,
@@ -18,13 +19,6 @@ enum State {
 
 impl ChunkedDecoder {
     const MAX_SIZE_LINE_LENGTH: usize = 8192;
-
-    pub(crate) fn new() -> Self {
-        Self {
-            buf: BytesMut::new(),
-            state: State::Size,
-        }
-    }
 
     pub(crate) fn decode(&mut self, input: &[u8]) -> Result<BytesMut> {
         self.buf.extend_from_slice(input);
@@ -90,17 +84,17 @@ mod tests {
 
     #[test]
     fn test_single_chunk() {
-        let mut decoder = ChunkedDecoder::new();
+        let mut decoder = ChunkedDecoder::default();
         assert_eq!(
             decode(&mut decoder, b"5\r\nhello\r\n"),
             Ok(b"hello".to_vec())
         );
-        assert_eq!(decoder, ChunkedDecoder::new());
+        assert_eq!(decoder, ChunkedDecoder::default());
     }
 
     #[test]
     fn test_many_chunks() {
-        let mut decoder = ChunkedDecoder::new();
+        let mut decoder = ChunkedDecoder::default();
         assert_eq!(
             decode(&mut decoder, b"3\r\nabc\r\nA\r\n0123456789\r\n"),
             Ok(b"abc0123456789".to_vec())
@@ -109,7 +103,7 @@ mod tests {
 
     #[test]
     fn test_byte_by_byte() {
-        let mut decoder = ChunkedDecoder::new();
+        let mut decoder = ChunkedDecoder::default();
         let mut out = vec![];
         for byte in b"1a\r\nabcdefghijklmnopqrstuvwxyz\r\n" {
             out.extend(decode(&mut decoder, &[*byte]).unwrap());
@@ -120,7 +114,7 @@ mod tests {
 
     #[test]
     fn test_extension() {
-        let mut decoder = ChunkedDecoder::new();
+        let mut decoder = ChunkedDecoder::default();
         assert_eq!(
             decode(&mut decoder, b"3;name=value\r\nabc\r\n"),
             Ok(b"abc".to_vec())
@@ -129,7 +123,7 @@ mod tests {
 
     #[test]
     fn test_end_of_body() {
-        let mut decoder = ChunkedDecoder::new();
+        let mut decoder = ChunkedDecoder::default();
         assert_eq!(
             decode(&mut decoder, b"3\r\nabc\r\n0\r\n\r\n"),
             Err("request body has ended".to_string())
@@ -138,7 +132,7 @@ mod tests {
 
     #[test]
     fn test_size_line_too_long() {
-        let mut decoder = ChunkedDecoder::new();
+        let mut decoder = ChunkedDecoder::default();
         assert_eq!(decode(&mut decoder, b"3;"), Ok(vec![]));
         assert_eq!(
             decode(&mut decoder, &[b'a'; ChunkedDecoder::MAX_SIZE_LINE_LENGTH]),
@@ -149,19 +143,19 @@ mod tests {
     #[test]
     fn test_errors() {
         assert_eq!(
-            decode(&mut ChunkedDecoder::new(), b"x\r\n"),
+            decode(&mut ChunkedDecoder::default(), b"x\r\n"),
             Err("invalid chunk size line".to_string())
         );
         assert_eq!(
-            decode(&mut ChunkedDecoder::new(), b"11111111111111111\r\n"),
+            decode(&mut ChunkedDecoder::default(), b"11111111111111111\r\n"),
             Err("invalid chunk size line".to_string())
         );
         assert_eq!(
-            decode(&mut ChunkedDecoder::new(), b"3\rabc"),
+            decode(&mut ChunkedDecoder::default(), b"3\rabc"),
             Err("invalid chunk size line".to_string())
         );
         assert_eq!(
-            decode(&mut ChunkedDecoder::new(), b"3\r\nabcde"),
+            decode(&mut ChunkedDecoder::default(), b"3\r\nabcde"),
             Err("chunk data is not followed by CRLF".to_string())
         );
     }

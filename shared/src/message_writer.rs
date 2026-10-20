@@ -6,8 +6,9 @@ use bytes::{Buf, Bytes};
 use core::num::NonZeroUsize;
 
 #[must_use]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub enum MessageWriter {
+    #[default]
     Empty,
 
     Some {
@@ -17,10 +18,6 @@ pub enum MessageWriter {
 }
 
 impl MessageWriter {
-    pub const fn new() -> Self {
-        Self::Empty
-    }
-
     #[must_use]
     pub fn remainder(&self) -> Option<&[u8]> {
         match self {
@@ -46,7 +43,7 @@ impl MessageWriter {
                     if let Some(next) = next.take() {
                         *current = Bytes::copy_from_slice(&next.encode());
                     } else {
-                        *self = Self::new();
+                        *self = Self::default();
                     }
                 }
             }
@@ -91,12 +88,6 @@ impl MessageWriter {
     }
 }
 
-impl Default for MessageWriter {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum MessageWriterError {
     #[error("written() called on an empty MessageWriter")]
@@ -112,7 +103,7 @@ mod tests {
 
     #[test]
     fn test_single() {
-        let mut writer = MessageWriter::new();
+        let mut writer = MessageWriter::default();
         assert_eq!(writer.remainder(), None);
 
         let msg = Message::truncate("FOO").unwrap();
@@ -130,7 +121,7 @@ mod tests {
 
     #[test]
     fn test_fixed_size_queue_like_with_tail_replacement() {
-        let mut writer = MessageWriter::new();
+        let mut writer = MessageWriter::default();
 
         let msg1 = Message::truncate("msg1").unwrap();
         writer.push(&msg1);
@@ -146,7 +137,7 @@ mod tests {
 
     #[test]
     fn test_heartbeat() {
-        let mut writer = MessageWriter::new();
+        let mut writer = MessageWriter::default();
         writer.push_heartbeat();
         assert_eq!(
             writer.remainder(),
@@ -164,7 +155,7 @@ mod tests {
 
     #[test]
     fn test_errors() {
-        let mut writer = MessageWriter::new();
+        let mut writer = MessageWriter::default();
         assert_eq!(
             writer.written(non_zero_usize(1)),
             Err(MessageWriterError::Empty)

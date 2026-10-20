@@ -4,8 +4,6 @@ use core::time::Duration;
 use mpclipboard_shared::{Message, Now, Wants, prelude::*};
 use rustix::fd::BorrowedFd;
 
-mod actions;
-
 mod error;
 
 mod http3_connection;
@@ -15,7 +13,7 @@ use quic_config::QuicConfig;
 pub use quic_config::QuicConfigError;
 
 mod state;
-use state::{DisconnectedState, Readable, State};
+use state::{Disconnected, Readable, State};
 
 pub(crate) struct Connection {
     epoch: Epoch,
@@ -27,13 +25,13 @@ impl Connection {
     pub(crate) fn new() -> Result<Self, QuicConfigError> {
         Ok(Self {
             epoch: Epoch::ZERO,
-            state: State::Disconnected(DisconnectedState::new(None)),
+            state: State::Disconnected(Disconnected::new(None)),
             quic_config: QuicConfig::new()?,
         })
     }
 
     pub(crate) fn disconnect(&mut self, now: Now) {
-        self.state = State::Disconnected(DisconnectedState::new(Some(now.as_past())));
+        self.state = State::Disconnected(Disconnected::new(Some(now.as_past())));
         self.epoch.bump();
     }
 

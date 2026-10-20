@@ -18,7 +18,7 @@ impl PreSource {
     pub(crate) fn new(fd: RegisteredFd, now: Now) -> Self {
         Self {
             fd,
-            reader: RequestReader::new(),
+            reader: RequestReader::default(),
             created_at: now.as_past(),
         }
     }

@@ -1,26 +1,23 @@
-use crate::{Message, MessageError, message::Frame, prelude::*};
+use crate::{Message, MessageDecodeError, message::Frame, prelude::*};
 use bytes::BytesMut;
 
 #[must_use]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct MessageReader {
     buf: BytesMut,
 }
 
 impl MessageReader {
-    pub fn empty() -> Self {
-        Self {
-            buf: BytesMut::new(),
-        }
-    }
-
     pub fn new(partial: &[u8]) -> Self {
         Self {
             buf: BytesMut::from(partial),
         }
     }
 
-    pub fn received(&mut self, bytes: &[u8]) -> Result<Completion<Message, ()>, MessageError> {
+    pub fn received(
+        &mut self,
+        bytes: &[u8],
+    ) -> Result<Completion<Message, ()>, MessageDecodeError> {
         self.buf.extend_from_slice(bytes);
         let mut message = None;
 
@@ -42,21 +39,15 @@ impl MessageReader {
     }
 }
 
-impl Default for MessageReader {
-    fn default() -> Self {
-        Self::empty()
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::MessageReader;
-    use crate::{Message, MessageError, message::Frame, prelude::*};
+    use crate::{Message, MessageDecodeError, message::Frame, prelude::*};
     use core::assert_matches;
 
     #[test]
     fn test_receive_full() {
-        let mut reader = MessageReader::empty();
+        let mut reader = MessageReader::default();
 
         let message = Message::truncate("BOO").unwrap();
         assert_eq!(reader.received(&message.encode()), Ok(Done(message)));
@@ -71,7 +62,7 @@ mod tests {
         let (first, rest) = stream.split_at(100);
         let (second, third) = rest.split_at(Message::BYTESIZE);
 
-        let mut reader = MessageReader::empty();
+        let mut reader = MessageReader::default();
 
         assert_eq!(reader.received(first), Ok(Pending(())));
         assert_eq!(reader.received(second), Ok(Done(one)));
@@ -87,7 +78,7 @@ mod tests {
 
         let (head, tail) = stream.split_at(Message::BYTESIZE * 2 + 10);
 
-        let mut reader = MessageReader::empty();
+        let mut reader = MessageReader::default();
 
         assert_eq!(reader.received(head), Ok(Done(two)));
         assert_eq!(reader.received(tail), Ok(Done(three)));
@@ -99,7 +90,7 @@ mod tests {
         let stream = [Frame::Heartbeat.encode(), one.encode()].concat();
         let (heartbeat, message) = stream.split_at(Message::BYTESIZE);
 
-        let mut reader = MessageReader::empty();
+        let mut reader = MessageReader::default();
 
         assert_eq!(reader.received(heartbeat), Ok(Pending(())));
         assert_eq!(reader.received(message), Ok(Done(one)));
@@ -107,11 +98,11 @@ mod tests {
 
     #[test]
     fn test_receive_invalid() {
-        let mut reader = MessageReader::empty();
+        let mut reader = MessageReader::default();
 
         assert_matches!(
             reader.received(&[b'\xC8'; Message::BYTESIZE]),
-            Err(MessageError::NonUtf8(_))
+            Err(MessageDecodeError::NonUtf8(_))
         );
     }
 }

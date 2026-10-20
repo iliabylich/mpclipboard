@@ -17,7 +17,7 @@ impl Client {
     const READ_SIZE: usize = 8192;
 
     pub(crate) fn new(fd: RegisteredFd, id: ID, leftover: &[u8]) -> Result<Self> {
-        let mut decoder = ChunkedDecoder::new();
+        let mut decoder = ChunkedDecoder::default();
         let partial = decoder
             .decode(leftover)
             .with_context(|| format!("[{id}] failed to decode leftover"))?;
@@ -27,7 +27,7 @@ impl Client {
             id,
             decoder,
             reader: MessageReader::new(&partial),
-            writer: MessageWriter::new(),
+            writer: MessageWriter::default(),
         };
         this.sync_wants()?;
         Ok(this)

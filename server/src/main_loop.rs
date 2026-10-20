@@ -29,15 +29,15 @@ impl MainLoop {
         let event_loop = EventLoopWithTimer::new()?;
         let listener = TcpListener::new(config.url.resolve()?, &event_loop)?;
 
-        let pre_sources = FdSet::<20, PreSource>::new();
-        let pre_sinks = FdSet::<20, PreSink>::new();
-        let clients = FdSet::<20, Client>::new();
+        let pre_sources = FdSet::<20, PreSource>::default();
+        let pre_sinks = FdSet::<20, PreSink>::default();
+        let clients = FdSet::<20, Client>::default();
 
         Ok(Self {
             listener,
             event_loop,
             config,
-            store: Store::empty(),
+            store: Store::default(),
 
             pre_sources,
             pre_sinks,
