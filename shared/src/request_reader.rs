@@ -1,105 +1,51 @@
 use crate::{
-    Buffer, HOST_PREFIX, HostPort, ID, ID_PREFIX, Message, NonEmptyInlineStringError, Request,
-    START_LINE, TOKEN_PREFIX, TRANSFER_ENCODING_CHUNKED_HEADER, Token, VERSION_PREFIX, Version,
-    line_reader::{LineReader, LineReaderError},
+    Buffer, HostPort, ID, Message, NonEmptyInlineStringError, PushResult, Request, Token, Version,
     prelude::*,
-    strip_prefix_ignore_ascii_case,
 };
-use core::{
-    ops::ControlFlow::{Break, Continue},
-    str::Utf8Error,
-};
+use core::str::Utf8Error;
 
 #[must_use]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct RequestReader {
-    lines: LineReader<{ Self::BUFFER_SIZE }>,
-
-    seen_start_line: bool,
-
-    host: Option<HostPort>,
-    token: Option<Token>,
-    id: Option<ID>,
-    version: Option<Version>,
-
-    seen_transfer_encoding_chunked: bool,
-    seen_eos: bool,
+    buf: Buffer<{ Self::MAX_REQUEST_SIZE }>,
 }
 
 impl RequestReader {
     pub const BUFFER_SIZE: usize = Message::BYTESIZE - 1;
+    const MAX_REQUEST_SIZE: usize = 8192;
+    const MAX_HEADERS: usize = 32;
 
     pub const fn new() -> Self {
         Self {
-            lines: LineReader::new(),
-
-            seen_start_line: false,
-
-            host: None,
-            token: None,
-            id: None,
-            version: None,
-
-            seen_transfer_encoding_chunked: false,
-            seen_eos: false,
+            buf: Buffer::empty(),
         }
     }
 
     pub fn received(
         &mut self,
-        mut buf: Buffer<{ Self::BUFFER_SIZE }>,
+        buf: Buffer<{ Self::BUFFER_SIZE }>,
     ) -> Result<Completion<(Request, Buffer<{ Self::BUFFER_SIZE }>), ()>, RequestReaderError> {
-        buf.drain_front::<RequestReaderError>(|byte| {
-            let Done(line) = self.lines.push(byte)? else {
-                return Ok(Continue(()));
-            };
-
-            let line = HttpLine::parse(line.as_slice())?;
-
-            match line {
-                HttpLine::StartLine => self.seen_start_line = true,
-                HttpLine::HostPort(host) => self.host = Some(host),
-                HttpLine::Token(token) => self.token = Some(token),
-                HttpLine::ID(id) => self.id = Some(id),
-                HttpLine::Version(version) => self.version = Some(version),
-                HttpLine::TransferEncodingChunked => self.seen_transfer_encoding_chunked = true,
-                HttpLine::EndOfRequest => {
-                    self.seen_eos = true;
-                    return Ok(Break(()));
-                }
-                HttpLine::Other => {}
+        for &byte in buf.as_slice() {
+            if let PushResult::Full(_) = self.buf.push(byte) {
+                return Err(RequestReaderError::TooLarge);
             }
-
-            Ok(Continue(()))
-        })?;
-
-        if let Some(req) = self.try_finish() {
-            Ok(Done((req, buf)))
-        } else if self.seen_eos {
-            Err(RequestReaderError::Incomplete)
-        } else {
-            Ok(Pending(()))
         }
-    }
 
-    const fn try_finish(&self) -> Option<Request> {
-        if self.seen_start_line
-            && let Some(host) = self.host
-            && let Some(token) = self.token
-            && let Some(id) = self.id
-            && let Some(version) = self.version
-            && self.seen_transfer_encoding_chunked
-            && self.seen_eos
-        {
-            Some(Request {
-                host,
-                token,
-                id,
-                version,
-            })
-        } else {
-            None
-        }
+        let mut headers = [httparse::EMPTY_HEADER; Self::MAX_HEADERS];
+        let mut req = httparse::Request::new(&mut headers);
+        let httparse::Status::Complete(len) = req.parse(self.buf.as_slice())? else {
+            return Ok(Pending(()));
+        };
+
+        let request = parse_request(&req);
+        let leftover = self.buf.as_slice().get(len..).and_then(Buffer::from_slice);
+        self.buf.clear();
+
+        let request = request?;
+        let leftover = leftover.unwrap_or_else(|| {
+            unreachable!("headers end within the last received chunk, which fits into BUFFER_SIZE")
+        });
+        Ok(Done((request, leftover)))
     }
 }
 
@@ -109,54 +55,59 @@ impl Default for RequestReader {
     }
 }
 
-#[derive(Debug)]
-enum HttpLine {
-    StartLine,
-    HostPort(HostPort),
-    Token(Token),
-    ID(ID),
-    Version(Version),
-    TransferEncodingChunked,
-    EndOfRequest,
+fn parse_request(req: &httparse::Request<'_, '_>) -> Result<Request, RequestReaderError> {
+    use RequestReaderError::{
+        InvalidHost, InvalidID, InvalidStartLine, InvalidToken, InvalidVersion, MissingHeader,
+        NotChunked,
+    };
 
-    Other,
-}
+    if req.method != Some("POST") || req.path != Some("/") || req.version != Some(1) {
+        return Err(InvalidStartLine);
+    }
 
-impl HttpLine {
-    fn parse(line: &[u8]) -> Result<Self, RequestReaderError> {
-        use RequestReaderError::{InvalidHost, InvalidID, InvalidToken, InvalidVersion};
+    let mut host = None;
+    let mut token = None;
+    let mut id = None;
+    let mut version = None;
+    let mut chunked = false;
 
-        let line = core::str::from_utf8(line)?;
+    for header in req.headers.iter() {
+        let name = header.name;
+        let value = || core::str::from_utf8(header.value);
 
-        if line.as_bytes() == START_LINE {
-            Ok(Self::StartLine)
-        } else if let Some(host) = strip_prefix_ignore_ascii_case(line, HOST_PREFIX) {
-            let host = HostPort::new(host).map_err(InvalidHost)?;
-            Ok(Self::HostPort(host))
-        } else if let Some(value) = strip_prefix_ignore_ascii_case(line, TOKEN_PREFIX) {
-            let token = Token::new(value).map_err(InvalidToken)?;
-            Ok(Self::Token(token))
-        } else if let Some(value) = strip_prefix_ignore_ascii_case(line, ID_PREFIX) {
-            let id = ID::new(value).map_err(InvalidID)?;
-            Ok(Self::ID(id))
-        } else if let Some(version) = strip_prefix_ignore_ascii_case(line, VERSION_PREFIX) {
-            let version = Version::new(version).map_err(InvalidVersion)?;
-            Ok(Self::Version(version))
-        } else if strip_prefix_ignore_ascii_case(line, TRANSFER_ENCODING_CHUNKED_HEADER) == Some("")
-        {
-            Ok(Self::TransferEncodingChunked)
-        } else if line.is_empty() {
-            Ok(Self::EndOfRequest)
-        } else {
-            Ok(Self::Other)
+        if name.eq_ignore_ascii_case("Host") {
+            host = Some(HostPort::new(value()?).map_err(InvalidHost)?);
+        } else if name.eq_ignore_ascii_case("Token") {
+            token = Some(Token::new(value()?).map_err(InvalidToken)?);
+        } else if name.eq_ignore_ascii_case("ID") {
+            id = Some(ID::new(value()?).map_err(InvalidID)?);
+        } else if name.eq_ignore_ascii_case("Version") {
+            version = Some(Version::new(value()?).map_err(InvalidVersion)?);
+        } else if name.eq_ignore_ascii_case("Transfer-Encoding") {
+            chunked = header.value.eq_ignore_ascii_case(b"chunked");
         }
     }
+
+    if !chunked {
+        return Err(NotChunked);
+    }
+
+    Ok(Request {
+        host: host.ok_or(MissingHeader("Host"))?,
+        token: token.ok_or(MissingHeader("Token"))?,
+        id: id.ok_or(MissingHeader("ID"))?,
+        version: version.ok_or(MissingHeader("Version"))?,
+    })
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum RequestReaderError {
-    #[error("{0}")]
-    Line(#[from] LineReaderError),
+    #[error("malformed HTTP request: {0}")]
+    Parse(#[from] httparse::Error),
+    #[error("HTTP request exceeds {} bytes", RequestReader::MAX_REQUEST_SIZE)]
+    TooLarge,
+    #[error("unexpected start line, expected POST / HTTP/1.1")]
+    InvalidStartLine,
     #[error("non-utf8 header: {0}")]
     NonUtf8(#[from] Utf8Error),
     #[error("malformed host: {0}")]
@@ -167,18 +118,21 @@ pub enum RequestReaderError {
     InvalidID(NonEmptyInlineStringError),
     #[error("malformed version: {0}")]
     InvalidVersion(NonEmptyInlineStringError),
-    #[error("got EOS but no complete Request")]
-    Incomplete,
+    #[error("missing {0} header")]
+    MissingHeader(&'static str),
+    #[error("request is not Transfer-Encoding: chunked")]
+    NotChunked,
 }
 
 #[cfg(test)]
 mod tests {
     use super::{RequestReader, RequestReaderError};
     use crate::{
-        Buffer, HostPort, ID, Request, Token, Version,
+        Buffer, HostPort, ID, NonEmptyInlineStringError, Request, Token, Version,
         prelude::*,
         test_helpers::{as_chunks_with_guaranteed_trailer, buffer},
     };
+    use core::assert_matches;
 
     const REQ: Request = Request {
         host: HostPort::const_new("localhost:8443"),
@@ -233,16 +187,34 @@ Accept-Encoding: gzip\r\n\
         let bytes = REQUEST.replace("Transfer-Encoding: chunked\r\n", "Content-Length: 5\r\n");
         assert_eq!(
             read_all(bytes.as_bytes()),
-            Err(RequestReaderError::Incomplete)
+            Err(RequestReaderError::NotChunked)
+        );
+    }
+
+    #[test]
+    fn test_missing_header() {
+        let bytes = REQUEST.replace("Id: test-client\r\n", "");
+        assert_eq!(
+            read_all(bytes.as_bytes()),
+            Err(RequestReaderError::MissingHeader("ID"))
+        );
+    }
+
+    #[test]
+    fn test_invalid_start_line() {
+        let bytes = REQUEST.replace("POST / HTTP/1.1", "GET / HTTP/1.1");
+        assert_eq!(
+            read_all(bytes.as_bytes()),
+            Err(RequestReaderError::InvalidStartLine)
         );
     }
 
     #[test]
     fn test_err() {
         let mut reader = RequestReader::new();
-        assert_eq!(
+        assert_matches!(
             reader.received(buffer(b"boo\r\n\r\n")),
-            Err(RequestReaderError::Incomplete)
+            Err(RequestReaderError::Parse(_))
         );
     }
 
@@ -261,7 +233,25 @@ Accept-Encoding: gzip\r\n\
         let bytes = REQUEST.replace("Token: sekret", &format!("Token: {}", "a".repeat(300)));
         assert_eq!(
             read_all(bytes.as_bytes()),
-            Err(RequestReaderError::Incomplete)
+            Err(RequestReaderError::InvalidToken(
+                NonEmptyInlineStringError::TooLong
+            ))
         );
+    }
+
+    #[test]
+    fn test_too_large() {
+        let bytes = REQUEST.replacen(
+            "\r\n\r\n",
+            &format!("\r\nX-Long: {}\r\n\r\n", "a".repeat(RequestReader::MAX_REQUEST_SIZE)),
+            1,
+        );
+        let (chunks, _trailer) =
+            as_chunks_with_guaranteed_trailer::<{ RequestReader::BUFFER_SIZE }>(bytes.as_bytes());
+        let mut reader = RequestReader::new();
+        let res = chunks
+            .map(|buf| reader.received(buf))
+            .find(Result::is_err);
+        assert_eq!(res, Some(Err(RequestReaderError::TooLarge)));
     }
 }

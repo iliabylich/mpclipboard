@@ -33,8 +33,6 @@ pub use config::{
 };
 
 mod array_writer;
-mod line_reader;
-pub use line_reader::LineReaderError;
 
 mod request;
 mod request_reader;
@@ -73,13 +71,6 @@ pub type ID = NonEmptyInlineString<MAX_ID_LENGTH>;
 const MAX_VERSION_LENGTH: usize = 50;
 pub type Version = NonEmptyInlineString<MAX_VERSION_LENGTH>;
 
-pub(crate) const START_LINE: &[u8; 15] = b"POST / HTTP/1.1";
-pub(crate) const HOST_PREFIX: &[u8; 6] = b"Host: ";
-pub(crate) const TOKEN_PREFIX: &[u8; 7] = b"Token: ";
-pub(crate) const ID_PREFIX: &[u8; 4] = b"ID: ";
-pub(crate) const VERSION_PREFIX: &[u8; 9] = b"Version: ";
-pub(crate) const TRANSFER_ENCODING_CHUNKED_HEADER: &[u8; 26] = b"Transfer-Encoding: chunked";
-
 mod non_empty_inline_string;
 pub use non_empty_inline_string::{NonEmptyInlineString, NonEmptyInlineStringError};
 
@@ -103,15 +94,6 @@ pub use store::Store;
 
 mod url;
 pub use url::{Url, UrlParseError};
-
-pub(crate) fn strip_prefix_ignore_ascii_case<'a>(line: &'a str, prefix: &[u8]) -> Option<&'a str> {
-    let (pre, post) = line.split_at_checked(prefix.len())?;
-    if pre.as_bytes().eq_ignore_ascii_case(prefix) {
-        Some(post)
-    } else {
-        None
-    }
-}
 
 mod completion;
 pub use completion::Completion;
