@@ -2,7 +2,7 @@
 
 A simple client that:
 
-1. implements communication over TCP using `generic-client` and FFI
+1. implements communication over HTTP/3 using `generic-client` and FFI
 2. integrates with macOS clipboard to read/write clipboard text
 3. shows a tray icon with last 5 clips
 4. shows a system notification every time a new text is received
@@ -12,7 +12,7 @@ A simple client that:
 If you have your server up and running, make sure to create a config in `~/.config/mpclipboard/config.toml`:
 
 ```toml
-url = "http://host:80" # or "https://host:443" if you use SSL
+url = "https://host:443" # must be https, clients talk HTTP/3
 token = "s3cr3t"
 id = "macos-client"
 ```
