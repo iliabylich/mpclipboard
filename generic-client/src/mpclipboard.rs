@@ -1,10 +1,9 @@
 use crate::{
     Output,
     config::{Config, ConfigError},
-    connection::Connection,
+    connection::{Connection, QuicConfigError},
     event_loop::{EventLoop, EventLoopResult},
     logger::Logger,
-    tls::TLS,
 };
 use mpclipboard_shared::{EventLoopWithTimerError, Message, NonEmptyInlineString, Store};
 use std::{
@@ -24,20 +23,18 @@ impl MPClipboard {
     fn init_once() {
         static INIT: Once = Once::new();
 
-        INIT.call_once(|| {
-            Logger::init();
-            TLS::init();
-        });
+        INIT.call_once(Logger::init);
     }
 
     fn new(config: Config) -> Result<Self, MPClipboardError> {
         log::info!("Running with config {config:?}");
         let event_loop = EventLoop::new()?;
+        let conn = Connection::new()?;
 
         let mut this = Self {
             event_loop,
             now: 0,
-            conn: Connection::new(),
+            conn,
             store: Store::empty(),
             config,
         };
@@ -46,8 +43,10 @@ impl MPClipboard {
     }
 
     fn sync_event_loop(&mut self) -> Result<(), MPClipboardError> {
+        self.conn.flush(self.now);
+        let deadline = self.conn.time_until_next_timer();
         let wants = self.conn.wants();
-        self.event_loop.sync(wants)?;
+        self.event_loop.sync(wants, deadline)?;
         Ok(())
     }
 
@@ -108,9 +107,11 @@ impl MPClipboard {
             }
 
             if fd.writable && !self.conn.is_disconnected() {
-                self.conn.on_writable(self.now, &self.config);
+                self.conn.on_writable(self.now);
             }
         }
+
+        self.conn.process_expired_timers(self.now);
 
         out
     }
@@ -129,7 +130,7 @@ impl MPClipboard {
             return Ok(false);
         }
 
-        let pushed = self.conn.push(message);
+        let pushed = self.conn.push(message, self.now);
         self.sync_event_loop()?;
 
         Ok(pushed)
@@ -154,4 +155,6 @@ pub enum MPClipboardError {
     ConfigError(#[from] ConfigError),
     #[error("event loop error: {0}")]
     EventLoopError(#[from] EventLoopWithTimerError),
+    #[error("QUIC config error: {0}")]
+    QuicConfigError(#[from] QuicConfigError),
 }

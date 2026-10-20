@@ -1,5 +1,6 @@
 use crate::event_loop::Epoch;
 use crate::{Connectivity, config::Config};
+use core::time::Duration;
 use mpclipboard_shared::{Message, Wants, prelude::*};
 use rustix::fd::BorrowedFd;
 
@@ -7,25 +8,28 @@ mod actions;
 
 mod error;
 
-mod maybe_tls_stream;
+mod http3_connection;
 
-mod std_read_write_fd;
+mod quic_config;
+use quic_config::QuicConfig;
+pub use quic_config::QuicConfigError;
 
 mod state;
-use state::{DisconnectedState, Readable, State, TcpState};
+use state::{DisconnectedState, Readable, State};
 
-#[derive(Debug)]
 pub(crate) struct Connection {
     epoch: Epoch,
     state: State,
+    quic_config: QuicConfig,
 }
 
 impl Connection {
-    pub(crate) const fn new() -> Self {
-        Self {
-            epoch: Epoch::new(),
+    pub(crate) fn new() -> Result<Self, QuicConfigError> {
+        Ok(Self {
+            epoch: Epoch::ZERO,
             state: State::Disconnected(DisconnectedState::new(None)),
-        }
+            quic_config: QuicConfig::new()?,
+        })
     }
 
     pub(crate) fn disconnect(&mut self, now: u64) {
@@ -38,31 +42,24 @@ impl Connection {
     }
 
     pub(crate) const fn is_disconnected(&self) -> bool {
-        matches!(self.state, State::Disconnected { .. })
+        matches!(self.state, State::Disconnected { .. } | State::Stopped)
     }
 
     pub(crate) fn tick(&mut self, now: u64, config: &Config) {
-        if let Some(next) = self.state.tick(now, config) {
+        if let Some(next) = self.state.tick(now, config, &self.quic_config) {
             self.state = next;
             self.epoch.bump();
         }
     }
 
-    pub(crate) fn push(&mut self, message: Message) -> bool {
-        let State::Tcp { state: active, .. } = &mut self.state else {
-            return false;
-        };
-        let TcpState::Connected(_reader, writer) = active else {
-            return false;
-        };
-        writer.push(&message);
-        true
+    pub(crate) fn push(&mut self, message: Message, now: u64) -> bool {
+        self.state.push(&message, now)
     }
 
     pub(crate) fn on_readable(&mut self, now: u64, config: &Config) -> Option<Message> {
         log::trace!("{self:?} reading...");
 
-        match self.state.on_readable(now, config) {
+        match self.state.on_readable(now, config, &self.quic_config) {
             Ok(Done(Readable::NextState(next))) => {
                 self.state = next;
                 self.epoch.bump();
@@ -78,17 +75,44 @@ impl Connection {
         }
     }
 
-    pub(crate) fn on_writable(&mut self, now: u64, config: &Config) {
+    pub(crate) fn on_writable(&mut self, now: u64) {
         log::trace!("{self:?} writing...");
 
-        if let Err(err) = self.state.on_writable(now, config) {
+        if let Err(err) = self.state.on_writable(now) {
             log::error!("{err}");
             self.disconnect(now);
         }
     }
 
+    pub(crate) fn process_expired_timers(&mut self, now: u64) {
+        if let Err(err) = self.state.process_expired_timers() {
+            log::error!("{err}");
+            self.disconnect(now);
+        }
+    }
+
+    pub(crate) fn flush(&mut self, now: u64) {
+        if let Err(err) = self.state.flush() {
+            log::error!("{err}");
+            self.disconnect(now);
+        }
+    }
+
+    pub(crate) fn time_until_next_timer(&mut self) -> Option<Duration> {
+        self.state.time_until_next_timer()
+    }
+
     pub(crate) fn wants(&mut self) -> Option<(BorrowedFd<'_>, Epoch, Wants)> {
         let (fd, wants) = self.state.wants()?;
         Some((fd, self.epoch, wants))
+    }
+}
+
+impl core::fmt::Debug for Connection {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Connection")
+            .field("epoch", &self.epoch)
+            .field("state", &self.state)
+            .finish_non_exhaustive()
     }
 }

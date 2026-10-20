@@ -40,11 +40,30 @@ impl Message {
 
         buf
     }
+}
 
-    pub(crate) fn decode(buf: &[u8; Self::BYTESIZE]) -> Result<Self, MessageError> {
+#[must_use]
+#[expect(clippy::large_enum_variant)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Frame {
+    Message(Message),
+    Heartbeat,
+}
+
+impl Frame {
+    pub(crate) fn encode(&self) -> [u8; Message::BYTESIZE] {
+        match self {
+            Self::Message(message) => message.encode(),
+            Self::Heartbeat => [0; Message::BYTESIZE],
+        }
+    }
+
+    pub(crate) fn decode(buf: &[u8; Message::BYTESIZE]) -> Result<Self, MessageError> {
         let [len, text @ ..] = buf;
 
-        let len = NonZeroUsize::new(usize::from(*len)).ok_or(MessageError::Empty)?;
+        let Some(len) = NonZeroUsize::new(usize::from(*len)) else {
+            return Ok(Self::Heartbeat);
+        };
         let text = text
             .get(..len.get())
             .unwrap_or_else(|| unreachable!("len is a u8, so it never exceeds MAX_TEXT_LEN"));
@@ -52,7 +71,7 @@ impl Message {
         let string = NonEmptyInlineString::new(text)
             .unwrap_or_else(|_| unreachable!("text is non-empty and never exceeds MAX_TEXT_LEN"));
 
-        Ok(Self { string })
+        Ok(Self::Message(Message { string }))
     }
 }
 
@@ -64,8 +83,6 @@ impl core::fmt::Debug for Message {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum MessageError {
-    #[error("malformed message length")]
-    Empty,
     #[error("non-utf8 message text: {0}")]
     NonUtf8(#[from] Utf8Error),
 }
@@ -79,18 +96,23 @@ mod tests {
 
     #[test]
     fn test_encode_decode() {
-        let text = Message::new(S::const_new("aaaaaaaaaa"));
-        assert_eq!(Message::decode(&text.encode()), Ok(text));
+        let text = Frame::Message(Message::new(S::const_new("aaaaaaaaaa")));
+        assert_eq!(Frame::decode(&text.encode()), Ok(text));
+    }
+
+    #[test]
+    fn test_heartbeat() {
+        assert_eq!(Frame::Heartbeat.encode(), [0; Message::BYTESIZE]);
+        assert_eq!(
+            Frame::decode(&Frame::Heartbeat.encode()),
+            Ok(Frame::Heartbeat)
+        );
     }
 
     #[test]
     fn test_decode_invalid() {
-        assert_eq!(
-            Message::decode(&[0; Message::BYTESIZE]),
-            Err(MessageError::Empty)
-        );
         assert_matches!(
-            Message::decode(&[b'\xC8'; Message::BYTESIZE]),
+            Frame::decode(&[b'\xC8'; Message::BYTESIZE]),
             Err(MessageError::NonUtf8(_))
         );
     }

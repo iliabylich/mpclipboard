@@ -2,15 +2,15 @@ use crate::{
     client::Client,
     config::Config,
     fd_set::{FdSet, fd_from_key, key},
-    pre_sink::PreSink,
+    pre_sink::{PreSink, Verdict},
     pre_source::PreSource,
     tcp_listener::TcpListener,
     url_ext::UrlExt,
 };
 use anyhow::Result;
 use mpclipboard_shared::{
-    EventLoopFdResult, EventLoopWithTimer, ID, Message, PROTOCOL_VERSION, Store, UpgradeRequest,
-    Wants, enable_tcp_keep_alive, prelude::*,
+    EventLoopFdResult, EventLoopWithTimer, ID, Message, PROTOCOL_VERSION, Request, Store, Wants,
+    prelude::*,
 };
 use std::{collections::HashMap, os::fd::AsRawFd};
 
@@ -122,22 +122,25 @@ impl MainLoop {
             Err(err) => log::error!("{err:?}"),
             Ok(Pending(source)) => self.pre_sources.insert(source),
             Ok(Done((
-                UpgradeRequest {
+                Request {
                     token, id, version, ..
                 },
+                leftover,
                 fd,
             ))) => {
-                if token != self.config.token {
-                    log::info!("[{id}] invalid token={token:?}");
-                    return;
-                }
-
                 if version != PROTOCOL_VERSION {
                     log::info!("[{id}] bad version: given={version}, expected={PROTOCOL_VERSION}");
                     return;
                 }
 
-                let sink = match PreSink::new(fd, id, self.now) {
+                let verdict = if token == self.config.token {
+                    Verdict::Accepted { id, leftover }
+                } else {
+                    log::info!("[{id}] invalid token={token:?}");
+                    Verdict::Unauthorized { id }
+                };
+
+                let sink = match PreSink::new(fd, verdict, self.now) {
                     Ok(sink) => sink,
                     Err(err) => {
                         log::error!("{err:?}");
@@ -154,14 +157,11 @@ impl MainLoop {
         match sink.on_poll_event(revents) {
             Err(err) => log::error!("{err:?}"),
             Ok(Pending(sink)) => self.pre_sinks.insert(sink),
-            Ok(Done((id, fd))) => {
-                log::trace!("[{id}] Configuring TCP keepalive");
-                if let Err(err) = enable_tcp_keep_alive(&fd) {
-                    log::error!("[{id}] {err}");
-                    return;
-                }
-
-                let mut client = match Client::new(fd, id) {
+            Ok(Done((Verdict::Unauthorized { id }, _fd))) => {
+                log::info!("[{id}] rejected as unauthorized");
+            }
+            Ok(Done((Verdict::Accepted { id, leftover }, fd))) => {
+                let mut client = match Client::new(fd, id, &leftover) {
                     Ok(client) => client,
                     Err(err) => {
                         log::error!("{err:?}");

@@ -12,12 +12,14 @@
 #![warn(clippy::std_instead_of_alloc)]
 #![warn(clippy::std_instead_of_core)]
 #![allow(clippy::redundant_pub_crate)]
+#![cfg_attr(test, allow(clippy::unwrap_used))]
 
 use anyhow::Result;
 
 mod config;
 use config::Config;
 
+mod chunked_decoder;
 mod client;
 mod fd_set;
 mod pre_sink;

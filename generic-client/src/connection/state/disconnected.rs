@@ -3,34 +3,29 @@ use crate::{
     config::Config,
     connection::{
         error::ConnectionError,
-        state::{DnsState, FREEZE_TIME_IN_SECS, State, TcpState},
+        quic_config::QuicConfig,
+        state::{DnsState, FREEZE_TIME_IN_SECS, Http3, State},
     },
 };
 use core::net::{Ipv4Addr, SocketAddr};
-use mpclipboard_shared::Wants;
-use rustix::fd::BorrowedFd;
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct DisconnectedState(Option<u64>);
 
 impl DisconnectedState {
+    pub(crate) const NAME: &str = "Disconnected";
+    pub(crate) const CONNECTIVITY: Connectivity = Connectivity::Disconnected;
+
     pub(crate) const fn new(disconnected_at: Option<u64>) -> Self {
         Self(disconnected_at)
     }
 
-    pub(crate) const fn name() -> &'static str {
-        "Disconnected"
-    }
-
-    pub(crate) const fn connectivity() -> Connectivity {
-        Connectivity::Disconnected
-    }
-
-    pub(crate) const fn wants() -> Option<(BorrowedFd<'static>, Wants)> {
-        None
-    }
-
-    pub(crate) fn tick(&self, now: u64, config: &Config) -> Result<Option<State>, ConnectionError> {
+    pub(crate) fn tick(
+        &self,
+        now: u64,
+        config: &Config,
+        quic_config: &QuicConfig,
+    ) -> Result<Option<State>, ConnectionError> {
         if let Some(disconnected_at) = self.0 {
             let seconds_passed = now
                 .checked_sub(disconnected_at)
@@ -41,14 +36,19 @@ impl DisconnectedState {
             }
         }
 
-        let state = Self::reconnect(now, config)?;
+        let state = Self::reconnect(now, config, quic_config)?;
         Ok(Some(state))
     }
 
-    fn reconnect(now: u64, config: &Config) -> Result<State, ConnectionError> {
+    fn reconnect(
+        now: u64,
+        config: &Config,
+        quic_config: &QuicConfig,
+    ) -> Result<State, ConnectionError> {
         if let Ok(ip) = config.url.host().parse::<Ipv4Addr>() {
             let addr = SocketAddr::from((ip, config.url.port()));
-            TcpState::connect(now, addr, config)
+            let state = Http3::connect(now, addr, config, quic_config)?;
+            Ok(State::Http3(state))
         } else {
             let state = DnsState::start(now, config)?;
             Ok(State::Dns(state))

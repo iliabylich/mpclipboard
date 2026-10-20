@@ -1,6 +1,6 @@
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use crate::Timerfd;
 use crate::Wants;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use crate::{Timerfd, timerfd::OneshotTimerfd};
 use alloc::rc::Rc;
 use core::time::Duration;
 use polling::{Event, Events, PollMode, Poller};
@@ -14,15 +14,20 @@ pub struct EventLoopWithTimer {
     events: Events,
     #[cfg(any(target_os = "linux", target_os = "android"))]
     timer: Timerfd,
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    deadline: OneshotTimerfd,
     #[cfg(target_os = "macos")]
     time: u64,
+    #[cfg(target_os = "macos")]
+    deadline_registered: bool,
 }
 
 impl EventLoopWithTimer {
     const TIMER_KEY: usize = usize::MAX - 1;
     #[cfg(target_os = "macos")]
     const INITIAL_TIMER_KEY: usize = usize::MAX - 2;
-    const FIRST_RESERVED_KEY: usize = usize::MAX - 2;
+    const DEADLINE_KEY: usize = usize::MAX - 3;
+    const FIRST_RESERVED_KEY: usize = usize::MAX - 3;
 
     pub fn new() -> Result<Self, EventLoopWithTimerError> {
         let poller = Poller::new().map_err(EventLoopWithTimerError::Create)?;
@@ -35,10 +40,21 @@ impl EventLoopWithTimer {
             }
             .map_err(EventLoopWithTimerError::AddTimer)?;
 
+            let deadline = OneshotTimerfd::new().map_err(EventLoopWithTimerError::CreateTimer)?;
+            unsafe {
+                poller.add_with_mode(
+                    &deadline,
+                    Event::readable(Self::DEADLINE_KEY),
+                    PollMode::Level,
+                )
+            }
+            .map_err(EventLoopWithTimerError::AddTimer)?;
+
             Self {
                 poller: Rc::new(poller),
                 events: Events::new(),
                 timer,
+                deadline,
             }
         };
 
@@ -66,6 +82,7 @@ impl EventLoopWithTimer {
                 poller: Rc::new(poller),
                 events: Events::new(),
                 time: 0,
+                deadline_registered: false,
             }
         };
 
@@ -121,6 +138,55 @@ impl EventLoopWithTimer {
         Ok(())
     }
 
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    pub fn set_deadline(
+        &mut self,
+        timeout: Option<Duration>,
+    ) -> Result<(), EventLoopWithTimerError> {
+        self.deadline
+            .set(timeout)
+            .map_err(EventLoopWithTimerError::SetDeadline)?;
+        Ok(())
+    }
+
+    #[cfg(target_os = "macos")]
+    pub fn set_deadline(
+        &mut self,
+        timeout: Option<Duration>,
+    ) -> Result<(), EventLoopWithTimerError> {
+        use polling::os::kqueue::{PollerKqueueExt, Timer};
+
+        match (timeout, self.deadline_registered) {
+            (Some(timeout), registered) => {
+                let timer = Timer {
+                    id: Self::DEADLINE_KEY,
+                    timeout: timeout.max(Duration::from_nanos(1)),
+                };
+                if registered {
+                    self.poller
+                        .modify_filter(timer, Self::DEADLINE_KEY, PollMode::Oneshot)
+                } else {
+                    self.poller
+                        .add_filter(timer, Self::DEADLINE_KEY, PollMode::Oneshot)
+                }
+                .map_err(EventLoopWithTimerError::SetDeadline)?;
+                self.deadline_registered = true;
+            }
+            (None, true) => {
+                let timer = Timer {
+                    id: Self::DEADLINE_KEY,
+                    timeout: Duration::ZERO,
+                };
+                self.poller
+                    .delete_filter(timer)
+                    .map_err(EventLoopWithTimerError::SetDeadline)?;
+                self.deadline_registered = false;
+            }
+            (None, false) => {}
+        }
+        Ok(())
+    }
+
     pub fn wait(
         &mut self,
         timeout: Option<Duration>,
@@ -141,6 +207,13 @@ impl EventLoopWithTimer {
                         .read()
                         .map_err(EventLoopWithTimerError::ReadTimer)?;
                     time = Some(now);
+                }
+
+                #[cfg(any(target_os = "linux", target_os = "android"))]
+                Self::DEADLINE_KEY => {
+                    self.deadline
+                        .clear()
+                        .map_err(EventLoopWithTimerError::ReadTimer)?;
                 }
 
                 #[cfg(target_os = "macos")]
@@ -185,6 +258,7 @@ impl EventLoopWithTimer {
 impl Drop for EventLoopWithTimer {
     fn drop(&mut self) {
         let _ = self.poller.delete(self.timer.as_fd());
+        let _ = self.poller.delete(self.deadline.as_fd());
     }
 }
 
@@ -272,6 +346,12 @@ pub enum EventLoopWithTimerError {
     AddTimer(std::io::Error),
     #[error("failed to read timer: {0:?}")]
     ReadTimer(Errno),
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[error("failed to set deadline: {0:?}")]
+    SetDeadline(Errno),
+    #[cfg(target_os = "macos")]
+    #[error("failed to set deadline: {0}")]
+    SetDeadline(std::io::Error),
     #[error("key {0} is reserved for timers")]
     ReservedKey(usize),
     #[error("failed to register fd: {0}")]

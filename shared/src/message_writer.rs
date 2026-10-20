@@ -1,4 +1,7 @@
-use crate::{Buffer, Wants, message::Message};
+use crate::{
+    Buffer, Wants,
+    message::{Frame, Message},
+};
 use core::num::NonZeroUsize;
 
 #[must_use]
@@ -65,6 +68,15 @@ impl MessageWriter {
         }
     }
 
+    pub fn push_heartbeat(&mut self) {
+        if matches!(self, Self::Empty) {
+            *self = Self::Some {
+                current: Buffer::new(Frame::Heartbeat.encode()),
+                next: None,
+            };
+        }
+    }
+
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.remainder().is_none()
@@ -97,7 +109,7 @@ pub enum MessageWriterError {
 #[cfg(test)]
 mod tests {
     use super::{MessageWriter, MessageWriterError};
-    use crate::{Message, NonEmptyInlineString, test_helpers::non_zero_usize};
+    use crate::{Message, NonEmptyInlineString, message::Frame, test_helpers::non_zero_usize};
 
     #[test]
     fn test_single() {
@@ -131,6 +143,24 @@ mod tests {
         assert_eq!(writer.remainder(), Some(msg1.encode().as_slice()));
         assert_eq!(writer.written(non_zero_usize(Message::BYTESIZE)), Ok(()));
         assert_eq!(writer.remainder(), Some(msg3.encode().as_slice()));
+    }
+
+    #[test]
+    fn test_heartbeat() {
+        let mut writer = MessageWriter::new();
+        writer.push_heartbeat();
+        assert_eq!(
+            writer.remainder(),
+            Some(Frame::Heartbeat.encode().as_slice())
+        );
+
+        let msg = Message::new(NonEmptyInlineString::const_new("msg"));
+        writer.push(&msg);
+        writer.push_heartbeat();
+        assert_eq!(writer.written(non_zero_usize(Message::BYTESIZE)), Ok(()));
+        assert_eq!(writer.remainder(), Some(msg.encode().as_slice()));
+        assert_eq!(writer.written(non_zero_usize(Message::BYTESIZE)), Ok(()));
+        assert_eq!(writer.remainder(), None);
     }
 
     #[test]

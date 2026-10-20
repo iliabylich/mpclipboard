@@ -1,22 +1,35 @@
+use crate::chunked_decoder::ChunkedDecoder;
 use anyhow::{Context, Result, ensure};
 use mpclipboard_shared::{
-    EventLoopFdResult, ID, Message, MessageReader, MessageWriter, RegisteredFd, Wants, prelude::*,
+    Buffer, EventLoopFdResult, ID, Message, MessageReader, MessageWriter, RegisteredFd,
+    RequestReader, Wants, prelude::*,
 };
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd};
 
 pub struct Client {
     fd: RegisteredFd,
     id: ID,
+    decoder: ChunkedDecoder,
     reader: MessageReader,
     writer: MessageWriter,
 }
 
 impl Client {
-    pub(crate) fn new(fd: RegisteredFd, id: ID) -> Result<Self> {
+    pub(crate) fn new(
+        fd: RegisteredFd,
+        id: ID,
+        leftover: &Buffer<{ RequestReader::BUFFER_SIZE }>,
+    ) -> Result<Self> {
+        let mut decoder = ChunkedDecoder::new();
+        let partial = decoder
+            .decode(*leftover)
+            .with_context(|| format!("[{id}] failed to decode leftover"))?;
+
         let this = Self {
             fd,
             id,
-            reader: MessageReader::empty(),
+            decoder,
+            reader: MessageReader::new(partial),
             writer: MessageWriter::new(),
         };
         this.sync_wants()?;
@@ -68,11 +81,12 @@ impl Client {
     }
 
     fn read(&mut self) -> Result<Completion<Message, ()>> {
-        let Done(buf) = mpclipboard_shared::io::read(&self.fd)? else {
+        let Done(buf) = mpclipboard_shared::io::read::<{ Message::BYTESIZE }>(&self.fd)? else {
             return Ok(Pending(()));
         };
 
-        let received = self.reader.received(buf)?;
+        let buf = self.decoder.decode(buf)?;
+        let received = self.reader.received(buf.as_slice())?;
         Ok(received)
     }
 

@@ -1,7 +1,6 @@
 use crate::{
-    Buffer, CONNECTION_UPGRADE_HEADER, HOST_PREFIX, HostPort, ID, ID_PREFIX, Message,
-    NonEmptyInlineStringError, START_LINE, TOKEN_PREFIX, Token, UPGRADE_MPCLIPBOARD_RAW_HEADER,
-    UpgradeRequest, VERSION_PREFIX, Version,
+    Buffer, HOST_PREFIX, HostPort, ID, ID_PREFIX, Message, NonEmptyInlineStringError, Request,
+    START_LINE, TOKEN_PREFIX, TRANSFER_ENCODING_CHUNKED_HEADER, Token, VERSION_PREFIX, Version,
     line_reader::{LineReader, LineReaderError},
     prelude::*,
     strip_prefix_ignore_ascii_case,
@@ -11,10 +10,9 @@ use core::{
     str::Utf8Error,
 };
 
-#[expect(clippy::struct_excessive_bools)]
 #[must_use]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct UpgradeRequestReader {
+pub struct RequestReader {
     lines: LineReader<{ Self::BUFFER_SIZE }>,
 
     seen_start_line: bool,
@@ -24,12 +22,11 @@ pub struct UpgradeRequestReader {
     id: Option<ID>,
     version: Option<Version>,
 
-    seen_connection_upgrade: bool,
-    seen_upgrade_mpclipboard_raw: bool,
+    seen_transfer_encoding_chunked: bool,
     seen_eos: bool,
 }
 
-impl UpgradeRequestReader {
+impl RequestReader {
     pub const BUFFER_SIZE: usize = Message::BYTESIZE - 1;
 
     pub const fn new() -> Self {
@@ -43,8 +40,7 @@ impl UpgradeRequestReader {
             id: None,
             version: None,
 
-            seen_connection_upgrade: false,
-            seen_upgrade_mpclipboard_raw: false,
+            seen_transfer_encoding_chunked: false,
             seen_eos: false,
         }
     }
@@ -52,8 +48,8 @@ impl UpgradeRequestReader {
     pub fn received(
         &mut self,
         mut buf: Buffer<{ Self::BUFFER_SIZE }>,
-    ) -> Result<Completion<UpgradeRequest, ()>, UpgradeRequestReaderError> {
-        buf.drain_front::<UpgradeRequestReaderError>(|byte| {
+    ) -> Result<Completion<(Request, Buffer<{ Self::BUFFER_SIZE }>), ()>, RequestReaderError> {
+        buf.drain_front::<RequestReaderError>(|byte| {
             let Done(line) = self.lines.push(byte)? else {
                 return Ok(Continue(()));
             };
@@ -66,8 +62,7 @@ impl UpgradeRequestReader {
                 HttpLine::Token(token) => self.token = Some(token),
                 HttpLine::ID(id) => self.id = Some(id),
                 HttpLine::Version(version) => self.version = Some(version),
-                HttpLine::ConnectionUpgrade => self.seen_connection_upgrade = true,
-                HttpLine::UpgradeMPClipboardRaw => self.seen_upgrade_mpclipboard_raw = true,
+                HttpLine::TransferEncodingChunked => self.seen_transfer_encoding_chunked = true,
                 HttpLine::EndOfRequest => {
                     self.seen_eos = true;
                     return Ok(Break(()));
@@ -78,30 +73,25 @@ impl UpgradeRequestReader {
             Ok(Continue(()))
         })?;
 
-        if !buf.as_slice().is_empty() {
-            return Err(UpgradeRequestReaderError::Leftover);
-        }
-
         if let Some(req) = self.try_finish() {
-            Ok(Done(req))
+            Ok(Done((req, buf)))
         } else if self.seen_eos {
-            Err(UpgradeRequestReaderError::Incomplete)
+            Err(RequestReaderError::Incomplete)
         } else {
             Ok(Pending(()))
         }
     }
 
-    const fn try_finish(&self) -> Option<UpgradeRequest> {
+    const fn try_finish(&self) -> Option<Request> {
         if self.seen_start_line
             && let Some(host) = self.host
             && let Some(token) = self.token
             && let Some(id) = self.id
             && let Some(version) = self.version
-            && self.seen_connection_upgrade
-            && self.seen_upgrade_mpclipboard_raw
+            && self.seen_transfer_encoding_chunked
             && self.seen_eos
         {
-            Some(UpgradeRequest {
+            Some(Request {
                 host,
                 token,
                 id,
@@ -113,7 +103,7 @@ impl UpgradeRequestReader {
     }
 }
 
-impl Default for UpgradeRequestReader {
+impl Default for RequestReader {
     fn default() -> Self {
         Self::new()
     }
@@ -126,16 +116,15 @@ enum HttpLine {
     Token(Token),
     ID(ID),
     Version(Version),
-    ConnectionUpgrade,
-    UpgradeMPClipboardRaw,
+    TransferEncodingChunked,
     EndOfRequest,
 
     Other,
 }
 
 impl HttpLine {
-    fn parse(line: &[u8]) -> Result<Self, UpgradeRequestReaderError> {
-        use UpgradeRequestReaderError::{InvalidHost, InvalidID, InvalidToken, InvalidVersion};
+    fn parse(line: &[u8]) -> Result<Self, RequestReaderError> {
+        use RequestReaderError::{InvalidHost, InvalidID, InvalidToken, InvalidVersion};
 
         let line = core::str::from_utf8(line)?;
 
@@ -153,10 +142,9 @@ impl HttpLine {
         } else if let Some(version) = strip_prefix_ignore_ascii_case(line, VERSION_PREFIX) {
             let version = Version::new(version).map_err(InvalidVersion)?;
             Ok(Self::Version(version))
-        } else if strip_prefix_ignore_ascii_case(line, CONNECTION_UPGRADE_HEADER) == Some("") {
-            Ok(Self::ConnectionUpgrade)
-        } else if strip_prefix_ignore_ascii_case(line, UPGRADE_MPCLIPBOARD_RAW_HEADER) == Some("") {
-            Ok(Self::UpgradeMPClipboardRaw)
+        } else if strip_prefix_ignore_ascii_case(line, TRANSFER_ENCODING_CHUNKED_HEADER) == Some("")
+        {
+            Ok(Self::TransferEncodingChunked)
         } else if line.is_empty() {
             Ok(Self::EndOfRequest)
         } else {
@@ -166,7 +154,7 @@ impl HttpLine {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
-pub enum UpgradeRequestReaderError {
+pub enum RequestReaderError {
     #[error("{0}")]
     Line(#[from] LineReaderError),
     #[error("non-utf8 header: {0}")]
@@ -179,37 +167,47 @@ pub enum UpgradeRequestReaderError {
     InvalidID(NonEmptyInlineStringError),
     #[error("malformed version: {0}")]
     InvalidVersion(NonEmptyInlineStringError),
-    #[error("got leftover in UpgradeRequestReader")]
-    Leftover,
-    #[error("got EOS but no complete UpgradeRequest")]
+    #[error("got EOS but no complete Request")]
     Incomplete,
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{UpgradeRequestReader, UpgradeRequestReaderError};
+    use super::{RequestReader, RequestReaderError};
     use crate::{
-        HostPort, ID, Token, UpgradeRequest, UpgradeRequestWriter, Version,
+        Buffer, HostPort, ID, Request, Token, Version,
         prelude::*,
         test_helpers::{as_chunks_with_guaranteed_trailer, buffer},
     };
 
-    const REQ: UpgradeRequest = UpgradeRequest {
-        host: HostPort::const_new("localhost:3000"),
+    const REQ: Request = Request {
+        host: HostPort::const_new("localhost:8443"),
         token: Token::const_new("sekret"),
         id: ID::const_new("test-client"),
         version: Version::const_new("1.2.3"),
     };
 
-    fn request() -> String {
-        String::from_utf8_lossy(UpgradeRequestWriter::new(REQ).remainder()).into_owned()
-    }
+    const REQUEST: &str = "POST / HTTP/1.1\r\n\
+Host: localhost:8443\r\n\
+User-Agent: mpclipboard\r\n\
+Transfer-Encoding: chunked\r\n\
+Id: test-client\r\n\
+Token: sekret\r\n\
+Version: 1.2.3\r\n\
+Via: 3.0 Caddy\r\n\
+X-Forwarded-For: 127.0.0.1\r\n\
+X-Forwarded-Host: localhost:8443\r\n\
+X-Forwarded-Proto: https\r\n\
+Accept-Encoding: gzip\r\n\
+\r\n";
 
-    fn read_all(bytes: &[u8]) -> Result<Completion<UpgradeRequest, ()>, UpgradeRequestReaderError> {
+    fn read_all(
+        bytes: &[u8],
+    ) -> Result<Completion<(Request, Buffer<{ RequestReader::BUFFER_SIZE }>), ()>, RequestReaderError>
+    {
         let (chunks, trailer) =
-            as_chunks_with_guaranteed_trailer::<{ UpgradeRequestReader::BUFFER_SIZE }>(bytes);
-
-        let mut reader = UpgradeRequestReader::new();
+            as_chunks_with_guaranteed_trailer::<{ RequestReader::BUFFER_SIZE }>(bytes);
+        let mut reader = RequestReader::new();
         for buf in chunks {
             assert_eq!(reader.received(buf), Ok(Pending(())));
         }
@@ -218,43 +216,52 @@ mod tests {
 
     #[test]
     fn test_no_leftover() {
-        assert_eq!(read_all(request().as_bytes()), Ok(Done(REQ)));
+        assert_eq!(
+            read_all(REQUEST.as_bytes()),
+            Ok(Done((REQ, Buffer::empty())))
+        );
     }
 
     #[test]
     fn test_leftover() {
-        let bytes = format!("{}abc", request());
+        let bytes = format!("{REQUEST}abc");
+        assert_eq!(read_all(bytes.as_bytes()), Ok(Done((REQ, buffer(b"abc")))));
+    }
+
+    #[test]
+    fn test_not_chunked() {
+        let bytes = REQUEST.replace("Transfer-Encoding: chunked\r\n", "Content-Length: 5\r\n");
         assert_eq!(
             read_all(bytes.as_bytes()),
-            Err(UpgradeRequestReaderError::Leftover)
+            Err(RequestReaderError::Incomplete)
         );
     }
 
     #[test]
     fn test_err() {
-        let mut reader = UpgradeRequestReader::new();
+        let mut reader = RequestReader::new();
         assert_eq!(
             reader.received(buffer(b"boo\r\n\r\n")),
-            Err(UpgradeRequestReaderError::Incomplete)
+            Err(RequestReaderError::Incomplete)
         );
     }
 
     #[test]
     fn test_long_unknown_header() {
-        let bytes = request().replacen(
+        let bytes = REQUEST.replacen(
             "\r\n\r\n",
             &format!("\r\nX-Long: {}\r\n\r\n", "a".repeat(300)),
             1,
         );
-        assert_eq!(read_all(bytes.as_bytes()), Ok(Done(REQ)));
+        assert_eq!(read_all(bytes.as_bytes()), Ok(Done((REQ, Buffer::empty()))));
     }
 
     #[test]
     fn test_long_known_header() {
-        let bytes = request().replace("Token: sekret", &format!("Token: {}", "a".repeat(300)));
+        let bytes = REQUEST.replace("Token: sekret", &format!("Token: {}", "a".repeat(300)));
         assert_eq!(
             read_all(bytes.as_bytes()),
-            Err(UpgradeRequestReaderError::Incomplete)
+            Err(RequestReaderError::Incomplete)
         );
     }
 }

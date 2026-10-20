@@ -36,21 +36,11 @@ mod array_writer;
 mod line_reader;
 pub use line_reader::LineReaderError;
 
-mod upgrade_request;
-mod upgrade_request_reader;
-mod upgrade_request_writer;
+mod request;
+mod request_reader;
 pub use self::{
-    upgrade_request::UpgradeRequest,
-    upgrade_request_reader::{UpgradeRequestReader, UpgradeRequestReaderError},
-    upgrade_request_writer::{UpgradeRequestWriter, UpgradeRequestWriterError},
-};
-
-mod upgrade_response;
-mod upgrade_response_reader;
-mod upgrade_response_writer;
-pub use self::{
-    upgrade_response_reader::{UpgradeResponseReader, UpgradeResponseReaderError},
-    upgrade_response_writer::{UpgradeResponseWriter, UpgradeResponseWriterError},
+    request::Request,
+    request_reader::{RequestReader, RequestReaderError},
 };
 
 mod message;
@@ -83,14 +73,12 @@ pub type ID = NonEmptyInlineString<MAX_ID_LENGTH>;
 const MAX_VERSION_LENGTH: usize = 50;
 pub type Version = NonEmptyInlineString<MAX_VERSION_LENGTH>;
 
-pub(crate) const START_LINE: &[u8; 14] = b"GET / HTTP/1.1";
+pub(crate) const START_LINE: &[u8; 15] = b"POST / HTTP/1.1";
 pub(crate) const HOST_PREFIX: &[u8; 6] = b"Host: ";
 pub(crate) const TOKEN_PREFIX: &[u8; 7] = b"Token: ";
 pub(crate) const ID_PREFIX: &[u8; 4] = b"ID: ";
 pub(crate) const VERSION_PREFIX: &[u8; 9] = b"Version: ";
-pub(crate) const CONNECTION_UPGRADE_HEADER: &[u8; 19] = b"Connection: Upgrade";
-pub(crate) const UPGRADE_MPCLIPBOARD_RAW_HEADER: &[u8; 24] = b"Upgrade: mpclipboard-raw";
-pub(crate) const CRLF: &[u8; 2] = b"\r\n";
+pub(crate) const TRANSFER_ENCODING_CHUNKED_HEADER: &[u8; 26] = b"Transfer-Encoding: chunked";
 
 mod non_empty_inline_string;
 pub use non_empty_inline_string::{NonEmptyInlineString, NonEmptyInlineStringError};
@@ -112,9 +100,6 @@ pub use revents::{REvents, REventsError};
 
 mod store;
 pub use store::Store;
-
-mod tcp_keep_alive;
-pub use tcp_keep_alive::{TcpKeepAliveError, enable_tcp_keep_alive};
 
 mod url;
 pub use url::{Url, UrlParseError};
@@ -140,4 +125,4 @@ pub mod prelude {
     pub use crate::Completion::{self, *};
 }
 
-pub const PROTOCOL_VERSION: Version = Version::const_new("3");
+pub const PROTOCOL_VERSION: Version = Version::const_new("5");

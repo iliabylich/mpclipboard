@@ -8,11 +8,6 @@ MPCLIPBOARD_ID = "poll-cli-client"
 [tasks.dev]
 depends = ["//generic-client:build:debug"]
 run = """
-    ldflags=""
-    if [[ "$(uname)" == "Darwin" ]]; then
-        ldflags="-framework Security -framework CoreFoundation"
-    fi
-
-    clang -fuse-ld=lld poll-cli.c ../generic-client/target/debug/libmpclipboard_generic_client.a $ldflags -o poll-cli
+    clang -fuse-ld=lld poll-cli.c ../generic-client/target/debug/libmpclipboard_generic_client.a -o poll-cli
     ./poll-cli
 """

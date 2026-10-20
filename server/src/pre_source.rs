@@ -1,13 +1,13 @@
 use crate::reaper::CanBeReaped;
 use anyhow::{Context, Result, ensure};
 use mpclipboard_shared::{
-    EventLoopFdResult, RegisteredFd, UpgradeRequest, UpgradeRequestReader, prelude::*,
+    Buffer, EventLoopFdResult, RegisteredFd, Request, RequestReader, prelude::*,
 };
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd};
 
 pub struct PreSource {
     fd: RegisteredFd,
-    reader: UpgradeRequestReader,
+    reader: RequestReader,
     created_at: u64,
 }
 
@@ -15,7 +15,7 @@ impl PreSource {
     pub(crate) const fn new(fd: RegisteredFd, now: u64) -> Self {
         Self {
             fd,
-            reader: UpgradeRequestReader::new(),
+            reader: RequestReader::new(),
             created_at: now,
         }
     }
@@ -23,25 +23,36 @@ impl PreSource {
     pub(crate) fn on_poll_event(
         mut self,
         revents: EventLoopFdResult,
-    ) -> Result<Completion<(UpgradeRequest, RegisteredFd), Self>> {
+    ) -> Result<
+        Completion<
+            (
+                Request,
+                Buffer<{ RequestReader::BUFFER_SIZE }>,
+                RegisteredFd,
+            ),
+            Self,
+        >,
+    > {
         ensure!(!revents.has_error, "[{self}] polling returned an error");
 
         if revents.readable {
             log::trace!("[{self}] is readable");
 
-            let Done(req) = self
+            let Done((req, leftover)) = self
                 .read()
                 .with_context(|| format!("[{self}] read() failed"))?
             else {
                 return Ok(Pending(self));
             };
-            return Ok(Done((req, self.fd)));
+            return Ok(Done((req, leftover, self.fd)));
         }
 
         Ok(Pending(self))
     }
 
-    fn read(&mut self) -> Result<Completion<UpgradeRequest, ()>> {
+    fn read(
+        &mut self,
+    ) -> Result<Completion<(Request, Buffer<{ RequestReader::BUFFER_SIZE }>), ()>> {
         let Done(buf) = mpclipboard_shared::io::read(&self.fd)? else {
             return Ok(Pending(()));
         };

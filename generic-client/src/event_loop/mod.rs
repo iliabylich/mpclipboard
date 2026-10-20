@@ -25,7 +25,7 @@ impl EventLoop {
 
         Ok(Self {
             inner,
-            fd: FdState::new(),
+            fd: FdState::None,
             registered: None,
         })
     }
@@ -33,7 +33,10 @@ impl EventLoop {
     pub(crate) fn sync(
         &mut self,
         wants: Option<(BorrowedFd<'_>, Epoch, Wants)>,
+        deadline: Option<Duration>,
     ) -> Result<(), EventLoopWithTimerError> {
+        self.inner.set_deadline(deadline)?;
+
         match self.fd.transition(wants) {
             Diff::Add { fd, wants } => {
                 self.forget_registered();

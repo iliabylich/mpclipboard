@@ -3,17 +3,9 @@
 pub(crate) struct Epoch(u8);
 
 impl Epoch {
-    pub(crate) const fn new() -> Self {
-        Self(0)
-    }
+    pub(crate) const ZERO: Self = Self(0);
 
     pub(crate) const fn bump(&mut self) {
         self.0 = self.0.wrapping_add(1);
-    }
-}
-
-impl Default for Epoch {
-    fn default() -> Self {
-        Self::new()
     }
 }

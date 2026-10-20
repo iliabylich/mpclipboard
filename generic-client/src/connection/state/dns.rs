@@ -4,7 +4,8 @@ use crate::{
     connection::{
         actions::{read_dns_response, start_resolving, write_dns_request},
         error::ConnectionError,
-        state::{FREEZE_TIME_IN_SECS, State, TcpState},
+        quic_config::QuicConfig,
+        state::{FREEZE_TIME_IN_SECS, Http3, State},
     },
 };
 use mini_sansio_dns::{Dns, DnsWants, MAX_DNS_PACKET_LEN};
@@ -20,6 +21,9 @@ pub(crate) struct DnsState {
 }
 
 impl DnsState {
+    pub(crate) const NAME: &str = "Dns";
+    pub(crate) const CONNECTIVITY: Connectivity = Connectivity::Connecting;
+
     pub(crate) fn start(now: u64, config: &Config) -> Result<Self, ConnectionError> {
         let mut buf = [0; MAX_DNS_PACKET_LEN];
         let (fd, dns) = start_resolving(&config.url, &mut buf)?;
@@ -30,14 +34,6 @@ impl DnsState {
             buf,
             last_activity_at: now,
         })
-    }
-
-    pub(crate) const fn name() -> &'static str {
-        "Resolving"
-    }
-
-    pub(crate) const fn connectivity() -> Connectivity {
-        Connectivity::Connecting
     }
 
     pub(crate) fn is_stuck(&self, now: u64) -> bool {
@@ -52,6 +48,7 @@ impl DnsState {
         &mut self,
         now: u64,
         config: &Config,
+        quic_config: &QuicConfig,
     ) -> Result<Completion<State, ()>, ConnectionError> {
         let Done(mut addr) = read_dns_response(&self.fd, &mut self.dns, &mut self.buf)? else {
             self.last_activity_at = now;
@@ -59,8 +56,8 @@ impl DnsState {
         };
 
         addr.set_port(config.url.port());
-        let next = TcpState::connect(now, addr, config)?;
-        Ok(Done(next))
+        let next = Http3::connect(now, addr, config, quic_config)?;
+        Ok(Done(State::Http3(next)))
     }
 
     pub(crate) fn on_writable(&mut self, now: u64) -> Result<(), ConnectionError> {

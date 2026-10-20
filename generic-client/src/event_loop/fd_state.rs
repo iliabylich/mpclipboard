@@ -10,10 +10,6 @@ pub(crate) enum FdState {
 }
 
 impl FdState {
-    pub(crate) const fn new() -> Self {
-        Self::None
-    }
-
     pub(crate) fn transition<'fd>(
         &mut self,
         next: Option<(BorrowedFd<'fd>, Epoch, Wants)>,

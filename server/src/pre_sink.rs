@@ -1,26 +1,52 @@
 use crate::reaper::CanBeReaped;
 use anyhow::{Context, Result, ensure};
 use mpclipboard_shared::{
-    EventLoopFdResult, ID, RegisteredFd, UpgradeResponseWriter, Wants, prelude::*,
+    Buffer, EventLoopFdResult, ID, RegisteredFd, RequestReader, Wants, prelude::*,
 };
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd};
 
+#[expect(clippy::large_enum_variant)]
+pub(crate) enum Verdict {
+    Accepted {
+        id: ID,
+        leftover: Buffer<{ RequestReader::BUFFER_SIZE }>,
+    },
+    Unauthorized {
+        id: ID,
+    },
+}
+
+impl Verdict {
+    const fn id(&self) -> ID {
+        match self {
+            Self::Accepted { id, .. } | Self::Unauthorized { id } => *id,
+        }
+    }
+
+    const fn response(&self) -> &'static [u8] {
+        match self {
+            Self::Accepted { .. } => b"HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n",
+            Self::Unauthorized { .. } => b"HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\n\r\n",
+        }
+    }
+}
+
 pub struct PreSink {
     fd: RegisteredFd,
-    id: ID,
-    writer: UpgradeResponseWriter,
+    verdict: Verdict,
+    remainder: &'static [u8],
     created_at: u64,
 }
 
 impl PreSink {
-    pub(crate) fn new(fd: RegisteredFd, id: ID, now: u64) -> Result<Self> {
+    pub(crate) fn new(fd: RegisteredFd, verdict: Verdict, now: u64) -> Result<Self> {
         fd.modify(Wants::Write)
-            .with_context(|| format!("[{id}] failed to wait for writability"))?;
+            .with_context(|| format!("[{}] failed to wait for writability", verdict.id()))?;
 
         Ok(Self {
             fd,
-            id,
-            writer: UpgradeResponseWriter::new(),
+            remainder: verdict.response(),
+            verdict,
             created_at: now,
         })
     }
@@ -28,7 +54,7 @@ impl PreSink {
     pub(crate) fn on_poll_event(
         mut self,
         revents: EventLoopFdResult,
-    ) -> Result<Completion<(ID, RegisteredFd), Self>> {
+    ) -> Result<Completion<(Verdict, RegisteredFd), Self>> {
         ensure!(!revents.has_error, "[{self}] polling returned an error");
 
         if revents.writable {
@@ -40,22 +66,29 @@ impl PreSink {
             else {
                 return Ok(Pending(self));
             };
-            return Ok(Done((self.id, self.fd)));
+            return Ok(Done((self.verdict, self.fd)));
         }
 
         Ok(Pending(self))
     }
 
     fn write(&mut self) -> Result<Completion<(), ()>> {
-        let buf = self.writer.remainder();
-
-        let Done(len) = mpclipboard_shared::io::write(&self.fd, buf)? else {
+        let Done(len) = mpclipboard_shared::io::write(&self.fd, self.remainder)? else {
             return Ok(Pending(()));
         };
 
-        self.writer
-            .written(len)
-            .with_context(|| format!("[{self}] failed to call UpgradeResponseWriter"))
+        self.remainder = self.remainder.get(len.get()..).with_context(|| {
+            format!(
+                "[{self}] write() reported {len} bytes, but only {} bytes remained",
+                self.remainder.len()
+            )
+        })?;
+
+        if self.remainder.is_empty() {
+            Ok(Done(()))
+        } else {
+            Ok(Pending(()))
+        }
     }
 }
 

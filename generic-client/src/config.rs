@@ -1,6 +1,6 @@
 use mpclipboard_shared::{
-    ConfigIdError, ConfigReader, ConfigReaderError, ConfigTokenError, ConfigUrlError, ID,
-    PROTOCOL_VERSION, Token, UpgradeRequest, Url,
+    ConfigIdError, ConfigReader, ConfigReaderError, ConfigTokenError, ConfigUrlError, ID, Token,
+    Url,
 };
 
 #[derive(Clone, Copy)]
@@ -26,7 +26,7 @@ impl Config {
         let token = Token::new(token).map_err(ConfigTokenError::Invalid)?;
         let id = ID::new(id).map_err(ConfigIdError::Invalid)?;
 
-        Ok(Self { url, token, id })
+        Self::validated(url, token, id)
     }
 
     pub(crate) fn new_from_file() -> Result<Self, ConfigError> {
@@ -36,16 +36,14 @@ impl Config {
         let token = reader.get_token()?;
         let id = reader.get_id()?;
 
-        Ok(Self { url, token, id })
+        Self::validated(url, token, id)
     }
 
-    pub(crate) const fn update_request(&self) -> UpgradeRequest {
-        UpgradeRequest {
-            host: self.url.header(),
-            token: self.token,
-            id: self.id,
-            version: PROTOCOL_VERSION,
+    const fn validated(url: Url, token: Token, id: ID) -> Result<Self, ConfigError> {
+        if !url.is_tls() {
+            return Err(ConfigError::NotHttps);
         }
+        Ok(Self { url, token, id })
     }
 }
 
@@ -59,4 +57,6 @@ pub enum ConfigError {
     Token(#[from] ConfigTokenError),
     #[error("invalid id: {0}")]
     Id(#[from] ConfigIdError),
+    #[error("url must have https scheme")]
+    NotHttps,
 }

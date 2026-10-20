@@ -34,12 +34,10 @@ pub struct OwnedString {
 }
 
 impl OwnedString {
-    const fn null() -> Self {
-        Self {
-            ptr: core::ptr::null_mut(),
-            len: 0,
-        }
-    }
+    const NULL: Self = Self {
+        ptr: core::ptr::null_mut(),
+        len: 0,
+    };
 }
 
 impl From<String> for OwnedString {
@@ -95,14 +93,12 @@ pub struct Output {
 }
 
 impl Output {
-    const fn error() -> Self {
-        Self {
-            error: true,
-            has_connectivity: false,
-            connectivity: Connectivity::Disconnected,
-            text: OwnedString::null(),
-        }
-    }
+    const ERROR: Self = Self {
+        error: true,
+        has_connectivity: false,
+        connectivity: Connectivity::Disconnected,
+        text: OwnedString::NULL,
+    };
 }
 
 impl From<crate::Output> for Output {
@@ -113,7 +109,7 @@ impl From<crate::Output> for Output {
         };
         let text = match output.text {
             Some(text) => OwnedString::from(text),
-            None => OwnedString::null(),
+            None => OwnedString::NULL,
         };
 
         Self {
@@ -131,7 +127,7 @@ pub extern "C" fn mpclipboard_read(mpclipboard: &mut MPClipboard) -> Output {
         Ok(output) => output.into(),
         Err(err) => {
             log::error!("error at FFI boundary: {err}");
-            Output::error()
+            Output::ERROR
         }
     }
 }

@@ -1,3 +1,4 @@
+use core::time::Duration;
 use rustix::{
     fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd},
     fs::Timespec,
@@ -59,6 +60,69 @@ impl AsFd for Timerfd {
 }
 
 impl AsRawFd for Timerfd {
+    fn as_raw_fd(&self) -> i32 {
+        self.fd.as_raw_fd()
+    }
+}
+
+#[derive(Debug)]
+#[must_use]
+pub(crate) struct OneshotTimerfd {
+    fd: OwnedFd,
+}
+
+impl OneshotTimerfd {
+    pub(crate) fn new() -> Result<Self, Errno> {
+        let fd = timerfd_create(
+            TimerfdClockId::Monotonic,
+            TimerfdFlags::CLOEXEC | TimerfdFlags::NONBLOCK,
+        )?;
+        Ok(Self { fd })
+    }
+
+    pub(crate) fn set(&self, timeout: Option<Duration>) -> Result<(), Errno> {
+        let zero = Timespec {
+            tv_sec: 0,
+            tv_nsec: 0,
+        };
+        let it_value = match timeout {
+            Some(timeout) => {
+                let timeout = timeout.max(Duration::from_nanos(1));
+                Timespec {
+                    tv_sec: i64::try_from(timeout.as_secs()).unwrap_or(i64::MAX),
+                    tv_nsec: timeout.subsec_nanos().into(),
+                }
+            }
+            None => zero,
+        };
+
+        timerfd_settime(
+            &self.fd,
+            TimerfdTimerFlags::empty(),
+            &Itimerspec {
+                it_interval: zero,
+                it_value,
+            },
+        )?;
+        Ok(())
+    }
+
+    pub(crate) fn clear(&self) -> Result<(), Errno> {
+        let mut buf = [0u8; 8];
+        match rustix::io::read(&self.fd, &mut buf) {
+            Ok(_) | Err(Errno::WOULDBLOCK) => Ok(()),
+            Err(err) => Err(err),
+        }
+    }
+}
+
+impl AsFd for OneshotTimerfd {
+    fn as_fd(&self) -> BorrowedFd<'_> {
+        self.fd.as_fd()
+    }
+}
+
+impl AsRawFd for OneshotTimerfd {
     fn as_raw_fd(&self) -> i32 {
         self.fd.as_raw_fd()
     }

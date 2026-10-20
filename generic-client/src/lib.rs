@@ -25,6 +25,7 @@
 extern crate alloc;
 
 pub use config::ConfigError;
+pub use connection::QuicConfigError;
 pub use connectivity::Connectivity;
 pub use mpclipboard::{MPClipboard, MPClipboardError};
 pub use mpclipboard_shared::EventLoopWithTimerError;
@@ -38,4 +39,3 @@ mod ffi;
 mod logger;
 mod mpclipboard;
 mod output;
-mod tls;
