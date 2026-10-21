@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -19,7 +21,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 
 class MainActivity : ComponentActivity() {
@@ -30,6 +34,7 @@ class MainActivity : ComponentActivity() {
             var host by rememberSaveable { mutableStateOf(config.host) }
             var token by rememberSaveable { mutableStateOf(config.token) }
             var id by rememberSaveable { mutableStateOf(config.id) }
+            var tokenVisible by rememberSaveable { mutableStateOf(false) }
 
             MaterialTheme {
                 Surface {
@@ -58,7 +63,21 @@ class MainActivity : ComponentActivity() {
                             modifier = Modifier.fillMaxWidth(),
                             label = { Text("Token") },
                             singleLine = true,
-                            visualTransformation = PasswordVisualTransformation(),
+                            visualTransformation = if (tokenVisible) {
+                                VisualTransformation.None
+                            } else {
+                                PasswordVisualTransformation()
+                            },
+                            trailingIcon = {
+                                IconButton(onClick = { tokenVisible = !tokenVisible }) {
+                                    Icon(
+                                        painter = painterResource(
+                                            if (tokenVisible) R.drawable.visibility_off else R.drawable.visibility,
+                                        ),
+                                        contentDescription = if (tokenVisible) "Hide token" else "Show token",
+                                    )
+                                }
+                            },
                         )
 
                         OutlinedTextField(
