@@ -45,7 +45,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with: { targets: x86_64-unknown-linux-musl }
-      - uses: jdx/mise-action@v4
+      - uses: jdx/mise-action@v5
         with:
           working_directory: ./server
       - run: mise //server:release:deb --version "${{ inputs.version }}" --out "$PWD/mpclipboard-server_${{ inputs.version }}_amd64.deb"
@@ -60,7 +60,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
-      - uses: jdx/mise-action@v4
+      - uses: jdx/mise-action@v5
         with:
           working_directory: ./linux
       - run: mise //linux:release:deb --version "${{ inputs.version }}" --out "$PWD/mpclipboard-client_${{ inputs.version }}_amd64.deb"
@@ -77,7 +77,7 @@ jobs:
       - run: sudo xcode-select -switch /Applications/Xcode_26.3.app/Contents/Developer
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
-      - uses: jdx/mise-action@v4
+      - uses: jdx/mise-action@v5
         with:
           working_directory: ./macos
       - run: mise //macos:release:dmg --version "${{ inputs.version }}" --out "$PWD/mpclipboard_${{ inputs.version }}_arm64.dmg"
@@ -98,7 +98,7 @@ jobs:
 
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
-      - uses: jdx/mise-action@v4
+      - uses: jdx/mise-action@v5
         with:
           working_directory: ./android
       - run: mise //android:release:apk --version "${{ inputs.version }}" --out "$PWD/mpclipboard_${{ inputs.version }}_arm64.apk"
@@ -120,11 +120,11 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/download-artifact@v8
         with: { name: android-client-apk }
-      - uses: jdx/mise-action@v4
+      - uses: jdx/mise-action@v5
         with:
           working_directory: ./fdroid
       - run: mise //fdroid:update --apk "$PWD/mpclipboard_${{ inputs.version }}_arm64.apk"
-      - uses: actions/upload-pages-artifact@v4
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: fdroid
 
