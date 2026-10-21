@@ -1,16 +1,13 @@
 [task_config]
 shell = "bash -euo pipefail -c"
 
-[tools]
-"cargo:cargo-ndk" = "latest"
-"cargo:cbindgen" = "latest"
-
 [env]
 MACOSX_DEPLOYMENT_TARGET = "15.0"
 MPCLIPBOARD_URL = "https://127.0.0.1:8443"
 MPCLIPBOARD_ID = "generic-client"
 
 [tasks.cbindgen]
+tools = { "cargo:cbindgen" = "latest" }
 run = "cbindgen --output bindings.h"
 
 [tasks."build:debug"]
@@ -23,6 +20,7 @@ run = "cargo build --release"
 
 [tasks."build:android:debug"]
 hide = true
+tools = { "cargo:cargo-ndk" = "latest" }
 run = """
     cargo ndk -t arm64-v8a build
     ls -l target/aarch64-linux-android/debug/libmpclipboard_generic_client.a bindings.h
@@ -30,6 +28,7 @@ run = """
 
 [tasks."build:android:release"]
 hide = true
+tools = { "cargo:cargo-ndk" = "latest" }
 run = """
     cargo ndk -t arm64-v8a build --release
     ls -l target/aarch64-linux-android/release/libmpclipboard_generic_client.a bindings.h

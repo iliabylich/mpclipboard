@@ -49,6 +49,8 @@ jobs:
         with:
           working_directory: ./server
       - run: mise //server:release:deb --version "${{ inputs.version }}" --out "$PWD/mpclipboard-server_${{ inputs.version }}_amd64.deb"
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
       - uses: actions/upload-artifact@v7
         with:
           name: server-deb
@@ -64,6 +66,8 @@ jobs:
         with:
           working_directory: ./linux
       - run: mise //linux:release:deb --version "${{ inputs.version }}" --out "$PWD/mpclipboard-client_${{ inputs.version }}_amd64.deb"
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
       - uses: actions/upload-artifact@v7
         with:
           name: linux-client-deb
@@ -81,6 +85,8 @@ jobs:
         with:
           working_directory: ./macos
       - run: mise //macos:release:dmg --version "${{ inputs.version }}" --out "$PWD/mpclipboard_${{ inputs.version }}_arm64.dmg"
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
       - uses: actions/upload-artifact@v7
         with:
           name: macos-client-dmg
@@ -102,6 +108,8 @@ jobs:
         with:
           working_directory: ./android
       - run: mise //android:release:apk --version "${{ inputs.version }}" --out "$PWD/mpclipboard_${{ inputs.version }}_arm64.apk"
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
       - uses: actions/upload-artifact@v7
         with:
           name: android-client-apk
@@ -124,6 +132,8 @@ jobs:
         with:
           working_directory: ./fdroid
       - run: mise //fdroid:update --apk "$PWD/mpclipboard_${{ inputs.version }}_arm64.apk"
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
       - uses: actions/upload-pages-artifact@v5
         with:
           path: fdroid
