@@ -111,14 +111,6 @@ impl OneshotTimerfd {
         )?;
         Ok(())
     }
-
-    pub(crate) fn clear(&self) -> Result<(), Errno> {
-        let mut buf = [0u8; 8];
-        match rustix::io::read(&self.fd, &mut buf) {
-            Ok(_) | Err(Errno::WOULDBLOCK) => Ok(()),
-            Err(err) => Err(err),
-        }
-    }
 }
 
 impl AsFd for OneshotTimerfd {

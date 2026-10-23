@@ -3,9 +3,9 @@ use crate::{
     config::Config,
     connection::{error::ConnectionError, quic_config::QuicConfig},
 };
-use core::time::Duration;
 use mpclipboard_shared::{Message, Now, Wants, prelude::*};
 use rustix::fd::BorrowedFd;
+use std::time::Instant;
 
 mod disconnected;
 pub(crate) use disconnected::Disconnected;
@@ -125,9 +125,9 @@ impl State {
         Ok(())
     }
 
-    pub(crate) fn time_until_next_timer(&mut self) -> Option<Duration> {
+    pub(crate) fn next_timer(&mut self) -> Option<Instant> {
         match self {
-            Self::Http3(state) => state.time_until_next_timer(),
+            Self::Http3(state) => state.next_timer(),
             Self::Disconnected(_) | Self::Dns(_) | Self::Stopped => None,
         }
     }

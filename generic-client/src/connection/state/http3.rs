@@ -8,7 +8,7 @@ use crate::{
         state::{FREEZE_TIME_IN_SECS, HEARTBEAT_INTERVAL_IN_SECS, Readable, State},
     },
 };
-use core::{mem::MaybeUninit, net::SocketAddr, num::NonZeroUsize, time::Duration};
+use core::{mem::MaybeUninit, net::SocketAddr, num::NonZeroUsize};
 use h3wire::FieldRef;
 use mpclipboard_shared::{
     Message, MessageReader, MessageWriter, Now, PROTOCOL_VERSION, Past, Wants, prelude::*,
@@ -18,6 +18,7 @@ use rustix::{
     io::{Errno, FdFlags},
     net::{AddressFamily, RecvFlags, SendFlags, SocketType},
 };
+use std::time::Instant;
 
 pub(crate) struct Http3 {
     fd: OwnedFd,
@@ -175,8 +176,8 @@ impl Http3 {
         Ok(())
     }
 
-    pub(crate) fn time_until_next_timer(&mut self) -> Option<Duration> {
-        self.conn.time_until_next_timer()
+    pub(crate) fn next_timer(&mut self) -> Option<Instant> {
+        self.conn.next_timer()
     }
 
     pub(crate) fn push(&mut self, message: &Message, now: Now) -> bool {

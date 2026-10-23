@@ -10,6 +10,7 @@ pub(crate) use result::EventLoopResult;
 use core::time::Duration;
 use mpclipboard_shared::{EventLoopWithTimer, EventLoopWithTimerError, Now, Wants};
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd, RawFd};
+use std::time::Instant;
 
 pub(crate) struct EventLoop {
     inner: EventLoopWithTimer,
@@ -33,7 +34,7 @@ impl EventLoop {
     pub(crate) fn sync(
         &mut self,
         wants: Option<(BorrowedFd<'_>, Epoch, Wants)>,
-        deadline: Option<Duration>,
+        deadline: Option<Instant>,
     ) -> Result<(), EventLoopWithTimerError> {
         self.inner.set_deadline(deadline)?;
 

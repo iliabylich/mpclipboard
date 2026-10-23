@@ -10,7 +10,7 @@ use var_int_ext::VarIntExt;
 use crate::connection::{error::ConnectionError, quic_config::QuicConfig};
 use alloc::{collections::VecDeque, sync::Arc};
 use bytes::{Bytes, BytesMut};
-use core::{net::SocketAddr, time::Duration};
+use core::net::SocketAddr;
 use h3wire::{Action, Event, FieldRef, H3Code, Role, UsageError};
 use quinn_proto::{
     ConnectionHandle, DatagramEvent, Dir, Endpoint, StreamEvent, VarInt, WriteError,
@@ -95,9 +95,8 @@ impl Http3Connection {
         self.process_quinn_events_and_forward_to_h3wire()
     }
 
-    pub(crate) fn time_until_next_timer(&mut self) -> Option<Duration> {
-        let deadline = self.quic_conn.poll_timeout()?;
-        Some(deadline.saturating_duration_since(Instant::now()))
+    pub(crate) fn next_timer(&mut self) -> Option<Instant> {
+        self.quic_conn.poll_timeout()
     }
 
     pub(crate) fn open_request_and_enqueue_headers(

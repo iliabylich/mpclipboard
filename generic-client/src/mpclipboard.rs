@@ -42,7 +42,7 @@ impl MPClipboard {
 
     fn sync_event_loop(&mut self) -> Result<(), MPClipboardError> {
         self.conn.flush(self.event_loop.now());
-        let deadline = self.conn.time_until_next_timer();
+        let deadline = self.conn.next_timer();
         let wants = self.conn.wants();
         self.event_loop.sync(wants, deadline)?;
         Ok(())

@@ -10,6 +10,7 @@ use rustix::{
     fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd, RawFd},
     io::Errno,
 };
+use std::time::Instant;
 
 pub struct EventLoopWithTimer {
     poller: Rc<Poller>,
@@ -22,6 +23,13 @@ pub struct EventLoopWithTimer {
     time: u64,
     #[cfg(target_os = "macos")]
     deadline_registered: bool,
+    armed_deadline: ArmedDeadline,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ArmedDeadline {
+    Unknown,
+    Known(Option<Instant>),
 }
 
 impl EventLoopWithTimer {
@@ -57,6 +65,7 @@ impl EventLoopWithTimer {
                 events: Events::new(),
                 timer,
                 deadline,
+                armed_deadline: ArmedDeadline::Unknown,
             }
         };
 
@@ -85,6 +94,7 @@ impl EventLoopWithTimer {
                 events: Events::new(),
                 time: 0,
                 deadline_registered: false,
+                armed_deadline: ArmedDeadline::Unknown,
             }
         };
 
@@ -140,11 +150,22 @@ impl EventLoopWithTimer {
         Ok(())
     }
 
-    #[cfg(any(target_os = "linux", target_os = "android"))]
     pub fn set_deadline(
         &mut self,
-        timeout: Option<Duration>,
+        deadline: Option<Instant>,
     ) -> Result<(), EventLoopWithTimerError> {
+        if self.armed_deadline == ArmedDeadline::Known(deadline) {
+            return Ok(());
+        }
+
+        let timeout = deadline.map(|deadline| deadline.saturating_duration_since(Instant::now()));
+        self.arm_deadline(timeout)?;
+        self.armed_deadline = ArmedDeadline::Known(deadline);
+        Ok(())
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    fn arm_deadline(&self, timeout: Option<Duration>) -> Result<(), EventLoopWithTimerError> {
         self.deadline
             .set(timeout)
             .map_err(EventLoopWithTimerError::SetDeadline)?;
@@ -152,10 +173,7 @@ impl EventLoopWithTimer {
     }
 
     #[cfg(target_os = "macos")]
-    pub fn set_deadline(
-        &mut self,
-        timeout: Option<Duration>,
-    ) -> Result<(), EventLoopWithTimerError> {
+    fn arm_deadline(&mut self, timeout: Option<Duration>) -> Result<(), EventLoopWithTimerError> {
         use crate::polling::os::kqueue::{PollerKqueueExt, Timer};
 
         match (timeout, self.deadline_registered) {
@@ -220,11 +238,8 @@ impl EventLoopWithTimer {
                     ticked = true;
                 }
 
-                #[cfg(any(target_os = "linux", target_os = "android"))]
                 Self::DEADLINE_KEY => {
-                    self.deadline
-                        .clear()
-                        .map_err(EventLoopWithTimerError::ReadTimer)?;
+                    self.armed_deadline = ArmedDeadline::Unknown;
                 }
 
                 #[cfg(target_os = "macos")]

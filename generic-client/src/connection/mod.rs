@@ -1,8 +1,8 @@
 use crate::event_loop::Epoch;
 use crate::{Connectivity, config::Config};
-use core::time::Duration;
 use mpclipboard_shared::{Message, Now, Wants, prelude::*};
 use rustix::fd::BorrowedFd;
+use std::time::Instant;
 
 mod error;
 
@@ -96,8 +96,8 @@ impl Connection {
         }
     }
 
-    pub(crate) fn time_until_next_timer(&mut self) -> Option<Duration> {
-        self.state.time_until_next_timer()
+    pub(crate) fn next_timer(&mut self) -> Option<Instant> {
+        self.state.next_timer()
     }
 
     pub(crate) fn wants(&mut self) -> Option<(BorrowedFd<'_>, Epoch, Wants)> {
