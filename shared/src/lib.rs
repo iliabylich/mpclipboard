@@ -63,6 +63,8 @@ pub use non_empty_string::{NonEmptyString, NonEmptyStringError};
 mod wants;
 pub use wants::{OptionWantsExt, Wants};
 
+mod polling;
+
 mod event_loop;
 pub use event_loop::{
     EventLoopFdResult, EventLoopWithTimer, EventLoopWithTimerError, EventLoopWithTimerResult,

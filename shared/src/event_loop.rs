@@ -1,9 +1,11 @@
-use crate::{Now, Wants};
+use crate::{
+    Now, Wants,
+    polling::{Event, Events, PollMode, Poller},
+};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::{Timerfd, timerfd::OneshotTimerfd};
 use alloc::rc::Rc;
 use core::time::Duration;
-use polling::{Event, Events, PollMode, Poller};
 use rustix::{
     fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd, RawFd},
     io::Errno,
@@ -60,7 +62,7 @@ impl EventLoopWithTimer {
 
         #[cfg(target_os = "macos")]
         let this = {
-            use polling::os::kqueue::{PollerKqueueExt, Timer};
+            use crate::polling::os::kqueue::{PollerKqueueExt, Timer};
 
             let periodic = Timer {
                 id: Self::TIMER_KEY,
@@ -154,7 +156,7 @@ impl EventLoopWithTimer {
         &mut self,
         timeout: Option<Duration>,
     ) -> Result<(), EventLoopWithTimerError> {
-        use polling::os::kqueue::{PollerKqueueExt, Timer};
+        use crate::polling::os::kqueue::{PollerKqueueExt, Timer};
 
         match (timeout, self.deadline_registered) {
             (Some(timeout), registered) => {
