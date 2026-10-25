@@ -89,7 +89,10 @@ pub use completion::Completion;
 pub mod io;
 
 #[cfg(test)]
-mod test_helpers;
+mod marble;
+
+#[cfg(test)]
+mod event_loop_test;
 
 pub mod prelude {
     pub use crate::Completion::{self, *};

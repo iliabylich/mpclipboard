@@ -227,6 +227,8 @@ impl EventLoopWithTimer {
             .map_err(EventLoopWithTimerError::Wait)?;
 
         let mut ticked = false;
+        #[cfg(test)]
+        let mut deadline_expired = false;
 
         for event in self.events.iter() {
             match event.key {
@@ -240,6 +242,10 @@ impl EventLoopWithTimer {
 
                 Self::DEADLINE_KEY => {
                     self.armed_deadline = ArmedDeadline::Unknown;
+                    #[cfg(test)]
+                    {
+                        deadline_expired = true;
+                    }
                 }
 
                 #[cfg(target_os = "macos")]
@@ -262,6 +268,8 @@ impl EventLoopWithTimer {
 
         Ok(EventLoopWithTimerResult {
             ticked,
+            #[cfg(test)]
+            deadline_expired,
             events: &self.events,
         })
     }
@@ -336,6 +344,8 @@ impl AsRawFd for RegisteredFd {
 
 pub struct EventLoopWithTimerResult<'a> {
     pub ticked: bool,
+    #[cfg(test)]
+    pub deadline_expired: bool,
     events: &'a Events,
 }
 

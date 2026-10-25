@@ -99,7 +99,12 @@ pub enum MessageWriterError {
 #[cfg(test)]
 mod tests {
     use super::{MessageWriter, MessageWriterError};
-    use crate::{Message, message::Frame, test_helpers::non_zero_usize};
+    use crate::{Message, message::Frame};
+    use core::num::NonZeroUsize;
+
+    fn non_zero_usize(n: usize) -> NonZeroUsize {
+        NonZeroUsize::new(n).unwrap()
+    }
 
     #[test]
     fn test_single() {
