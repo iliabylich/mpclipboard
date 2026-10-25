@@ -1,9 +1,9 @@
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use crate::timerfd::Timerfd;
 use crate::{
     Now, Wants,
     polling::{Event, Events, PollMode, Poller},
 };
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use crate::{Timerfd, timerfd::OneshotTimerfd};
 use alloc::rc::Rc;
 use core::time::Duration;
 use rustix::{
@@ -17,88 +17,58 @@ pub struct EventLoopWithTimer {
     events: Events,
     #[cfg(any(target_os = "linux", target_os = "android"))]
     timer: Timerfd,
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    deadline: OneshotTimerfd,
-    #[cfg(target_os = "macos")]
-    time: u64,
-    #[cfg(target_os = "macos")]
-    deadline_registered: bool,
-    armed_deadline: ArmedDeadline,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ArmedDeadline {
-    Unknown,
-    Known(Option<Instant>),
+    start: Instant,
+    seconds: u64,
+    next_tick: Instant,
+    deadline: Option<Instant>,
+    armed: Instant,
 }
 
 impl EventLoopWithTimer {
     const TIMER_KEY: usize = usize::MAX - 1;
-    #[cfg(target_os = "macos")]
-    const INITIAL_TIMER_KEY: usize = usize::MAX - 2;
-    const DEADLINE_KEY: usize = usize::MAX - 3;
-    const FIRST_RESERVED_KEY: usize = usize::MAX - 3;
+    const FIRST_RESERVED_KEY: usize = usize::MAX - 1;
 
     pub fn new() -> Result<Self, EventLoopWithTimerError> {
         let poller = Poller::new().map_err(EventLoopWithTimerError::Create)?;
+        let start = Instant::now();
 
         #[cfg(any(target_os = "linux", target_os = "android"))]
-        let this = {
+        let timer = {
             let timer = Timerfd::new().map_err(EventLoopWithTimerError::CreateTimer)?;
+            timer
+                .set(Duration::ZERO)
+                .map_err(EventLoopWithTimerError::SetTimer)?;
             unsafe {
                 poller.add_with_mode(&timer, Event::readable(Self::TIMER_KEY), PollMode::Level)
             }
             .map_err(EventLoopWithTimerError::AddTimer)?;
-
-            let deadline = OneshotTimerfd::new().map_err(EventLoopWithTimerError::CreateTimer)?;
-            unsafe {
-                poller.add_with_mode(
-                    &deadline,
-                    Event::readable(Self::DEADLINE_KEY),
-                    PollMode::Level,
-                )
-            }
-            .map_err(EventLoopWithTimerError::AddTimer)?;
-
-            Self {
-                poller: Rc::new(poller),
-                events: Events::new(),
-                timer,
-                deadline,
-                armed_deadline: ArmedDeadline::Unknown,
-            }
+            timer
         };
 
         #[cfg(target_os = "macos")]
-        let this = {
-            use crate::polling::os::kqueue::{PollerKqueueExt, Timer};
+        {
+            use crate::polling::os::kqueue::PollerKqueueExt;
 
-            let periodic = Timer {
-                id: Self::TIMER_KEY,
-                timeout: Duration::from_secs(1),
-            };
             poller
-                .add_filter(periodic, Self::TIMER_KEY, PollMode::Edge)
+                .add_filter(
+                    Self::kqueue_timer(Duration::ZERO),
+                    Self::TIMER_KEY,
+                    PollMode::Oneshot,
+                )
                 .map_err(EventLoopWithTimerError::AddTimer)?;
+        }
 
-            let initial = Timer {
-                id: Self::INITIAL_TIMER_KEY,
-                timeout: Duration::from_nanos(1),
-            };
-            poller
-                .add_filter(initial, Self::INITIAL_TIMER_KEY, PollMode::Oneshot)
-                .map_err(EventLoopWithTimerError::AddTimer)?;
-
-            Self {
-                poller: Rc::new(poller),
-                events: Events::new(),
-                time: 0,
-                deadline_registered: false,
-                armed_deadline: ArmedDeadline::Unknown,
-            }
-        };
-
-        Ok(this)
+        Ok(Self {
+            poller: Rc::new(poller),
+            events: Events::new(),
+            #[cfg(any(target_os = "linux", target_os = "android"))]
+            timer,
+            start,
+            seconds: 0,
+            next_tick: start,
+            deadline: None,
+            armed: start,
+        })
     }
 
     pub fn register(
@@ -154,69 +124,61 @@ impl EventLoopWithTimer {
         &mut self,
         deadline: Option<Instant>,
     ) -> Result<(), EventLoopWithTimerError> {
-        if self.armed_deadline == ArmedDeadline::Known(deadline) {
+        if self.deadline == deadline {
             return Ok(());
         }
 
-        let timeout = deadline.map(|deadline| deadline.saturating_duration_since(Instant::now()));
-        self.arm_deadline(timeout)?;
-        self.armed_deadline = ArmedDeadline::Known(deadline);
-        Ok(())
-    }
-
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    fn arm_deadline(&self, timeout: Option<Duration>) -> Result<(), EventLoopWithTimerError> {
-        self.deadline
-            .set(timeout)
-            .map_err(EventLoopWithTimerError::SetDeadline)?;
-        Ok(())
-    }
-
-    #[cfg(target_os = "macos")]
-    fn arm_deadline(&mut self, timeout: Option<Duration>) -> Result<(), EventLoopWithTimerError> {
-        use crate::polling::os::kqueue::{PollerKqueueExt, Timer};
-
-        match (timeout, self.deadline_registered) {
-            (Some(timeout), registered) => {
-                let timer = Timer {
-                    id: Self::DEADLINE_KEY,
-                    timeout: timeout.max(Duration::from_nanos(1)),
-                };
-                if registered {
-                    self.poller
-                        .modify_filter(timer, Self::DEADLINE_KEY, PollMode::Oneshot)
-                } else {
-                    self.poller
-                        .add_filter(timer, Self::DEADLINE_KEY, PollMode::Oneshot)
-                }
-                .map_err(EventLoopWithTimerError::SetDeadline)?;
-                self.deadline_registered = true;
-            }
-            (None, true) => {
-                let timer = Timer {
-                    id: Self::DEADLINE_KEY,
-                    timeout: Duration::ZERO,
-                };
-                self.poller
-                    .delete_filter(timer)
-                    .map_err(EventLoopWithTimerError::SetDeadline)?;
-                self.deadline_registered = false;
-            }
-            (None, false) => {}
+        self.deadline = deadline;
+        let target = self.target();
+        if target != self.armed {
+            self.arm(target)?;
         }
         Ok(())
     }
 
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    pub const fn now(&self) -> Now {
-        Now::new(self.timer.time())
+    fn target(&self) -> Instant {
+        self.deadline
+            .map_or(self.next_tick, |deadline| deadline.min(self.next_tick))
+    }
+
+    fn arm(&mut self, target: Instant) -> Result<(), EventLoopWithTimerError> {
+        let timeout = target.saturating_duration_since(Instant::now());
+
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        self.timer
+            .set(timeout)
+            .map_err(EventLoopWithTimerError::SetTimer)?;
+
+        #[cfg(target_os = "macos")]
+        {
+            use crate::polling::os::kqueue::PollerKqueueExt;
+
+            self.poller
+                .modify_filter(
+                    Self::kqueue_timer(timeout),
+                    Self::TIMER_KEY,
+                    PollMode::Oneshot,
+                )
+                .map_err(EventLoopWithTimerError::SetTimer)?;
+        }
+
+        self.armed = target;
+        Ok(())
     }
 
     #[cfg(target_os = "macos")]
-    pub const fn now(&self) -> Now {
-        Now::new(self.time)
+    fn kqueue_timer(timeout: Duration) -> crate::polling::os::kqueue::Timer {
+        crate::polling::os::kqueue::Timer {
+            id: Self::TIMER_KEY,
+            timeout: timeout.max(Duration::from_nanos(1)),
+        }
     }
 
+    pub const fn now(&self) -> Now {
+        Now::new(self.seconds)
+    }
+
+    #[expect(clippy::missing_panics_doc)]
     pub fn wait(
         &mut self,
         timeout: Option<Duration>,
@@ -227,43 +189,35 @@ impl EventLoopWithTimer {
             .map_err(EventLoopWithTimerError::Wait)?;
 
         let mut ticked = false;
-        #[cfg(test)]
         let mut deadline_expired = false;
 
-        for event in self.events.iter() {
-            match event.key {
-                #[cfg(any(target_os = "linux", target_os = "android"))]
-                Self::TIMER_KEY => {
-                    self.timer
-                        .read()
-                        .map_err(EventLoopWithTimerError::ReadTimer)?;
-                    ticked = true;
-                }
+        if self.events.iter().any(|event| event.key == Self::TIMER_KEY) {
+            let now = Instant::now();
 
-                Self::DEADLINE_KEY => {
-                    self.armed_deadline = ArmedDeadline::Unknown;
-                    #[cfg(test)]
-                    {
-                        deadline_expired = true;
-                    }
-                }
-
-                #[cfg(target_os = "macos")]
-                Self::TIMER_KEY => {
-                    self.time = self
-                        .time
-                        .checked_add(1)
-                        .unwrap_or_else(|| unreachable!("seconds of uptime never overflow u64"));
-                    ticked = true;
-                }
-
-                #[cfg(target_os = "macos")]
-                Self::INITIAL_TIMER_KEY => {
-                    ticked = true;
-                }
-
-                _ => {}
+            if now >= self.next_tick {
+                ticked = true;
+                self.seconds = now.duration_since(self.start).as_secs();
+                self.next_tick = self
+                    .seconds
+                    .checked_add(1)
+                    .and_then(|seconds| self.start.checked_add(Duration::from_secs(seconds)))
+                    .unwrap_or_else(|| unreachable!("seconds of uptime never overflow"));
             }
+
+            if self.deadline.is_some_and(|deadline| now >= deadline) {
+                self.deadline = None;
+                deadline_expired = true;
+            }
+
+            assert!(
+                ticked || deadline_expired,
+                "timer woke up with nothing due: now={now:?}, armed={:?}, next_tick={:?}, deadline={:?}",
+                self.armed,
+                self.next_tick,
+                self.deadline,
+            );
+
+            self.arm(self.target())?;
         }
 
         Ok(EventLoopWithTimerResult {
@@ -292,7 +246,6 @@ impl EventLoopWithTimer {
 impl Drop for EventLoopWithTimer {
     fn drop(&mut self) {
         let _ = self.poller.delete(self.timer.as_fd());
-        let _ = self.poller.delete(self.deadline.as_fd());
     }
 }
 
@@ -380,14 +333,12 @@ pub enum EventLoopWithTimerError {
     CreateTimer(Errno),
     #[error("failed to register timer: {0}")]
     AddTimer(std::io::Error),
-    #[error("failed to read timer: {0:?}")]
-    ReadTimer(Errno),
     #[cfg(any(target_os = "linux", target_os = "android"))]
-    #[error("failed to set deadline: {0:?}")]
-    SetDeadline(Errno),
+    #[error("failed to set timer: {0:?}")]
+    SetTimer(Errno),
     #[cfg(target_os = "macos")]
-    #[error("failed to set deadline: {0}")]
-    SetDeadline(std::io::Error),
+    #[error("failed to set timer: {0}")]
+    SetTimer(std::io::Error),
     #[error("key {0} is reserved for timers")]
     ReservedKey(usize),
     #[error("failed to register fd: {0}")]

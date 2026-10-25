@@ -20,9 +20,6 @@ pub trait PollerKqueueExt<F: Filter>: PollerSealed {
 
     /// Modify an existing filter.
     fn modify_filter(&self, filter: F, key: usize, mode: PollMode) -> io::Result<()>;
-
-    /// Remove a filter from the poller.
-    fn delete_filter(&self, filter: F) -> io::Result<()>;
 }
 
 impl<F: Filter> PollerKqueueExt<F> for Poller {
@@ -41,16 +38,6 @@ impl<F: Filter> PollerKqueueExt<F> for Poller {
 
         // Modify the filter.
         self.poller.submit_changes([event])
-    }
-
-    fn delete_filter(&self, filter: F) -> io::Result<()> {
-        // Convert the filter into a kevent.
-        let event = filter.filter(kqueue::EventFlags::DELETE, 0);
-
-        // Delete the filter.
-        self.poller.submit_changes([event])?;
-
-        self.poller.remove_source(filter.source_id())
     }
 }
 

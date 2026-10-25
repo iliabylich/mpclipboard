@@ -50,8 +50,6 @@ pub use self::{
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 mod timerfd;
-#[cfg(any(target_os = "linux", target_os = "android"))]
-pub use timerfd::Timerfd;
 
 pub type Token = NonEmptyString;
 
