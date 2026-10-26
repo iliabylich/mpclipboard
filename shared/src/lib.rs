@@ -66,8 +66,10 @@ mod polling;
 mod event_loop;
 pub use event_loop::{
     EventLoopFdResult, EventLoopWithTimer, EventLoopWithTimerError, EventLoopWithTimerResult,
-    RegisteredFd,
 };
+
+mod event_loop_aware_fd;
+pub use event_loop_aware_fd::EventLoopAwareFd;
 
 mod revents;
 pub use revents::{REvents, REventsError};

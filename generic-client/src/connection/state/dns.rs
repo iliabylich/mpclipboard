@@ -10,7 +10,7 @@ use crate::{
 };
 use core::net::{Ipv4Addr, SocketAddrV4};
 use mini_sansio_dns::{Dns as DnsConn, DnsRecordType, DnsWants, MAX_DNS_PACKET_LEN};
-use mpclipboard_shared::{Now, Past, RegisteredFd, Wants, prelude::*};
+use mpclipboard_shared::{EventLoopAwareFd, Now, Past, Wants, prelude::*};
 use rustix::{
     io::{Errno, FdFlags},
     net::{AddressFamily, RecvFlags, SendFlags, SocketType},
@@ -18,7 +18,7 @@ use rustix::{
 
 #[derive(Debug)]
 pub(crate) struct Dns {
-    fd: RegisteredFd,
+    fd: EventLoopAwareFd,
     conn: DnsConn,
     buf: [u8; MAX_DNS_PACKET_LEN],
     last_activity_at: Past,

@@ -2,12 +2,12 @@ use crate::reaper::CanBeReaped;
 use anyhow::{Context, Result, ensure};
 use bytes::BytesMut;
 use mpclipboard_shared::{
-    EventLoopFdResult, Now, Past, RegisteredFd, Request, RequestReader, prelude::*,
+    EventLoopAwareFd, EventLoopFdResult, Now, Past, Request, RequestReader, prelude::*,
 };
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd};
 
 pub struct PreSource {
-    fd: RegisteredFd,
+    fd: EventLoopAwareFd,
     reader: RequestReader,
     created_at: Past,
 }
@@ -15,7 +15,7 @@ pub struct PreSource {
 impl PreSource {
     const READ_SIZE: usize = 8192;
 
-    pub(crate) fn new(fd: RegisteredFd, now: Now) -> Self {
+    pub(crate) fn new(fd: EventLoopAwareFd, now: Now) -> Self {
         Self {
             fd,
             reader: RequestReader::default(),
@@ -26,7 +26,7 @@ impl PreSource {
     pub(crate) fn on_poll_event(
         mut self,
         revents: EventLoopFdResult,
-    ) -> Result<Completion<(Request, BytesMut, RegisteredFd), Self>> {
+    ) -> Result<Completion<(Request, BytesMut, EventLoopAwareFd), Self>> {
         ensure!(!revents.has_error, "[{self}] polling returned an error");
 
         if revents.readable {

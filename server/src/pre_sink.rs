@@ -1,7 +1,7 @@
 use crate::reaper::CanBeReaped;
 use anyhow::{Context, Result, ensure};
 use bytes::BytesMut;
-use mpclipboard_shared::{EventLoopFdResult, ID, Now, Past, RegisteredFd, Wants, prelude::*};
+use mpclipboard_shared::{EventLoopAwareFd, EventLoopFdResult, ID, Now, Past, Wants, prelude::*};
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd};
 
 pub(crate) enum Verdict {
@@ -25,14 +25,14 @@ impl Verdict {
 }
 
 pub struct PreSink {
-    fd: RegisteredFd,
+    fd: EventLoopAwareFd,
     verdict: Verdict,
     remainder: &'static [u8],
     created_at: Past,
 }
 
 impl PreSink {
-    pub(crate) fn new(fd: RegisteredFd, verdict: Verdict, now: Now) -> Result<Self> {
+    pub(crate) fn new(fd: EventLoopAwareFd, verdict: Verdict, now: Now) -> Result<Self> {
         fd.modify(Wants::Write)
             .with_context(|| format!("[{}] failed to wait for writability", verdict.id()))?;
 
@@ -51,7 +51,7 @@ impl PreSink {
     pub(crate) fn on_poll_event(
         mut self,
         revents: EventLoopFdResult,
-    ) -> Result<Completion<(Verdict, RegisteredFd), Self>> {
+    ) -> Result<Completion<(Verdict, EventLoopAwareFd), Self>> {
         ensure!(!revents.has_error, "[{self}] polling returned an error");
 
         if revents.writable {

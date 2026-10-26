@@ -1,12 +1,12 @@
 use crate::fd_set::key;
 use anyhow::{Context, Result, ensure};
 use core::net::SocketAddrV4;
-use mpclipboard_shared::{EventLoopFdResult, EventLoopWithTimer, RegisteredFd, Wants};
+use mpclipboard_shared::{EventLoopAwareFd, EventLoopFdResult, EventLoopWithTimer, Wants};
 use rustix::net::{AddressFamily, SocketType};
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd};
 
 pub struct TcpListener {
-    fd: RegisteredFd,
+    fd: EventLoopAwareFd,
 }
 
 impl TcpListener {

@@ -1,7 +1,7 @@
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::timerfd::Timerfd;
 use crate::{
-    Now, Wants,
+    EventLoopAwareFd, Now, Wants,
     polling::{Event, Events, PollMode, Poller},
 };
 use alloc::rc::Rc;
@@ -76,15 +76,11 @@ impl EventLoopWithTimer {
         fd: OwnedFd,
         key: usize,
         wants: Wants,
-    ) -> Result<RegisteredFd, EventLoopWithTimerError> {
+    ) -> Result<EventLoopAwareFd, EventLoopWithTimerError> {
         let event = Self::event(key, wants)?;
         unsafe { self.poller.add_with_mode(&fd, event, PollMode::Level) }
             .map_err(EventLoopWithTimerError::Add)?;
-        Ok(RegisteredFd {
-            fd,
-            key,
-            poller: Rc::clone(&self.poller),
-        })
+        Ok(EventLoopAwareFd::new(fd, key, Rc::clone(&self.poller)))
     }
 
     pub fn set_deadline(
@@ -195,7 +191,7 @@ impl EventLoopWithTimer {
         })
     }
 
-    const fn event(key: usize, wants: Wants) -> Result<Event, EventLoopWithTimerError> {
+    pub(crate) const fn event(key: usize, wants: Wants) -> Result<Event, EventLoopWithTimerError> {
         if key >= Self::FIRST_RESERVED_KEY {
             return Err(EventLoopWithTimerError::ReservedKey(key));
         }
@@ -225,41 +221,6 @@ impl AsFd for EventLoopWithTimer {
 impl AsRawFd for EventLoopWithTimer {
     fn as_raw_fd(&self) -> RawFd {
         self.poller.as_raw_fd()
-    }
-}
-
-#[derive(Debug)]
-pub struct RegisteredFd {
-    fd: OwnedFd,
-    key: usize,
-    poller: Rc<Poller>,
-}
-
-impl RegisteredFd {
-    pub fn modify(&self, wants: Wants) -> Result<(), EventLoopWithTimerError> {
-        let event = EventLoopWithTimer::event(self.key, wants)?;
-        self.poller
-            .modify_with_mode(&self.fd, event, PollMode::Level)
-            .map_err(EventLoopWithTimerError::Modify)?;
-        Ok(())
-    }
-}
-
-impl Drop for RegisteredFd {
-    fn drop(&mut self) {
-        let _ = self.poller.delete(&self.fd);
-    }
-}
-
-impl AsFd for RegisteredFd {
-    fn as_fd(&self) -> BorrowedFd<'_> {
-        self.fd.as_fd()
-    }
-}
-
-impl AsRawFd for RegisteredFd {
-    fn as_raw_fd(&self) -> RawFd {
-        self.fd.as_raw_fd()
     }
 }
 

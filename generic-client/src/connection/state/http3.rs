@@ -12,7 +12,7 @@ use crate::{
 use core::{mem::MaybeUninit, net::SocketAddr, num::NonZeroUsize};
 use h3wire::FieldRef;
 use mpclipboard_shared::{
-    Message, MessageReader, MessageWriter, Now, PROTOCOL_VERSION, Past, RegisteredFd, Wants,
+    EventLoopAwareFd, Message, MessageReader, MessageWriter, Now, PROTOCOL_VERSION, Past, Wants,
     prelude::*,
 };
 use rustix::{
@@ -22,7 +22,7 @@ use rustix::{
 use std::time::Instant;
 
 pub(crate) struct Http3 {
-    fd: RegisteredFd,
+    fd: EventLoopAwareFd,
     conn: Http3Connection,
     recv_buf: Box<[MaybeUninit<u8>]>,
     state: Http3State,

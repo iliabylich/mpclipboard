@@ -2,7 +2,9 @@ mod result;
 pub(crate) use result::EventLoopResult;
 
 use core::time::Duration;
-use mpclipboard_shared::{EventLoopWithTimer, EventLoopWithTimerError, Now, RegisteredFd, Wants};
+use mpclipboard_shared::{
+    EventLoopAwareFd, EventLoopWithTimer, EventLoopWithTimerError, Now, Wants,
+};
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd, RawFd};
 use std::time::Instant;
 
@@ -22,7 +24,7 @@ impl EventLoop {
         &self,
         fd: OwnedFd,
         wants: Wants,
-    ) -> Result<RegisteredFd, EventLoopWithTimerError> {
+    ) -> Result<EventLoopAwareFd, EventLoopWithTimerError> {
         self.inner.register(fd, Self::FD_KEY, wants)
     }
 

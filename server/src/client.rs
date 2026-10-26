@@ -1,12 +1,13 @@
 use crate::chunked_decoder::ChunkedDecoder;
 use anyhow::{Context, Result, ensure};
 use mpclipboard_shared::{
-    EventLoopFdResult, ID, Message, MessageReader, MessageWriter, RegisteredFd, Wants, prelude::*,
+    EventLoopAwareFd, EventLoopFdResult, ID, Message, MessageReader, MessageWriter, Wants,
+    prelude::*,
 };
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd};
 
 pub struct Client {
-    fd: RegisteredFd,
+    fd: EventLoopAwareFd,
     id: ID,
     decoder: ChunkedDecoder,
     reader: MessageReader,
@@ -16,7 +17,7 @@ pub struct Client {
 impl Client {
     const READ_SIZE: usize = 8192;
 
-    pub(crate) fn new(fd: RegisteredFd, id: ID, leftover: &[u8]) -> Result<Self> {
+    pub(crate) fn new(fd: EventLoopAwareFd, id: ID, leftover: &[u8]) -> Result<Self> {
         let mut decoder = ChunkedDecoder::default();
         let partial = decoder
             .decode(leftover)
