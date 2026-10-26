@@ -1,10 +1,5 @@
 use crate::{ID, NonEmptyStringError, Token, Url, UrlParseError};
 use boml::{table::TomlGetError, types::TomlValueType};
-use core::{mem::MaybeUninit, str::Utf8Error};
-use rustix::{
-    fs::{Mode, OFlags},
-    io::Errno,
-};
 use std::path::{Path, PathBuf};
 
 pub struct ConfigReader {
@@ -12,8 +7,6 @@ pub struct ConfigReader {
 }
 
 impl ConfigReader {
-    const BUFFER_SIZE: usize = 1_024;
-
     pub fn new() -> Result<Self, ConfigReaderError> {
         for path in Self::paths() {
             log::error!("trying {}...", path.display());
@@ -83,32 +76,17 @@ impl ConfigReader {
 }
 
 fn read(path: &Path) -> Result<Option<String>, ConfigReaderError> {
-    let fd = match rustix::fs::open(path, OFlags::RDONLY, Mode::empty()) {
-        Ok(fd) => fd,
-        Err(Errno::NOENT) => return Ok(None),
-        Err(errno) => return Err(ConfigReaderError::Open(errno)),
-    };
-
-    let mut buffer = [MaybeUninit::uninit(); ConfigReader::BUFFER_SIZE];
-    let (bytes, spare) = rustix::io::read(&fd, &mut buffer).map_err(ConfigReaderError::Read)?;
-    if spare.is_empty() {
-        return Err(ConfigReaderError::TooLarge(ConfigReader::BUFFER_SIZE));
+    match std::fs::read_to_string(path) {
+        Ok(text) => Ok(Some(text)),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(err) => Err(ConfigReaderError::Read(err)),
     }
-
-    let text = core::str::from_utf8(bytes)?;
-    Ok(Some(text.to_string()))
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum ConfigReaderError {
-    #[error("failed to open() config: {0:?}")]
-    Open(Errno),
-    #[error("failed to read() config: {0:?}")]
-    Read(Errno),
-    #[error("config must be smaller than {0} bytes")]
-    TooLarge(usize),
-    #[error("config must be valid utf-8: {0}")]
-    NonUtf8(#[from] Utf8Error),
+    #[error("failed to read config: {0}")]
+    Read(std::io::Error),
     #[error("failed to parse TOML config at byte {0}")]
     MalformedToml(usize),
 }

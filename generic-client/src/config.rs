@@ -47,7 +47,7 @@ impl Config {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum ConfigError {
     #[error("failed to read config: {0}")]
     Read(#[from] ConfigReaderError),
