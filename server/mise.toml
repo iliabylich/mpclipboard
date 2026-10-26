@@ -44,18 +44,18 @@ flag "--version <version>" required=#true help="Release version in MAJOR.MINOR.P
 flag "--out <out>" required=#true help="Absolute path to write the .deb to"
 '''
 run = """
-    cargo-deb --no-build --deb-version "${usage_version}" -p mpclipboard-server --target=x86_64-unknown-linux-musl
-    mv "target/debian/mpclipboard-server_${usage_version}_amd64.deb" "${usage_out}"
+    cargo-deb --no-build --deb-version "{{usage.version}}" -p mpclipboard-server --target=x86_64-unknown-linux-musl
+    mv "target/debian/mpclipboard-server_{{usage.version}}_amd64.deb" "{{usage.out}}"
 """
 
 [tasks."release:container"]
 depends = ["build:release"]
 usage = 'flag "--version <version>" required=#true help="Release version in MAJOR.MINOR.PATCH format"'
 run = """
-    docker build -t "ghcr.io/iliabylich/mpclipboard:${usage_version}" .
-    docker push "ghcr.io/iliabylich/mpclipboard:${usage_version}"
+    docker build -t "ghcr.io/iliabylich/mpclipboard:{{usage.version}}" .
+    docker push "ghcr.io/iliabylich/mpclipboard:{{usage.version}}"
 
-    docker tag "ghcr.io/iliabylich/mpclipboard:${usage_version}" ghcr.io/iliabylich/mpclipboard:latest
+    docker tag "ghcr.io/iliabylich/mpclipboard:{{usage.version}}" ghcr.io/iliabylich/mpclipboard:latest
     docker push ghcr.io/iliabylich/mpclipboard:latest
 """
 

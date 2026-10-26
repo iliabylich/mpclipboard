@@ -52,8 +52,8 @@ flag "--version <version>" required=#true help="Release version in MAJOR.MINOR.P
 flag "--out <out>" required=#true help="Absolute path to write the .apk to"
 '''
 run = """
-    gradle --no-daemon assembleRelease -PappVersion="${usage_version}"
-    cp build/outputs/apk/release/mpclipboard-release.apk "${usage_out}"
+    gradle --no-daemon assembleRelease -PappVersion="{{usage.version}}"
+    cp build/outputs/apk/release/mpclipboard-release.apk "{{usage.out}}"
 """
 
 [tasks."install:debug"]

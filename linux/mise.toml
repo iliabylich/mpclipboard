@@ -28,8 +28,8 @@ flag "--out <out>" required=#true help="Absolute path to write the .deb to"
 '''
 depends = ["build:release"]
 run = """
-    cargo-deb --no-build --deb-version "${usage_version}" -p mpclipboard-client
-    mv "target/debian/mpclipboard-client_${usage_version}_amd64.deb" "${usage_out}"
+    cargo-deb --no-build --deb-version "{{usage.version}}" -p mpclipboard-client
+    mv "target/debian/mpclipboard-client_{{usage.version}}_amd64.deb" "{{usage.out}}"
 """
 
 [tasks.generate]

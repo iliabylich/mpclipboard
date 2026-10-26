@@ -41,7 +41,7 @@ run = "cargo build --example cli"
 [tasks.dev]
 usage = 'arg "<id>"'
 depends = ["build:cli:debug"]
-run = 'MPCLIPBOARD_ID="${usage_id}" target/debug/examples/cli'
+run = 'MPCLIPBOARD_ID="{{usage.id}}" target/debug/examples/cli'
 
 [tasks.valgrind]
 depends = ["build:cli:debug"]

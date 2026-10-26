@@ -30,7 +30,7 @@ run = """
     rm -rf archive metadata repo srclibs tmp
     mkdir -p repo
 
-    cp "${usage_apk}" repo/mpclipboard.apk
+    cp "{{usage.apk}}" repo/mpclipboard.apk
 
     fdroid update --verbose --create-metadata
 """

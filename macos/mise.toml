@@ -27,8 +27,15 @@ run = "xcodebuild -quiet -configuration Debug"
 
 [tasks."build:release"]
 hide = true
+usage = '''
+flag "--version <version>" required=#true help="Release version in MAJOR.MINOR.PATCH format"
+'''
 depends = ["generate", "//generic-client:build:release"]
-run = "xcodebuild -quiet -configuration Release"
+run = """
+    xcodebuild -quiet -configuration Release \
+        MARKETING_VERSION="{{usage.version}}" \
+        CURRENT_PROJECT_VERSION="{{usage.version}}"
+"""
 
 [tasks.dev]
 depends = ["build:debug"]
@@ -39,7 +46,7 @@ usage = '''
 flag "--version <version>" required=#true help="Release version in MAJOR.MINOR.PATCH format"
 flag "--out <out>" required=#true help="Absolute path to write the .dmg to"
 '''
-depends = ["clean", "build:release"]
+depends = ["clean", "build:release --version {{usage.version}}"]
 run = """
     pushd build/Release
         mkdir -p dmg-root
@@ -48,5 +55,5 @@ run = """
         hdiutil create -volname mpclipboard -srcfolder dmg-root -ov -format UDZO mpclipboard.dmg
     popd
 
-    mv build/Release/mpclipboard.dmg "${usage_out}"
+    mv build/Release/mpclipboard.dmg "{{usage.out}}"
 """

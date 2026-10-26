@@ -39,4 +39,4 @@ depends = ["//shared:clippy", "//generic-client:clippy", "//server:clippy"]
 
 [tasks."github:release"]
 usage = 'flag "--version <version>" required=#true help="Release version in MAJOR.MINOR.PATCH format"'
-run = 'gh workflow run release --ref master -f version="${usage_version}"'
+run = 'gh workflow run release --ref master -f version="{{usage.version}}"'
