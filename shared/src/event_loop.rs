@@ -77,47 +77,14 @@ impl EventLoopWithTimer {
         key: usize,
         wants: Wants,
     ) -> Result<RegisteredFd, EventLoopWithTimerError> {
-        unsafe { self.add(fd.as_fd(), key, wants) }?;
+        let event = Self::event(key, wants)?;
+        unsafe { self.poller.add_with_mode(&fd, event, PollMode::Level) }
+            .map_err(EventLoopWithTimerError::Add)?;
         Ok(RegisteredFd {
             fd,
             key,
             poller: Rc::clone(&self.poller),
         })
-    }
-
-    /// # Safety
-    ///
-    /// `fd` must be [`delete()`](Self::delete)d before it is closed.
-    pub unsafe fn add(
-        &self,
-        fd: BorrowedFd<'_>,
-        key: usize,
-        wants: Wants,
-    ) -> Result<(), EventLoopWithTimerError> {
-        let event = Self::event(key, wants)?;
-        unsafe { self.poller.add_with_mode(&fd, event, PollMode::Level) }
-            .map_err(EventLoopWithTimerError::Add)?;
-        Ok(())
-    }
-
-    pub fn modify(
-        &self,
-        fd: BorrowedFd<'_>,
-        key: usize,
-        wants: Wants,
-    ) -> Result<(), EventLoopWithTimerError> {
-        let event = Self::event(key, wants)?;
-        self.poller
-            .modify_with_mode(fd, event, PollMode::Level)
-            .map_err(EventLoopWithTimerError::Modify)?;
-        Ok(())
-    }
-
-    pub fn delete(&self, fd: BorrowedFd<'_>) -> Result<(), EventLoopWithTimerError> {
-        self.poller
-            .delete(fd)
-            .map_err(EventLoopWithTimerError::Delete)?;
-        Ok(())
     }
 
     pub fn set_deadline(
@@ -261,6 +228,7 @@ impl AsRawFd for EventLoopWithTimer {
     }
 }
 
+#[derive(Debug)]
 pub struct RegisteredFd {
     fd: OwnedFd,
     key: usize,
@@ -345,8 +313,6 @@ pub enum EventLoopWithTimerError {
     Add(std::io::Error),
     #[error("failed to modify fd: {0}")]
     Modify(std::io::Error),
-    #[error("failed to delete fd: {0}")]
-    Delete(std::io::Error),
     #[error("failed to wait for events: {0}")]
     Wait(std::io::Error),
 }

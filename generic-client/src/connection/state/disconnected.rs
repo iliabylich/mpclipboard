@@ -6,6 +6,7 @@ use crate::{
         quic_config::QuicConfig,
         state::{Dns, FREEZE_TIME_IN_SECS, Http3, State},
     },
+    event_loop::EventLoop,
 };
 use core::net::{Ipv4Addr, SocketAddr};
 use mpclipboard_shared::{Now, Past};
@@ -28,6 +29,7 @@ impl Disconnected {
         now: Now,
         config: &Config,
         quic_config: &QuicConfig,
+        event_loop: &EventLoop,
     ) -> Result<Option<State>, ConnectionError> {
         if let Some(disconnected_at) = self.disconnected_at
             && now.seconds_since(disconnected_at) <= FREEZE_TIME_IN_SECS
@@ -35,7 +37,7 @@ impl Disconnected {
             return Ok(None);
         }
 
-        let state = Self::reconnect(now, config, quic_config)?;
+        let state = Self::reconnect(now, config, quic_config, event_loop)?;
         Ok(Some(state))
     }
 
@@ -43,13 +45,14 @@ impl Disconnected {
         now: Now,
         config: &Config,
         quic_config: &QuicConfig,
+        event_loop: &EventLoop,
     ) -> Result<State, ConnectionError> {
         if let Ok(ip) = config.url.host().parse::<Ipv4Addr>() {
             let addr = SocketAddr::from((ip, config.url.port()));
-            let state = Http3::connect(now, addr, config, quic_config)?;
+            let state = Http3::connect(now, addr, config, quic_config, event_loop)?;
             Ok(State::Http3(state))
         } else {
-            let state = Dns::start(now, config)?;
+            let state = Dns::start(now, config, event_loop)?;
             Ok(State::Dns(state))
         }
     }

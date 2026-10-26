@@ -43,8 +43,7 @@ impl MPClipboard {
     fn sync_event_loop(&mut self) -> Result<(), MPClipboardError> {
         self.conn.flush(self.event_loop.now());
         let deadline = self.conn.next_timer();
-        let wants = self.conn.wants();
-        self.event_loop.sync(wants, deadline)?;
+        self.event_loop.set_deadline(deadline)?;
         Ok(())
     }
 
@@ -73,7 +72,6 @@ impl MPClipboard {
         };
         let next_connectivity = self.conn.connectivity();
 
-        log::trace!("Connection wants: {:?}", self.conn.wants());
         self.sync_event_loop()?;
 
         let connectivity = if prev_connectivity == next_connectivity {
@@ -91,7 +89,7 @@ impl MPClipboard {
 
         if polled.ticked {
             log::trace!("tick {now}");
-            self.conn.tick(now, &self.config);
+            self.conn.tick(now, &self.config, &self.event_loop);
         }
 
         if let Some(fd) = polled.fd {
@@ -101,7 +99,7 @@ impl MPClipboard {
             }
 
             if fd.readable && !self.conn.is_disconnected() {
-                out = self.conn.on_readable(now, &self.config);
+                out = self.conn.on_readable(now, &self.config, &self.event_loop);
             }
 
             if fd.writable && !self.conn.is_disconnected() {

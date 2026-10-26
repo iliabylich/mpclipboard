@@ -1,7 +1,6 @@
-use crate::event_loop::Epoch;
+use crate::event_loop::EventLoop;
 use crate::{Connectivity, config::Config};
-use mpclipboard_shared::{Message, Now, Wants, prelude::*};
-use rustix::fd::BorrowedFd;
+use mpclipboard_shared::{Message, Now, prelude::*};
 use std::time::Instant;
 
 mod error;
@@ -16,7 +15,6 @@ mod state;
 use state::{Disconnected, Readable, State};
 
 pub(crate) struct Connection {
-    epoch: Epoch,
     state: State,
     quic_config: QuicConfig,
 }
@@ -24,7 +22,6 @@ pub(crate) struct Connection {
 impl Connection {
     pub(crate) fn new() -> Result<Self, QuicConfigError> {
         Ok(Self {
-            epoch: Epoch::ZERO,
             state: State::Disconnected(Disconnected::new(None)),
             quic_config: QuicConfig::new()?,
         })
@@ -32,7 +29,6 @@ impl Connection {
 
     pub(crate) fn disconnect(&mut self, now: Now) {
         self.state = State::Disconnected(Disconnected::new(Some(now.as_past())));
-        self.epoch.bump();
     }
 
     pub(crate) const fn connectivity(&self) -> Connectivity {
@@ -43,10 +39,9 @@ impl Connection {
         matches!(self.state, State::Disconnected { .. } | State::Stopped)
     }
 
-    pub(crate) fn tick(&mut self, now: Now, config: &Config) {
-        if let Some(next) = self.state.tick(now, config, &self.quic_config) {
+    pub(crate) fn tick(&mut self, now: Now, config: &Config, event_loop: &EventLoop) {
+        if let Some(next) = self.state.tick(now, config, &self.quic_config, event_loop) {
             self.state = next;
-            self.epoch.bump();
         }
     }
 
@@ -54,13 +49,20 @@ impl Connection {
         self.state.push(message, now)
     }
 
-    pub(crate) fn on_readable(&mut self, now: Now, config: &Config) -> Option<Message> {
+    pub(crate) fn on_readable(
+        &mut self,
+        now: Now,
+        config: &Config,
+        event_loop: &EventLoop,
+    ) -> Option<Message> {
         log::trace!("{self:?} reading...");
 
-        match self.state.on_readable(now, config, &self.quic_config) {
+        match self
+            .state
+            .on_readable(now, config, &self.quic_config, event_loop)
+        {
             Ok(Done(Readable::NextState(next))) => {
                 self.state = next;
-                self.epoch.bump();
                 None
             }
             Ok(Done(Readable::Message(message))) => Some(message),
@@ -99,17 +101,11 @@ impl Connection {
     pub(crate) fn next_timer(&mut self) -> Option<Instant> {
         self.state.next_timer()
     }
-
-    pub(crate) fn wants(&mut self) -> Option<(BorrowedFd<'_>, Epoch, Wants)> {
-        let (fd, wants) = self.state.wants()?;
-        Some((fd, self.epoch, wants))
-    }
 }
 
 impl core::fmt::Debug for Connection {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("Connection")
-            .field("epoch", &self.epoch)
             .field("state", &self.state)
             .finish_non_exhaustive()
     }

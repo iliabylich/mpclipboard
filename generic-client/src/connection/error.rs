@@ -1,5 +1,5 @@
 use mini_sansio_dns::DnsError;
-use mpclipboard_shared::{MessageDecodeError, MessageWriterError};
+use mpclipboard_shared::{EventLoopWithTimerError, MessageDecodeError, MessageWriterError};
 use quinn_proto::{ReadableError, WriteError};
 use rustix::io::Errno;
 
@@ -12,6 +12,8 @@ pub(crate) enum ConnectionError {
     SetCloexec(Errno),
     #[error("failed to ioctl(FIONBIO): {0:?}")]
     SwitchToNonBlocking(Errno),
+    #[error("event loop error: {0}")]
+    EventLoop(#[from] EventLoopWithTimerError),
 
     // DNS-related errors
     #[error("failed to connect() to DNS server: {0:?}")]

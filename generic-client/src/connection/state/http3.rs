@@ -7,21 +7,22 @@ use crate::{
         quic_config::QuicConfig,
         state::{FREEZE_TIME_IN_SECS, HEARTBEAT_INTERVAL_IN_SECS, Readable, State},
     },
+    event_loop::EventLoop,
 };
 use core::{mem::MaybeUninit, net::SocketAddr, num::NonZeroUsize};
 use h3wire::FieldRef;
 use mpclipboard_shared::{
-    Message, MessageReader, MessageWriter, Now, PROTOCOL_VERSION, Past, Wants, prelude::*,
+    Message, MessageReader, MessageWriter, Now, PROTOCOL_VERSION, Past, RegisteredFd, Wants,
+    prelude::*,
 };
 use rustix::{
-    fd::{AsFd, BorrowedFd, OwnedFd},
     io::{Errno, FdFlags},
     net::{AddressFamily, RecvFlags, SendFlags, SocketType},
 };
 use std::time::Instant;
 
 pub(crate) struct Http3 {
-    fd: OwnedFd,
+    fd: RegisteredFd,
     conn: Http3Connection,
     recv_buf: Box<[MaybeUninit<u8>]>,
     state: Http3State,
@@ -47,6 +48,7 @@ impl Http3 {
         peer: SocketAddr,
         config: &Config,
         quic_config: &QuicConfig,
+        event_loop: &EventLoop,
     ) -> Result<Self, ConnectionError> {
         let fd = rustix::net::socket(AddressFamily::INET, SocketType::DGRAM, None)
             .map_err(ConnectionError::OpenSocket)?;
@@ -54,6 +56,7 @@ impl Http3 {
         rustix::io::fcntl_setfd(&fd, FdFlags::CLOEXEC).map_err(ConnectionError::SetCloexec)?;
         rustix::io::ioctl_fionbio(&fd, true).map_err(ConnectionError::SwitchToNonBlocking)?;
         rustix::net::connect(&fd, &peer).map_err(ConnectionError::ConnectToAppServer)?;
+        let fd = event_loop.register(fd, Wants::Read)?;
 
         let conn = Http3Connection::new(peer, config.url.host(), quic_config)?;
         log::info!("connecting to {peer}");
@@ -216,10 +219,6 @@ impl Http3 {
             }
         }
         Ok(())
-    }
-
-    pub(crate) fn wants(&self) -> (BorrowedFd<'_>, Wants) {
-        (self.fd.as_fd(), Wants::Read)
     }
 
     fn recv(&mut self) -> Result<(), ConnectionError> {

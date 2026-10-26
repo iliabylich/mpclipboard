@@ -1,21 +1,13 @@
-mod epoch;
-pub(crate) use epoch::Epoch;
-
-mod fd_state;
-use fd_state::{Diff, FdState};
-
 mod result;
 pub(crate) use result::EventLoopResult;
 
 use core::time::Duration;
-use mpclipboard_shared::{EventLoopWithTimer, EventLoopWithTimerError, Now, Wants};
-use std::os::fd::{AsFd, AsRawFd, BorrowedFd, RawFd};
+use mpclipboard_shared::{EventLoopWithTimer, EventLoopWithTimerError, Now, RegisteredFd, Wants};
+use std::os::fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd, RawFd};
 use std::time::Instant;
 
 pub(crate) struct EventLoop {
     inner: EventLoopWithTimer,
-    fd: FdState,
-    registered: Option<RawFd>,
 }
 
 impl EventLoop {
@@ -23,38 +15,22 @@ impl EventLoop {
 
     pub(crate) fn new() -> Result<Self, EventLoopWithTimerError> {
         let inner = EventLoopWithTimer::new()?;
-
-        Ok(Self {
-            inner,
-            fd: FdState::None,
-            registered: None,
-        })
+        Ok(Self { inner })
     }
 
-    pub(crate) fn sync(
+    pub(crate) fn register(
+        &self,
+        fd: OwnedFd,
+        wants: Wants,
+    ) -> Result<RegisteredFd, EventLoopWithTimerError> {
+        self.inner.register(fd, Self::FD_KEY, wants)
+    }
+
+    pub(crate) fn set_deadline(
         &mut self,
-        wants: Option<(BorrowedFd<'_>, Epoch, Wants)>,
         deadline: Option<Instant>,
     ) -> Result<(), EventLoopWithTimerError> {
-        self.inner.set_deadline(deadline)?;
-
-        match self.fd.transition(wants) {
-            Diff::Add { fd, wants } => {
-                self.forget_registered();
-                unsafe { self.inner.add(fd, Self::FD_KEY, wants) }?;
-                self.registered = Some(fd.as_raw_fd());
-            }
-            Diff::Modify { fd, wants } => {
-                self.inner.modify(fd, Self::FD_KEY, wants)?;
-            }
-            Diff::Empty => {}
-        }
-
-        if matches!(self.fd, FdState::None) {
-            self.forget_registered();
-        }
-
-        Ok(())
+        self.inner.set_deadline(deadline)
     }
 
     pub(crate) fn drain_events_without_waiting(
@@ -79,13 +55,6 @@ impl EventLoop {
 
     pub(crate) const fn now(&self) -> Now {
         self.inner.now()
-    }
-
-    fn forget_registered(&mut self) {
-        let Some(fd) = self.registered.take() else {
-            return;
-        };
-        let _ = self.inner.delete(unsafe { BorrowedFd::borrow_raw(fd) });
     }
 }
 

@@ -2,9 +2,9 @@ use crate::{
     Connectivity,
     config::Config,
     connection::{error::ConnectionError, quic_config::QuicConfig},
+    event_loop::EventLoop,
 };
-use mpclipboard_shared::{Message, Now, Wants, prelude::*};
-use rustix::fd::BorrowedFd;
+use mpclipboard_shared::{Message, Now, prelude::*};
 use std::time::Instant;
 
 mod disconnected;
@@ -50,10 +50,11 @@ impl State {
         now: Now,
         config: &Config,
         quic_config: &QuicConfig,
+        event_loop: &EventLoop,
     ) -> Option<Self> {
         let is_stuck = match self {
             Self::Disconnected(state) => {
-                return match state.tick(now, config, quic_config) {
+                return match state.tick(now, config, quic_config, event_loop) {
                     Ok(next) => next,
                     Err(err) => {
                         log::error!("failed to reconnect: {err}");
@@ -83,13 +84,14 @@ impl State {
         now: Now,
         config: &Config,
         quic_config: &QuicConfig,
+        event_loop: &EventLoop,
     ) -> Result<Completion<Readable, ()>, ConnectionError> {
         match self {
             Self::Disconnected(_) => unreachable!("can't read() in Disconnected state"),
             Self::Stopped => unreachable!("can't read() in Stopped state"),
 
             Self::Dns(state) => {
-                let Done(next) = state.on_readable(now, config, quic_config)? else {
+                let Done(next) = state.on_readable(now, config, quic_config, event_loop)? else {
                     return Ok(Pending(()));
                 };
                 Ok(Done(Readable::NextState(next)))
@@ -136,14 +138,6 @@ impl State {
         match self {
             Self::Http3(state) => state.push(message, now),
             Self::Disconnected(_) | Self::Dns(_) | Self::Stopped => false,
-        }
-    }
-
-    pub(crate) fn wants(&mut self) -> Option<(BorrowedFd<'_>, Wants)> {
-        match self {
-            Self::Disconnected(_) | Self::Stopped => None,
-            Self::Dns(state) => Some(state.wants()),
-            Self::Http3(state) => Some(state.wants()),
         }
     }
 }
