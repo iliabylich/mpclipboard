@@ -65,7 +65,7 @@ impl core::fmt::Display for PreSource {
         write!(
             f,
             "PreSource(fd={}, created_at={})",
-            self.fd.as_raw_fd(),
+            self.fd.as_fd().as_raw_fd(),
             self.created_at
         )
     }
@@ -74,11 +74,5 @@ impl core::fmt::Display for PreSource {
 impl AsFd for PreSource {
     fn as_fd(&self) -> BorrowedFd<'_> {
         self.fd.as_fd()
-    }
-}
-
-impl AsRawFd for PreSource {
-    fn as_raw_fd(&self) -> i32 {
-        self.fd.as_raw_fd()
     }
 }

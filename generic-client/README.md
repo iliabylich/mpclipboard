@@ -25,7 +25,7 @@ let mut mpclipboard = MPClipboard::new_with_xdg_config()?;
 // or MPClipboard::new_inline("https://your.host:443", "<TOKEN>", "<ID>")
 
 // and take its file descriptor
-let fd = mpclipboard.as_raw_fd();
+let fd = mpclipboard.as_fd().as_raw_fd();
 
 loop {
     // FD becomes readable when there's work to do.

@@ -1,6 +1,6 @@
 use core::time::Duration;
 use rustix::{
-    fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd},
+    fd::{AsFd, BorrowedFd, OwnedFd},
     fs::Timespec,
     io::Errno,
     time::{
@@ -47,11 +47,5 @@ impl Timerfd {
 impl AsFd for Timerfd {
     fn as_fd(&self) -> BorrowedFd<'_> {
         self.fd.as_fd()
-    }
-}
-
-impl AsRawFd for Timerfd {
-    fn as_raw_fd(&self) -> i32 {
-        self.fd.as_raw_fd()
     }
 }

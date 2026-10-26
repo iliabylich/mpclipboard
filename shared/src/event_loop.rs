@@ -7,7 +7,7 @@ use crate::{
 use alloc::rc::Rc;
 use core::time::Duration;
 use rustix::{
-    fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd, RawFd},
+    fd::{AsFd, BorrowedFd, OwnedFd},
     io::Errno,
 };
 use std::time::Instant;
@@ -39,7 +39,11 @@ impl EventLoopWithTimer {
                 .set(Duration::ZERO)
                 .map_err(EventLoopWithTimerError::SetTimer)?;
             unsafe {
-                poller.add_with_mode(&timer, Event::readable(Self::TIMER_KEY), PollMode::Level)
+                poller.add_with_mode(
+                    &timer.as_fd(),
+                    Event::readable(Self::TIMER_KEY),
+                    PollMode::Level,
+                )
             }
             .map_err(EventLoopWithTimerError::AddTimer)?;
             timer
@@ -215,12 +219,6 @@ impl Drop for EventLoopWithTimer {
 impl AsFd for EventLoopWithTimer {
     fn as_fd(&self) -> BorrowedFd<'_> {
         self.poller.as_fd()
-    }
-}
-
-impl AsRawFd for EventLoopWithTimer {
-    fn as_raw_fd(&self) -> RawFd {
-        self.poller.as_raw_fd()
     }
 }
 

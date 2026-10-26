@@ -3,7 +3,7 @@ use anyhow::{Context, Result, ensure};
 use core::net::SocketAddrV4;
 use mpclipboard_shared::{EventLoopAwareFd, EventLoopFdResult, EventLoopWithTimer, Wants};
 use rustix::net::{AddressFamily, SocketType};
-use std::os::fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd};
+use std::os::fd::{AsFd, BorrowedFd, OwnedFd};
 
 pub struct TcpListener {
     fd: EventLoopAwareFd,
@@ -43,11 +43,5 @@ impl TcpListener {
 impl AsFd for TcpListener {
     fn as_fd(&self) -> BorrowedFd<'_> {
         self.fd.as_fd()
-    }
-}
-
-impl AsRawFd for TcpListener {
-    fn as_raw_fd(&self) -> i32 {
-        self.fd.as_raw_fd()
     }
 }

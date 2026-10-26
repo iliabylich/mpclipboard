@@ -7,7 +7,7 @@ use crate::{
 };
 use mpclipboard_shared::{EventLoopWithTimerError, Message, Store};
 use std::{
-    os::fd::{AsFd, AsRawFd, BorrowedFd},
+    os::fd::{AsFd, BorrowedFd},
     sync::Once,
 };
 
@@ -129,12 +129,6 @@ impl MPClipboard {
         self.sync_event_loop()?;
 
         Ok(pushed)
-    }
-}
-
-impl AsRawFd for MPClipboard {
-    fn as_raw_fd(&self) -> i32 {
-        self.event_loop.as_raw_fd()
     }
 }
 

@@ -106,18 +106,17 @@ impl Client {
 
 impl core::fmt::Display for Client {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "Client(fd={}, id={})", self.fd.as_raw_fd(), self.id)
+        write!(
+            f,
+            "Client(fd={}, id={})",
+            self.fd.as_fd().as_raw_fd(),
+            self.id
+        )
     }
 }
 
 impl AsFd for Client {
     fn as_fd(&self) -> BorrowedFd<'_> {
         self.fd.as_fd()
-    }
-}
-
-impl AsRawFd for Client {
-    fn as_raw_fd(&self) -> i32 {
-        self.fd.as_raw_fd()
     }
 }

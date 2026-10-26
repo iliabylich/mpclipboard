@@ -11,7 +11,7 @@ use rustix::{
 };
 use std::{
     io::ErrorKind,
-    os::fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd, RawFd},
+    os::fd::{AsFd, BorrowedFd, OwnedFd},
 };
 
 struct Connecting {
@@ -225,11 +225,5 @@ impl DBus {
 impl AsFd for DBus {
     fn as_fd(&self) -> BorrowedFd<'_> {
         self.fd.as_fd()
-    }
-}
-
-impl AsRawFd for DBus {
-    fn as_raw_fd(&self) -> RawFd {
-        self.fd.as_raw_fd()
     }
 }

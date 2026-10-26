@@ -5,7 +5,7 @@ use core::time::Duration;
 use mpclipboard_shared::{
     EventLoopAwareFd, EventLoopWithTimer, EventLoopWithTimerError, Now, Wants,
 };
-use std::os::fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd, RawFd};
+use std::os::fd::{AsFd, BorrowedFd, OwnedFd};
 use std::time::Instant;
 
 pub(crate) struct EventLoop {
@@ -63,11 +63,5 @@ impl EventLoop {
 impl AsFd for EventLoop {
     fn as_fd(&self) -> BorrowedFd<'_> {
         self.inner.as_fd()
-    }
-}
-
-impl AsRawFd for EventLoop {
-    fn as_raw_fd(&self) -> RawFd {
-        self.inner.as_raw_fd()
     }
 }

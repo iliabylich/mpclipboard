@@ -100,7 +100,7 @@ impl core::fmt::Display for PreSink {
         write!(
             f,
             "PreSink(fd={}, created_at={})",
-            self.fd.as_raw_fd(),
+            self.fd.as_fd().as_raw_fd(),
             self.created_at
         )
     }
@@ -109,11 +109,5 @@ impl core::fmt::Display for PreSink {
 impl AsFd for PreSink {
     fn as_fd(&self) -> BorrowedFd<'_> {
         self.fd.as_fd()
-    }
-}
-
-impl AsRawFd for PreSink {
-    fn as_raw_fd(&self) -> i32 {
-        self.fd.as_raw_fd()
     }
 }

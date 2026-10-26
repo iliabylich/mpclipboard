@@ -11,7 +11,10 @@ use anyhow::Result;
 use mpclipboard_shared::{
     EventLoopFdResult, EventLoopWithTimer, ID, Message, Request, Store, Wants, prelude::*,
 };
-use std::{collections::HashMap, os::fd::AsRawFd};
+use std::{
+    collections::HashMap,
+    os::fd::{AsFd, AsRawFd},
+};
 
 pub struct MainLoop {
     event_loop: EventLoopWithTimer,
@@ -64,7 +67,7 @@ impl MainLoop {
 
     pub(crate) fn poll_and_process_events(&mut self) {
         let (ticked, mut revents) = self.poll();
-        let listener = revents.remove(&self.listener.as_raw_fd());
+        let listener = revents.remove(&self.listener.as_fd().as_raw_fd());
 
         for (fd, revents) in revents {
             if let Some(source) = self.pre_sources.remove(fd) {

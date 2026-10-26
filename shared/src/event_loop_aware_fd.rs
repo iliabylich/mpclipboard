@@ -3,7 +3,7 @@ use crate::{
     polling::{PollMode, Poller},
 };
 use alloc::rc::Rc;
-use rustix::fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd, RawFd};
+use rustix::fd::{AsFd, BorrowedFd, OwnedFd};
 
 #[derive(Debug)]
 pub struct EventLoopAwareFd {
@@ -35,11 +35,5 @@ impl Drop for EventLoopAwareFd {
 impl AsFd for EventLoopAwareFd {
     fn as_fd(&self) -> BorrowedFd<'_> {
         self.fd.as_fd()
-    }
-}
-
-impl AsRawFd for EventLoopAwareFd {
-    fn as_raw_fd(&self) -> RawFd {
-        self.fd.as_raw_fd()
     }
 }

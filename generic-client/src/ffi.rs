@@ -1,6 +1,6 @@
 use crate::{Connectivity, MPClipboard};
 use core::{ffi::c_char, str::Utf8Error};
-use rustix::fd::AsRawFd;
+use rustix::fd::{AsFd, AsRawFd};
 
 macro_rules! try_or_null {
     ($v:expr) => {
@@ -81,7 +81,7 @@ pub extern "C" fn mpclipboard_new_from_file() -> Option<Box<MPClipboard>> {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn mpclipboard_get_fd(mpclipboard: &MPClipboard) -> i32 {
-    mpclipboard.as_raw_fd()
+    mpclipboard.as_fd().as_raw_fd()
 }
 
 #[repr(C)]
