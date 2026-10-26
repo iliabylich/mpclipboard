@@ -59,7 +59,7 @@ mod non_empty_string;
 pub use non_empty_string::{NonEmptyString, NonEmptyStringError};
 
 mod wants;
-pub use wants::{OptionWantsExt, Wants};
+pub use wants::Wants;
 
 mod polling;
 
@@ -70,9 +70,6 @@ pub use event_loop::{
 
 mod event_loop_aware_fd;
 pub use event_loop_aware_fd::EventLoopAwareFd;
-
-mod revents;
-pub use revents::{REvents, REventsError};
 
 mod store;
 pub use store::Store;

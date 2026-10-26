@@ -1,7 +1,4 @@
-use crate::{
-    Wants,
-    message::{Frame, Message},
-};
+use crate::message::{Frame, Message};
 use bytes::{Buf, Bytes};
 use core::num::NonZeroUsize;
 
@@ -76,15 +73,6 @@ impl MessageWriter {
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.remainder().is_none()
-    }
-
-    #[must_use]
-    pub fn wants(&self) -> Option<Wants> {
-        if self.is_empty() {
-            None
-        } else {
-            Some(Wants::Write)
-        }
     }
 }
 

@@ -1,5 +1,4 @@
 use mpclipboard_generic_client::{MPClipboard, Output};
-use mpclipboard_shared::REvents;
 use rustix::event::{PollFd, PollFlags};
 use std::io::BufRead;
 
@@ -13,11 +12,15 @@ fn main() {
             PollFd::new(&stdin, PollFlags::IN),
         ];
         rustix::event::poll(&mut fds, None).unwrap();
-        let mpclipboard_revents = REvents::new(fds[0].revents()).unwrap();
-        let stdin_revents = REvents::new(fds[1].revents()).unwrap();
+        let [mpclipboard_revents, stdin_revents] = fds.each_ref().map(PollFd::revents);
+        for revents in [mpclipboard_revents, stdin_revents] {
+            assert!(
+                !revents.intersects(PollFlags::HUP | PollFlags::ERR | PollFlags::NVAL),
+                "got revents {revents:?}"
+            );
+        }
 
-        assert!(!mpclipboard_revents.writable);
-        if mpclipboard_revents.readable {
+        if mpclipboard_revents.contains(PollFlags::IN) {
             let Output { connectivity, text } = mpclipboard.read().unwrap();
             if let Some(connectivity) = connectivity {
                 println!("[c] {connectivity:?}");
@@ -27,8 +30,7 @@ fn main() {
             }
         }
 
-        assert!(!stdin_revents.writable);
-        if stdin_revents.readable {
+        if stdin_revents.contains(PollFlags::IN) {
             let mut line = String::new();
             stdin.read_line(&mut line).unwrap();
             let line = line.trim();
