@@ -26,7 +26,6 @@ pub struct EventLoopWithTimer {
 
 impl EventLoopWithTimer {
     const TIMER_KEY: usize = usize::MAX - 1;
-    const FIRST_RESERVED_KEY: usize = usize::MAX - 1;
 
     pub fn new() -> Result<Self, EventLoopWithTimerError> {
         let poller = Poller::new().map_err(EventLoopWithTimerError::Create)?;
@@ -196,7 +195,7 @@ impl EventLoopWithTimer {
     }
 
     pub(crate) const fn event(key: usize, wants: Wants) -> Result<Event, EventLoopWithTimerError> {
-        if key >= Self::FIRST_RESERVED_KEY {
+        if key == Self::TIMER_KEY {
             return Err(EventLoopWithTimerError::ReservedKey(key));
         }
 
@@ -233,7 +232,7 @@ impl EventLoopWithTimerResult<'_> {
     pub fn fds(&self) -> impl Iterator<Item = (usize, EventLoopFdResult)> + '_ {
         self.events
             .iter()
-            .filter(|event| event.key < EventLoopWithTimer::FIRST_RESERVED_KEY)
+            .filter(|event| event.key != EventLoopWithTimer::TIMER_KEY)
             .map(|event| {
                 let fd = EventLoopFdResult {
                     readable: event.readable,
