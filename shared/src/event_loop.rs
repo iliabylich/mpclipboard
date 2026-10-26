@@ -1,8 +1,7 @@
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use crate::timerfd::Timerfd;
 use crate::{
     EventLoopAwareFd, Now, Wants,
     polling::{Event, Events, PollMode, Poller},
+    timer::Timer,
 };
 use alloc::rc::Rc;
 use core::time::Duration;
@@ -15,8 +14,7 @@ use std::time::Instant;
 pub struct EventLoopWithTimer {
     poller: Rc<Poller>,
     events: Events,
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    timer: Timerfd,
+    timer: Timer,
     start: Instant,
     seconds: u64,
     next_tick: Instant,
@@ -28,43 +26,13 @@ impl EventLoopWithTimer {
     const TIMER_KEY: usize = usize::MAX - 1;
 
     pub fn new() -> Result<Self, EventLoopWithTimerError> {
-        let poller = Poller::new().map_err(EventLoopWithTimerError::Create)?;
+        let poller = Rc::new(Poller::new().map_err(EventLoopWithTimerError::Create)?);
         let start = Instant::now();
-
-        #[cfg(any(target_os = "linux", target_os = "android"))]
-        let timer = {
-            let timer = Timerfd::new().map_err(EventLoopWithTimerError::CreateTimer)?;
-            timer
-                .set(Duration::ZERO)
-                .map_err(EventLoopWithTimerError::SetTimer)?;
-            unsafe {
-                poller.add_with_mode(
-                    &timer.as_fd(),
-                    Event::readable(Self::TIMER_KEY),
-                    PollMode::Level,
-                )
-            }
-            .map_err(EventLoopWithTimerError::AddTimer)?;
-            timer
-        };
-
-        #[cfg(target_os = "macos")]
-        {
-            use crate::polling::os::kqueue::PollerKqueueExt;
-
-            poller
-                .add_filter(
-                    Self::kqueue_timer(Duration::ZERO),
-                    Self::TIMER_KEY,
-                    PollMode::Oneshot,
-                )
-                .map_err(EventLoopWithTimerError::AddTimer)?;
-        }
+        let timer = Timer::new(Rc::clone(&poller), Self::TIMER_KEY)?;
 
         Ok(Self {
-            poller: Rc::new(poller),
+            poller,
             events: Events::new(),
-            #[cfg(any(target_os = "linux", target_os = "android"))]
             timer,
             start,
             seconds: 0,
@@ -109,35 +77,9 @@ impl EventLoopWithTimer {
 
     fn arm(&mut self, target: Instant) -> Result<(), EventLoopWithTimerError> {
         let timeout = target.saturating_duration_since(Instant::now());
-
-        #[cfg(any(target_os = "linux", target_os = "android"))]
-        self.timer
-            .set(timeout)
-            .map_err(EventLoopWithTimerError::SetTimer)?;
-
-        #[cfg(target_os = "macos")]
-        {
-            use crate::polling::os::kqueue::PollerKqueueExt;
-
-            self.poller
-                .modify_filter(
-                    Self::kqueue_timer(timeout),
-                    Self::TIMER_KEY,
-                    PollMode::Oneshot,
-                )
-                .map_err(EventLoopWithTimerError::SetTimer)?;
-        }
-
+        self.timer.set(timeout)?;
         self.armed = target;
         Ok(())
-    }
-
-    #[cfg(target_os = "macos")]
-    fn kqueue_timer(timeout: Duration) -> crate::polling::os::kqueue::Timer {
-        crate::polling::os::kqueue::Timer {
-            id: Self::TIMER_KEY,
-            timeout: timeout.max(Duration::from_nanos(1)),
-        }
     }
 
     pub const fn now(&self) -> Now {
@@ -205,13 +147,6 @@ impl EventLoopWithTimer {
             Wants::ReadWrite => Event::all(key),
         };
         Ok(event)
-    }
-}
-
-#[cfg(any(target_os = "linux", target_os = "android"))]
-impl Drop for EventLoopWithTimer {
-    fn drop(&mut self) {
-        let _ = self.poller.delete(self.timer.as_fd());
     }
 }
 

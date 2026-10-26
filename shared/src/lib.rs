@@ -48,8 +48,7 @@ pub use self::{
     message_writer::{MessageWriter, MessageWriterError},
 };
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
-mod timerfd;
+mod timer;
 
 pub type Token = NonEmptyString;
 
