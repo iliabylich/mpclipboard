@@ -42,21 +42,35 @@ impl ConfigReader {
         Ok(id)
     }
 
-    fn get(&self, env_var_name: &str, config_key: &str) -> Result<String, LookupError> {
+    fn get(
+        &self,
+        env_var_name: &'static str,
+        config_key: &'static str,
+    ) -> Result<String, LookupError> {
         if let Some(value) = std::env::var_os(env_var_name) {
-            return value.into_string().map_err(|_| LookupError::NonUtf8Env);
+            return value
+                .into_string()
+                .map_err(|_| LookupError::NonUtf8Env { env_var_name });
         }
 
         let Some(text) = &self.text else {
-            return Err(LookupError::Missing);
+            return Err(LookupError::Missing {
+                env_var_name,
+                config_key,
+            });
         };
         let toml = boml::parse(text)
             .unwrap_or_else(|_| unreachable!("config is validated in ConfigReader::new()"));
 
         match toml.get_string(config_key) {
             Ok(value) => Ok(value.to_string()),
-            Err(TomlGetError::InvalidKey) => Err(LookupError::Missing),
-            Err(TomlGetError::TypeMismatch(_, found)) => Err(LookupError::NotAString(found)),
+            Err(TomlGetError::InvalidKey) => Err(LookupError::Missing {
+                env_var_name,
+                config_key,
+            }),
+            Err(TomlGetError::TypeMismatch(_, found)) => {
+                Err(LookupError::NotAString { config_key, found })
+            }
         }
     }
 
@@ -91,75 +105,42 @@ pub enum ConfigReaderError {
     MalformedToml(usize),
 }
 
-#[derive(Debug, Clone, Copy)]
-enum LookupError {
-    Missing,
-    NonUtf8Env,
-    NotAString(TomlValueType),
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub enum LookupError {
+    #[error("{config_key} is missing: set ${env_var_name} or add it to the config file")]
+    Missing {
+        env_var_name: &'static str,
+        config_key: &'static str,
+    },
+    #[error("${env_var_name} must be valid utf-8")]
+    NonUtf8Env { env_var_name: &'static str },
+    #[error("{config_key} must be a string in toml, got {found:?}")]
+    NotAString {
+        config_key: &'static str,
+        found: TomlValueType,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum ConfigUrlError {
-    #[error("url is missing: set $MPCLIPBOARD_URL or add it to the config file")]
-    Missing,
-    #[error("$MPCLIPBOARD_URL must be valid utf-8")]
-    NonUtf8Env,
-    #[error("url must be a string in toml, got {0:?}")]
-    NotAString(TomlValueType),
+    #[error(transparent)]
+    Lookup(#[from] LookupError),
     #[error("malformed url: {0}")]
     Parse(#[from] UrlParseError),
 }
 
-impl From<LookupError> for ConfigUrlError {
-    fn from(err: LookupError) -> Self {
-        match err {
-            LookupError::Missing => Self::Missing,
-            LookupError::NonUtf8Env => Self::NonUtf8Env,
-            LookupError::NotAString(found) => Self::NotAString(found),
-        }
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum ConfigTokenError {
-    #[error("token is missing: set $MPCLIPBOARD_TOKEN or add it to the config file")]
-    Missing,
-    #[error("$MPCLIPBOARD_TOKEN must be valid utf-8")]
-    NonUtf8Env,
-    #[error("token must be a string in toml, got {0:?}")]
-    NotAString(TomlValueType),
+    #[error(transparent)]
+    Lookup(#[from] LookupError),
     #[error("malformed token: {0}")]
     Invalid(#[from] NonEmptyStringError),
 }
 
-impl From<LookupError> for ConfigTokenError {
-    fn from(err: LookupError) -> Self {
-        match err {
-            LookupError::Missing => Self::Missing,
-            LookupError::NonUtf8Env => Self::NonUtf8Env,
-            LookupError::NotAString(found) => Self::NotAString(found),
-        }
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum ConfigIdError {
-    #[error("id is missing: set $MPCLIPBOARD_ID or add it to the config file")]
-    Missing,
-    #[error("$MPCLIPBOARD_ID must be valid utf-8")]
-    NonUtf8Env,
-    #[error("id must be a string in toml, got {0:?}")]
-    NotAString(TomlValueType),
+    #[error(transparent)]
+    Lookup(#[from] LookupError),
     #[error("malformed id: {0}")]
     Invalid(#[from] NonEmptyStringError),
-}
-
-impl From<LookupError> for ConfigIdError {
-    fn from(err: LookupError) -> Self {
-        match err {
-            LookupError::Missing => Self::Missing,
-            LookupError::NonUtf8Env => Self::NonUtf8Env,
-            LookupError::NotAString(found) => Self::NotAString(found),
-        }
-    }
 }

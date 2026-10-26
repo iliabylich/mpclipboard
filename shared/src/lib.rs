@@ -29,7 +29,7 @@ extern crate alloc;
 
 mod config;
 pub use config::{
-    ConfigIdError, ConfigReader, ConfigReaderError, ConfigTokenError, ConfigUrlError,
+    ConfigIdError, ConfigReader, ConfigReaderError, ConfigTokenError, ConfigUrlError, LookupError,
 };
 
 mod request;
