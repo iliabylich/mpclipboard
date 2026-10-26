@@ -19,7 +19,6 @@ pub struct EventLoopWithTimer {
     seconds: u64,
     next_tick: Instant,
     deadline: Option<Instant>,
-    armed: Instant,
 }
 
 impl EventLoopWithTimer {
@@ -38,7 +37,6 @@ impl EventLoopWithTimer {
             seconds: 0,
             next_tick: start,
             deadline: None,
-            armed: start,
         })
     }
 
@@ -58,14 +56,10 @@ impl EventLoopWithTimer {
         &mut self,
         deadline: Option<Instant>,
     ) -> Result<(), EventLoopWithTimerError> {
-        if self.deadline == deadline {
-            return Ok(());
-        }
-
+        let prev = self.target();
         self.deadline = deadline;
-        let target = self.target();
-        if target != self.armed {
-            self.arm(target)?;
+        if self.target() != prev {
+            self.arm()?;
         }
         Ok(())
     }
@@ -75,10 +69,9 @@ impl EventLoopWithTimer {
             .map_or(self.next_tick, |deadline| deadline.min(self.next_tick))
     }
 
-    fn arm(&mut self, target: Instant) -> Result<(), EventLoopWithTimerError> {
-        let timeout = target.saturating_duration_since(Instant::now());
+    fn arm(&self) -> Result<(), EventLoopWithTimerError> {
+        let timeout = self.target().saturating_duration_since(Instant::now());
         self.timer.set(timeout)?;
-        self.armed = target;
         Ok(())
     }
 
@@ -119,13 +112,12 @@ impl EventLoopWithTimer {
 
             assert!(
                 ticked || deadline_expired,
-                "timer woke up with nothing due: now={now:?}, armed={:?}, next_tick={:?}, deadline={:?}",
-                self.armed,
+                "timer woke up with nothing due: now={now:?}, next_tick={:?}, deadline={:?}",
                 self.next_tick,
                 self.deadline,
             );
 
-            self.arm(self.target())?;
+            self.arm()?;
         }
 
         Ok(EventLoopWithTimerResult {
@@ -194,10 +186,6 @@ pub enum EventLoopWithTimerError {
     CreateTimer(Errno),
     #[error("failed to register timer: {0}")]
     AddTimer(std::io::Error),
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    #[error("failed to set timer: {0:?}")]
-    SetTimer(Errno),
-    #[cfg(target_os = "macos")]
     #[error("failed to set timer: {0}")]
     SetTimer(std::io::Error),
     #[error("key {0} is reserved for timers")]

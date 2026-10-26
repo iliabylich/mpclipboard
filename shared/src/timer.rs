@@ -59,7 +59,7 @@ mod linux {
                     },
                 },
             )
-            .map_err(EventLoopWithTimerError::SetTimer)?;
+            .map_err(|errno| EventLoopWithTimerError::SetTimer(errno.into()))?;
             Ok(())
         }
     }
