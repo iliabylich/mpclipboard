@@ -98,9 +98,10 @@ mod macos {
     }
 
     fn kqueue_timer(key: usize, timeout: Duration) -> crate::polling::os::kqueue::Timer {
+        let millis = timeout.as_nanos().div_ceil(1_000_000).max(1);
         crate::polling::os::kqueue::Timer {
             id: key,
-            timeout: timeout.max(Duration::from_nanos(1)),
+            timeout: Duration::from_millis(u64::try_from(millis).unwrap_or(u64::MAX)),
         }
     }
 }
