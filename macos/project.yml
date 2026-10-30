@@ -13,6 +13,7 @@ targets:
         ARCHS: arm64
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         CODE_SIGN_STYLE: Automatic
+        CURRENT_PROJECT_VERSION: $(MARKETING_VERSION)
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_LSUIElement: YES
         PRODUCT_BUNDLE_IDENTIFIER: org.mpclipboard.MPClipboard

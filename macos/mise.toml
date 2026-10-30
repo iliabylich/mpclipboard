@@ -1,10 +1,6 @@
 [task_config]
 shell = "bash -euo pipefail -c"
 
-[tools]
-xcodegen = "latest"
-imagemagick = "latest"
-
 [env]
 MPCLIPBOARD_URL = "https://127.0.0.1:8443"
 MPCLIPBOARD_ID = "macos-client"
@@ -13,16 +9,18 @@ MPCLIPBOARD_ID = "macos-client"
 hide = true
 run = "rm -rf build mpclipboard.xcodeproj"
 
-[tasks.generate]
-wait_for = ["clean"]
-run = """
-    ./scripts/generate-assets.py
-    xcodegen generate
-"""
+[tasks."assets:generate"]
+tools = { imagemagick = "latest" }
+run = "./scripts/generate-assets.py"
+
+[tasks."xcodegen:generate"]
+hide = true
+tools = { xcodegen = "latest" }
+run = "xcodegen generate --use-cache"
 
 [tasks."build:debug"]
 hide = true
-depends = ["generate", "//generic-client:build:debug"]
+depends = ["xcodegen:generate", "//generic-client:build:debug"]
 run = "xcodebuild -quiet -configuration Debug"
 
 [tasks."build:release"]
@@ -30,12 +28,8 @@ hide = true
 usage = '''
 flag "--version <version>" required=#true help="Release version in MAJOR.MINOR.PATCH format"
 '''
-depends = ["generate", "//generic-client:build:release"]
-run = """
-    xcodebuild -quiet -configuration Release \
-        MARKETING_VERSION="{{usage.version}}" \
-        CURRENT_PROJECT_VERSION="{{usage.version}}"
-"""
+depends = ["xcodegen:generate", "//generic-client:build:release"]
+run = 'xcodebuild -quiet -configuration Release MARKETING_VERSION="{{usage.version}}"'
 
 [tasks.dev]
 depends = ["build:debug"]
@@ -46,9 +40,10 @@ usage = '''
 flag "--version <version>" required=#true help="Release version in MAJOR.MINOR.PATCH format"
 flag "--out <out>" required=#true help="Absolute path to write the .dmg to"
 '''
-depends = ["clean", "build:release --version {{usage.version}}"]
+depends = ["build:release --version {{usage.version}}"]
 run = """
     pushd build/Release
+        rm -rf dmg-root
         mkdir -p dmg-root
         cp -R mpclipboard.app dmg-root/
         ln -s /Applications dmg-root/Applications
