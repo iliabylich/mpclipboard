@@ -1,0 +1,20 @@
+["cargo:fmt"]
+hide = true
+run = "cargo fmt"
+
+["cargo:clippy"]
+hide = true
+run = "cargo clippy"
+
+["cargo:test"]
+hide = true
+run = "cargo test"
+
+["cargo:outdated"]
+hide = true
+run = "cargo outdated"
+tools = { "cargo:cargo-outdated" = "latest" }
+
+["cargo:update"]
+hide = true
+run = "cargo update"

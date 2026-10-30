@@ -1,3 +1,5 @@
+include = ["../.mise/android.toml"]
+
 [task_config]
 shell = "bash -euo pipefail -c"
 

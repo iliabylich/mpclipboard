@@ -1,6 +1,3 @@
 [task_config]
 shell = "bash -euo pipefail -c"
-
-[tasks.clippy]
-hide = true
-run = "cargo clippy"
+includes = ["../.mise/rust.toml"]

@@ -1,0 +1,10 @@
+[task_config]
+shell = "bash -euo pipefail -c"
+
+[tasks.release]
+usage = 'flag "--version <version>" required=#true help="Release version in MAJOR.MINOR.PATCH format"'
+run = 'gh workflow run release --ref master -f version="{{usage.version}}"'
+
+[tasks.outdated]
+tools = { "github:luxass/actioneer" = "latest" }
+run = "actioneer --dry-run --pin tag --exclude dtolnay/rust-toolchain workflows"

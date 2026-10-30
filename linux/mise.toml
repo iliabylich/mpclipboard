@@ -1,9 +1,6 @@
 [task_config]
 shell = "bash -euo pipefail -c"
-
-[tools]
-"cargo:cargo-deb" = "latest"
-imagemagick = "latest"
+includes = ["../.mise/rust.toml"]
 
 [env]
 MPCLIPBOARD_URL = "https://127.0.0.1:8443"
@@ -27,12 +24,14 @@ flag "--version <version>" required=#true help="Release version in MAJOR.MINOR.P
 flag "--out <out>" required=#true help="Absolute path to write the .deb to"
 '''
 depends = ["build:release"]
-run = """
-    cargo-deb --no-build --deb-version "{{usage.version}}" -p mpclipboard-client
-    mv "target/debian/mpclipboard-client_{{usage.version}}_amd64.deb" "{{usage.out}}"
-"""
+tools = { "cargo:cargo-deb" = "latest" }
+run = [
+    'cargo-deb --no-build --deb-version "{{usage.version}}" -p mpclipboard-client',
+    'mv "target/debian/mpclipboard-client_{{usage.version}}_amd64.deb" "{{usage.out}}"',
+]
 
 [tasks.generate]
+tools = { imagemagick = "latest" }
 run = """
     generate_icon() {
         magick ../icon_512x512.png \
@@ -50,3 +49,9 @@ run = """
     generate_icon assets/red.argb32    "rgb(195, 40, 40)"
     generate_icon assets/yellow.argb32 "rgb(236, 223, 41)"
 """
+
+[tasks."cargo:clippy"]
+skip_if = "{{ os() != 'linux' }}"
+
+[tasks."cargo:test"]
+skip_if = "{{ os() != 'linux' }}"

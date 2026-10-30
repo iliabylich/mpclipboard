@@ -1,8 +1,10 @@
+include = ["../.mise/android.toml"]
+
 [task_config]
 shell = "bash -euo pipefail -c"
+includes = ["../.mise/rust.toml"]
 
 [env]
-MACOSX_DEPLOYMENT_TARGET = "15.0"
 MPCLIPBOARD_URL = "https://127.0.0.1:8443"
 MPCLIPBOARD_ID = "generic-client"
 
@@ -21,18 +23,18 @@ run = "cargo build --release"
 [tasks."build:android:debug"]
 hide = true
 tools = { "cargo:cargo-ndk" = "latest" }
-run = """
-    cargo ndk -t arm64-v8a build
-    ls -l target/aarch64-linux-android/debug/libmpclipboard_generic_client.a bindings.h
-"""
+run = [
+    "cargo ndk -t arm64-v8a build",
+    "ls -l target/aarch64-linux-android/debug/libmpclipboard_generic_client.a bindings.h",
+]
 
 [tasks."build:android:release"]
 hide = true
 tools = { "cargo:cargo-ndk" = "latest" }
-run = """
-    cargo ndk -t arm64-v8a build --release
-    ls -l target/aarch64-linux-android/release/libmpclipboard_generic_client.a bindings.h
-"""
+run = [
+    "cargo ndk -t arm64-v8a build --release",
+    "ls -l target/aarch64-linux-android/release/libmpclipboard_generic_client.a bindings.h",
+]
 
 [tasks."build:cli:debug"]
 hide = true
@@ -46,7 +48,3 @@ run = 'MPCLIPBOARD_ID="{{usage.id}}" target/debug/examples/cli'
 [tasks.valgrind]
 depends = ["build:cli:debug"]
 run = "valgrind --leak-check=full target/debug/examples/cli"
-
-[tasks.clippy]
-hide = true
-run = "cargo clippy"

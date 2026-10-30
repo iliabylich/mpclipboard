@@ -2,6 +2,7 @@ monorepo_root = true
 
 [monorepo]
 config_roots = [
+    ".github",
     "android",
     "dev-certs",
     "fdroid",
@@ -24,19 +25,24 @@ cargo.binstall_only = true
 RUST_LOG = "{{ get_env(name='RUST_LOG', default='info') }}"
 RUST_LOG_STYLE = "always"
 MPCLIPBOARD_TOKEN = "sekret"
-ANDROID_HOME = "{{config_root}}/android/.cache/android-sdk"
-ANDROID_SDK_ROOT = "{{config_root}}/android/.cache/android-sdk"
-ANDROID_NDK_VERSION = "30.0.16248370"
-ANDROID_BUILD_TOOLS_VERSION = "36.0.0"
-ANDROID_NDK_HOME = "{{config_root}}/android/.cache/android-sdk/ndk/{{env.ANDROID_NDK_VERSION}}"
-ANDROID_NDK_ROOT = "{{config_root}}/android/.cache/android-sdk/ndk/{{env.ANDROID_NDK_VERSION}}"
 
 [task_config]
 shell = "bash -euo pipefail -c"
 
-[tasks.clippy]
-depends = ["//shared:clippy", "//generic-client:clippy", "//server:clippy"]
+[tasks.fmt]
+depends = ["//...:cargo:fmt"]
 
-[tasks."github:release"]
-usage = 'flag "--version <version>" required=#true help="Release version in MAJOR.MINOR.PATCH format"'
-run = 'gh workflow run release --ref master -f version="{{usage.version}}"'
+[tasks.clippy]
+run = "mise run --jobs 1 '//...:cargo:clippy'"
+
+[tasks.test]
+run = "mise run --jobs 1 '//...:cargo:test'"
+
+[tasks.outdated]
+run = [
+    "mise run --jobs 1 '//...:cargo:outdated'",
+    { task = "//.github:outdated" },
+]
+
+[tasks.update]
+run = "mise run --jobs 1 '//...:cargo:update'"

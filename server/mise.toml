@@ -1,9 +1,6 @@
 [task_config]
 shell = "bash -euo pipefail -c"
-
-[tools]
-"cargo:cargo-deb" = "latest"
-caddy = "latest"
+includes = ["../.mise/rust.toml"]
 
 [env]
 MPCLIPBOARD_URL = "http://127.0.0.1:3000"
@@ -14,6 +11,7 @@ run = 'cargo run'
 
 [tasks.caddy]
 hide = true
+tools = { caddy = "latest" }
 run = '''
 caddy run --adapter caddyfile --config - <<'EOF'
 {
@@ -39,26 +37,23 @@ run = "cargo build --target=x86_64-unknown-linux-musl --release"
 
 [tasks."release:deb"]
 depends = ["build:release"]
+tools = { "cargo:cargo-deb" = "latest" }
 usage = '''
 flag "--version <version>" required=#true help="Release version in MAJOR.MINOR.PATCH format"
 flag "--out <out>" required=#true help="Absolute path to write the .deb to"
 '''
-run = """
-    cargo-deb --no-build --deb-version "{{usage.version}}" -p mpclipboard-server --target=x86_64-unknown-linux-musl
-    mv "target/debian/mpclipboard-server_{{usage.version}}_amd64.deb" "{{usage.out}}"
-"""
+run = [
+    'cargo-deb --no-build --deb-version "{{usage.version}}" -p mpclipboard-server --target=x86_64-unknown-linux-musl',
+    'mv "target/debian/mpclipboard-server_{{usage.version}}_amd64.deb" "{{usage.out}}"',
+]
 
 [tasks."release:container"]
 depends = ["build:release"]
 usage = 'flag "--version <version>" required=#true help="Release version in MAJOR.MINOR.PATCH format"'
-run = """
-    docker build -t "ghcr.io/iliabylich/mpclipboard:{{usage.version}}" .
-    docker push "ghcr.io/iliabylich/mpclipboard:{{usage.version}}"
+run = [
+    'docker build -t "ghcr.io/iliabylich/mpclipboard:{{usage.version}}" .',
+    'docker push "ghcr.io/iliabylich/mpclipboard:{{usage.version}}"',
 
-    docker tag "ghcr.io/iliabylich/mpclipboard:{{usage.version}}" ghcr.io/iliabylich/mpclipboard:latest
-    docker push ghcr.io/iliabylich/mpclipboard:latest
-"""
-
-[tasks.clippy]
-hide = true
-run = "cargo clippy"
+    'docker tag "ghcr.io/iliabylich/mpclipboard:{{usage.version}}" ghcr.io/iliabylich/mpclipboard:latest',
+    'docker push ghcr.io/iliabylich/mpclipboard:latest',
+]
