@@ -69,8 +69,14 @@ mod tests {
 
     #[test]
     fn test_new() {
-        assert_eq!(FixedStr::<3>::new("abc").map(|s| s.as_str() == "abc"), Ok(true));
-        assert_eq!(FixedStr::<8>::new("abc").map(|s| s.as_str() == "abc"), Ok(true));
+        assert_eq!(
+            FixedStr::<3>::new("abc").map(|s| s.as_str() == "abc"),
+            Ok(true)
+        );
+        assert_eq!(
+            FixedStr::<8>::new("abc").map(|s| s.as_str() == "abc"),
+            Ok(true)
+        );
     }
 
     #[test]

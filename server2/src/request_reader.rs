@@ -156,7 +156,10 @@ impl core::fmt::Display for RequestReaderError {
                 write!(f, "request is not Upgrade: {UPGRADE_PROTOCOL}")
             }
             Self::UnsupportedVersion => {
-                write!(f, "unsupported protocol version, expected={PROTOCOL_VERSION}")
+                write!(
+                    f,
+                    "unsupported protocol version, expected={PROTOCOL_VERSION}"
+                )
             }
             Self::MissingHeader(name) => write!(f, "missing {name} header"),
         }
@@ -232,7 +235,10 @@ Accept-Encoding: gzip\r\n\
     #[test]
     fn test_leftover() {
         let bytes = format!("{REQUEST}abc");
-        assert_eq!(read_all(bytes.as_bytes()), Ok(Some((req(), b"abc".to_vec()))));
+        assert_eq!(
+            read_all(bytes.as_bytes()),
+            Ok(Some((req(), b"abc".to_vec())))
+        );
     }
 
     #[test]
@@ -244,10 +250,16 @@ Accept-Encoding: gzip\r\n\
     #[test]
     fn test_not_upgrade() {
         let bytes = REQUEST.replace("Connection: Upgrade\r\n", "");
-        assert_eq!(read_all(bytes.as_bytes()), Err(RequestReaderError::NotUpgrade));
+        assert_eq!(
+            read_all(bytes.as_bytes()),
+            Err(RequestReaderError::NotUpgrade)
+        );
 
         let bytes = REQUEST.replace("Connection: Upgrade", "Connection: keep-alive");
-        assert_eq!(read_all(bytes.as_bytes()), Err(RequestReaderError::NotUpgrade));
+        assert_eq!(
+            read_all(bytes.as_bytes()),
+            Err(RequestReaderError::NotUpgrade)
+        );
     }
 
     #[test]
