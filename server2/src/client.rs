@@ -52,7 +52,10 @@ pub(crate) async fn client(
     let guard = {
         let handshake = handshake(&ctx, &mut stream, peer, token, state);
         let Some(handshake) = ctx.timeout(REAP_STRANGER_AFTER, handshake).await else {
-            log::info!("[{peer}] no handshake within {REAP_STRANGER_AFTER:?}");
+            log::info!(
+                "[{peer}] no handshake within {}s",
+                REAP_STRANGER_AFTER.as_secs()
+            );
             return;
         };
         let Ok((id, leftover_message)) = handshake else {
@@ -115,7 +118,7 @@ async fn handshake(
     let response = if authorized {
         SWITCHING_PROTOCOLS
     } else {
-        log::info!("[{}] invalid token={:?}", request.id, request.token);
+        log::info!("[{}] invalid token=\"{}\"", request.id, request.token);
         UNAUTHORIZED
     };
     let written = write_all(ctx, stream, response).await;

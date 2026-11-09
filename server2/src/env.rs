@@ -15,7 +15,10 @@ pub(crate) fn var(name: &CStr) -> Result<Option<&'static str>, ()> {
     match value.to_str() {
         Ok(value) => Ok(Some(value)),
         Err(err) => {
-            log::error!("env var {name:?} must be valid utf-8: {err}");
+            log::error!(
+                "env var {} must be valid utf-8: {err}",
+                name.to_str().unwrap_or("<non-utf8 name>")
+            );
             Err(())
         }
     }

@@ -34,7 +34,7 @@ impl Message {
 
 impl core::fmt::Debug for Message {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "Text({:?})", self.text())
+        write!(f, "Text(\"{}\")", self.text())
     }
 }
 

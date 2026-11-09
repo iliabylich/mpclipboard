@@ -38,7 +38,7 @@ impl<const N: usize> Eq for FixedStr<N> {}
 
 impl<const N: usize> core::fmt::Debug for FixedStr<N> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "{:?}", self.as_str())
+        write!(f, "\"{}\"", self.as_str())
     }
 }
 

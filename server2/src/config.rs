@@ -22,7 +22,7 @@ impl Config {
             Ok(bind_address) => bind_address,
             Err(err) => {
                 log::error!(
-                    "MPCLIPBOARD_BIND_ADDRESS={bind_address:?} must be an ip:port address: {err}"
+                    "MPCLIPBOARD_BIND_ADDRESS=\"{bind_address}\" must be an ip:port address: {err}"
                 );
                 return Err(());
             }
@@ -49,10 +49,11 @@ impl Config {
 
 impl core::fmt::Debug for Config {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("Config")
-            .field("bind_address", &self.bind_address)
-            .field("token", &"******")
-            .finish()
+        write!(
+            f,
+            "Config {{ bind_address: {}, token: \"******\" }}",
+            self.bind_address
+        )
     }
 }
 

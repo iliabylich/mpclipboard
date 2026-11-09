@@ -18,7 +18,7 @@ impl Logger {
             Some(value) => match value.parse::<LevelFilter>() {
                 Ok(level) => level,
                 Err(err) => {
-                    let _ = writeln!(Stderr, "invalid RUST_LOG={value:?}: {err}");
+                    let _ = writeln!(Stderr, "invalid RUST_LOG=\"{value}\": {err}");
                     return Err(());
                 }
             },
