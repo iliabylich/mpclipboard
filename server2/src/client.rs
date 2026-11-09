@@ -38,7 +38,7 @@ impl Default for ClientState {
 
 #[expect(clippy::await_holding_refcell_ref)]
 pub(crate) async fn client(
-    ctx: &ServerContext<'_>,
+    ctx: ServerContext<'_>,
     mut stream: TcpStream,
     peer: SocketAddr,
     token: &Token,
@@ -50,7 +50,7 @@ pub(crate) async fn client(
     let state = &mut *state;
 
     let guard = {
-        let handshake = handshake(ctx, &mut stream, peer, token, state);
+        let handshake = handshake(&ctx, &mut stream, peer, token, state);
         let Some(handshake) = ctx.timeout(REAP_STRANGER_AFTER, handshake).await else {
             log::info!("[{peer}] no handshake within {REAP_STRANGER_AFTER:?}");
             return;
@@ -70,7 +70,7 @@ pub(crate) async fn client(
         guard
     };
 
-    serve(ctx, stream, state, &guard).await;
+    serve(&ctx, stream, state, &guard).await;
 }
 
 async fn handshake(

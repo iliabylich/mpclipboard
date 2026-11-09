@@ -31,11 +31,11 @@ use rustix::{
 };
 use slot::Slot;
 
-const MAX_CLIENTS: usize = 20;
+const MAX_CLIENTS: usize = 10;
 
 const MAX_TASKS_COUNT: usize = MAX_CLIENTS;
-const MAX_TASK_SIZE: usize = 976;
-const MAX_ROOT_TASK_SIZE: usize = 608;
+const MAX_TASK_SIZE: usize = 632;
+const MAX_ROOT_TASK_SIZE: usize = 288;
 const MAX_TIMERS_COUNT: usize = MAX_CLIENTS;
 const MAX_IO_COUNT: usize = MAX_CLIENTS + 1;
 
@@ -89,14 +89,12 @@ fn start<'a>(
         &STORAGE,
         selector,
         DummyState,
-        async move |ctx: &ServerContext<'a>| {
-            accept_loop(ctx, listener, token, slots, current, states).await;
-        },
+        move |ctx: ServerContext<'a>| accept_loop(ctx, listener, token, slots, current, states),
     )
 }
 
 async fn accept_loop<'a>(
-    ctx: &ServerContext<'a>,
+    ctx: ServerContext<'a>,
     mut listener: TcpListener,
     token: &'a Token,
     slots: &'a [RefCell<Slot>],
@@ -106,7 +104,7 @@ async fn accept_loop<'a>(
     loop {
         let task = ctx.reserve_task().await;
         let (stream, peer) = loop {
-            match listener.accept(ctx).await {
+            match listener.accept(&ctx).await {
                 Ok(accepted) => break accepted,
                 Err(err) => log::error!("accept() failed: {err}"),
             }
@@ -116,9 +114,7 @@ async fn accept_loop<'a>(
             log::error!("[{peer}] no free client state");
             continue;
         };
-        task.spawn(async move |ctx| {
-            client::client(ctx, stream, peer, token, slots, current, state).await;
-        });
+        task.spawn(move |ctx| client::client(ctx, stream, peer, token, slots, current, state));
     }
 }
 
