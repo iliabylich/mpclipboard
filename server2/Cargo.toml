@@ -12,7 +12,6 @@ bench = false
 [dependencies]
 externally-driven-async-rt = { path = "../../externally-driven-async-rt" }
 rustix = { version = "1", default-features = false, features = ["event", "stdio"] }
-httparse = { version = "1", default-features = false }
 log = { version = "0.4", default-features = false }
 
 [profile.dev]

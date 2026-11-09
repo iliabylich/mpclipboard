@@ -56,8 +56,9 @@ async fn handshake(
 ) -> Result<(ID, MessageReader, Option<Message>), ()> {
     let (request, reader, leftover_message) = {
         let mut request_reader = RequestReader::default();
+        let mut buf = [0; Message::BYTESIZE];
         loop {
-            let len = match stream.read(ctx, request_reader.unfilled()).await {
+            let len = match stream.read(ctx, &mut buf).await {
                 Ok(0) => {
                     log::info!("[{peer}] disconnected during handshake");
                     return Err(());
@@ -69,11 +70,11 @@ async fn handshake(
                 }
             };
 
-            match request_reader.filled(len) {
+            match request_reader.received(&buf[..len]) {
                 Ok(None) => {}
-                Ok(Some((request, leftover))) => {
+                Ok(Some((request, consumed))) => {
                     let mut reader = MessageReader::default();
-                    let Ok(leftover_message) = reader.received(leftover) else {
+                    let Ok(leftover_message) = reader.received(&buf[consumed..len]) else {
                         log::error!("[{peer}] sent a malformed frame right after the request");
                         return Err(());
                     };
