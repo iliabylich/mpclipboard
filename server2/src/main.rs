@@ -3,7 +3,6 @@
 
 use core::fmt::Write as _;
 
-#[link(name = "c")]
 unsafe extern "C" {
     fn abort() -> !;
 }

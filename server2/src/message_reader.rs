@@ -107,6 +107,9 @@ mod tests {
     #[test]
     fn test_receive_invalid() {
         let mut reader = MessageReader::default();
-        assert_eq!(received(&mut reader, &[b'\xC8'; Message::BYTESIZE]), Err(()));
+        assert_eq!(
+            received(&mut reader, &[b'\xC8'; Message::BYTESIZE]),
+            Err(())
+        );
     }
 }
