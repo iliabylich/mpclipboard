@@ -1,5 +1,8 @@
 #![no_std]
 
+mod stderr;
+pub use stderr::Stderr;
+
 use externally_driven_async_rt::Selector;
 
 pub fn run() -> i32 {

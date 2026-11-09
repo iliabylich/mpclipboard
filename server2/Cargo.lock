@@ -55,6 +55,7 @@ name = "server2"
 version = "0.1.0"
 dependencies = [
  "externally-driven-async-rt",
+ "rustix",
 ]
 
 [[package]]

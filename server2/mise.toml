@@ -1,0 +1,14 @@
+[task_config]
+shell = "bash -euo pipefail -c"
+includes = ["../.mise/rust.toml"]
+
+[env]
+MPCLIPBOARD_BIND_ADDRESS = "127.0.0.1:3000"
+
+[tasks."build:debug"]
+hide = true
+run = "cargo build"
+
+[tasks.dev]
+depends = ["build:debug"]
+run = "target/debug/server2"
