@@ -10,6 +10,7 @@ mod logger;
 mod message;
 mod message_reader;
 mod request_reader;
+mod slot;
 mod stderr;
 pub use stderr::Stderr;
 

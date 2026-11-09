@@ -15,6 +15,10 @@ impl Message {
         size
     };
 
+    pub(crate) fn text(&self) -> &str {
+        self.text.as_str()
+    }
+
     pub(crate) fn encode(&self) -> [u8; Self::BYTESIZE] {
         let text = self.text.as_bytes();
         let len = u8::try_from(text.len())
@@ -30,7 +34,7 @@ impl Message {
 
 impl core::fmt::Debug for Message {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "Text({:?})", self.text.as_str())
+        write!(f, "Text({:?})", self.text())
     }
 }
 
@@ -76,7 +80,14 @@ pub(crate) mod tests {
 
     pub(crate) fn text(frame: Frame) -> String {
         match frame {
-            Frame::Message(message) => String::from(message.text.as_str()),
+            Frame::Message(message) => String::from(message.text()),
+            Frame::Heartbeat => panic!("expected a message, got a heartbeat"),
+        }
+    }
+
+    pub(crate) fn message(text: &str) -> Message {
+        match Frame::decode(&frame(text)).unwrap() {
+            Frame::Message(message) => message,
             Frame::Heartbeat => panic!("expected a message, got a heartbeat"),
         }
     }
