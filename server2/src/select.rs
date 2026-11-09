@@ -1,6 +1,6 @@
 use core::{
     future::{Future, poll_fn},
-    pin::pin,
+    pin::Pin,
     task::Poll,
 };
 
@@ -10,23 +10,19 @@ pub(crate) enum Either<L, R> {
     Right(R),
 }
 
-pub(crate) async fn select<L: Future, R: Future>(
-    left: L,
-    right: R,
-) -> Either<L::Output, R::Output> {
-    let mut left = pin!(left);
-    let mut right = pin!(right);
-
-    poll_fn(|cx| {
-        if let Poll::Ready(output) = left.as_mut().poll(cx) {
+pub(crate) fn select<L: Future + Unpin, R: Future + Unpin>(
+    mut left: L,
+    mut right: R,
+) -> impl Future<Output = Either<L::Output, R::Output>> {
+    poll_fn(move |cx| {
+        if let Poll::Ready(output) = Pin::new(&mut left).poll(cx) {
             return Poll::Ready(Either::Left(output));
         }
-        if let Poll::Ready(output) = right.as_mut().poll(cx) {
+        if let Poll::Ready(output) = Pin::new(&mut right).poll(cx) {
             return Poll::Ready(Either::Right(output));
         }
         Poll::Pending
     })
-    .await
 }
 
 #[cfg(test)]

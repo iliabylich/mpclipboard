@@ -7,8 +7,9 @@ use crate::{
     slot::{Slot, SlotGuard},
 };
 use core::{
-    cell::{Cell, RefCell},
+    cell::{Cell, RefCell, RefMut},
     net::SocketAddr,
+    pin::pin,
     time::Duration,
 };
 use externally_driven_async_rt::net::TcpStream;
@@ -19,6 +20,23 @@ const SWITCHING_PROTOCOLS: &[u8] =
     b"HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: mpclipboard-raw\r\n\r\n";
 const UNAUTHORIZED: &[u8] = b"HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\n\r\n";
 
+pub(crate) struct ClientState {
+    buf: [u8; Message::BYTESIZE],
+    request_reader: RequestReader,
+    reader: MessageReader,
+}
+
+impl Default for ClientState {
+    fn default() -> Self {
+        Self {
+            buf: [0; Message::BYTESIZE],
+            request_reader: RequestReader::default(),
+            reader: MessageReader::default(),
+        }
+    }
+}
+
+#[expect(clippy::await_holding_refcell_ref)]
 pub(crate) async fn client(
     ctx: &ServerContext<'_>,
     mut stream: TcpStream,
@@ -26,26 +44,33 @@ pub(crate) async fn client(
     token: &Token,
     slots: &[RefCell<Slot>],
     current: &Cell<Option<Message>>,
+    mut state: RefMut<'_, ClientState>,
 ) {
-    let handshake = handshake(ctx, &mut stream, peer, token);
-    let Some(handshake) = ctx.timeout(REAP_STRANGER_AFTER, handshake).await else {
-        log::info!("[{peer}] no handshake within {REAP_STRANGER_AFTER:?}");
-        return;
-    };
-    let Ok((id, reader, leftover_message)) = handshake else {
-        return;
+    *state = ClientState::default();
+    let state = &mut *state;
+
+    let guard = {
+        let handshake = handshake(ctx, &mut stream, peer, token, state);
+        let Some(handshake) = ctx.timeout(REAP_STRANGER_AFTER, handshake).await else {
+            log::info!("[{peer}] no handshake within {REAP_STRANGER_AFTER:?}");
+            return;
+        };
+        let Ok((id, leftover_message)) = handshake else {
+            return;
+        };
+
+        let Ok(guard) = SlotGuard::take(slots, current, id) else {
+            return;
+        };
+        log::info!("[{id}] connected from {peer}");
+
+        if let Some(message) = leftover_message {
+            guard.publish(message);
+        }
+        guard
     };
 
-    let Ok(guard) = SlotGuard::take(slots, current, id) else {
-        return;
-    };
-    log::info!("[{id}] connected from {peer}");
-
-    if let Some(message) = leftover_message {
-        guard.publish(message);
-    }
-
-    serve(ctx, stream, id, reader, guard).await;
+    serve(ctx, stream, state, &guard).await;
 }
 
 async fn handshake(
@@ -53,12 +78,17 @@ async fn handshake(
     stream: &mut TcpStream,
     peer: SocketAddr,
     token: &Token,
-) -> Result<(ID, MessageReader, Option<Message>), ()> {
-    let (request, reader, leftover_message) = {
-        let mut request_reader = RequestReader::default();
-        let mut buf = [0; Message::BYTESIZE];
+    state: &mut ClientState,
+) -> Result<(ID, Option<Message>), ()> {
+    let ClientState {
+        buf,
+        request_reader,
+        reader,
+    } = state;
+
+    let (request, leftover) = {
         loop {
-            let len = match stream.read(ctx, &mut buf).await {
+            let len = match stream.read(ctx, buf).await {
                 Ok(0) => {
                     log::info!("[{peer}] disconnected during handshake");
                     return Err(());
@@ -72,14 +102,7 @@ async fn handshake(
 
             match request_reader.received(&buf[..len]) {
                 Ok(None) => {}
-                Ok(Some((request, consumed))) => {
-                    let mut reader = MessageReader::default();
-                    let Ok(leftover_message) = reader.received(&buf[consumed..len]) else {
-                        log::error!("[{peer}] sent a malformed frame right after the request");
-                        return Err(());
-                    };
-                    break (request, reader, leftover_message);
-                }
+                Ok(Some((request, consumed))) => break (request, consumed..len),
                 Err(err) => {
                     log::error!("[{peer}] {err}");
                     return Err(());
@@ -105,44 +128,52 @@ async fn handshake(
         return Err(());
     }
 
-    Ok((request.id, reader, leftover_message))
+    let Ok(leftover_message) = reader.received(&buf[leftover]) else {
+        log::error!(
+            "[{}] sent a malformed frame right after the request",
+            request.id
+        );
+        return Err(());
+    };
+    Ok((request.id, leftover_message))
 }
 
 async fn serve(
     ctx: &ServerContext<'_>,
     mut stream: TcpStream,
-    id: ID,
-    mut reader: MessageReader,
-    guard: SlotGuard<'_>,
+    state: &mut ClientState,
+    guard: &SlotGuard<'_>,
 ) {
-    let mut buf = [0; Message::BYTESIZE];
+    let ClientState { buf, reader, .. } = state;
+
     loop {
-        match select(stream.read(ctx, &mut buf), guard.notified()).await {
+        let event = select(pin!(stream.read(ctx, buf)), pin!(guard.notified())).await;
+        match event {
             Either::Left(Ok(0)) => {
-                log::info!("[{id}] disconnected");
+                log::info!("[{}] disconnected", guard.id());
                 return;
             }
-            Either::Left(Ok(len)) => match reader.received(&buf[..len]) {
-                Ok(Some(message)) => guard.publish(message),
-                Ok(None) => {}
-                Err(()) => {
-                    log::error!("[{id}] received a malformed frame");
-                    return;
+            Either::Left(Ok(len)) => {
+                match reader.received(&buf[..len]) {
+                    Ok(Some(message)) => guard.publish(message),
+                    Ok(None) => {}
+                    Err(()) => {
+                        log::error!("[{}] received a malformed frame", guard.id());
+                        return;
+                    }
                 }
-            },
+                continue;
+            }
             Either::Left(Err(err)) => {
-                log::error!("[{id}] read() failed: {err}");
+                log::error!("[{}] read() failed: {err}", guard.id());
                 return;
             }
-            Either::Right(message) => {
-                if write_all(ctx, &mut stream, &message.encode())
-                    .await
-                    .is_err()
-                {
-                    log::error!("[{id}] failed to send {message:?}");
-                    return;
-                }
-            }
+            Either::Right(message) => *buf = message.encode(),
+        }
+
+        if write_all(ctx, &mut stream, buf).await.is_err() {
+            log::error!("[{}] failed to send a message", guard.id());
+            return;
         }
     }
 }

@@ -16,6 +16,7 @@ mod slot;
 mod stderr;
 pub use stderr::Stderr;
 
+use client::ClientState;
 use config::Config;
 use core::cell::{Cell, RefCell};
 use externally_driven_async_rt::{
@@ -33,8 +34,8 @@ use slot::Slot;
 const MAX_CLIENTS: usize = 20;
 
 const MAX_TASKS_COUNT: usize = MAX_CLIENTS;
-const MAX_TASK_SIZE: usize = 2160;
-const MAX_ROOT_TASK_SIZE: usize = 544;
+const MAX_TASK_SIZE: usize = 976;
+const MAX_ROOT_TASK_SIZE: usize = 608;
 const MAX_TIMERS_COUNT: usize = MAX_CLIENTS;
 const MAX_IO_COUNT: usize = MAX_CLIENTS + 1;
 
@@ -81,6 +82,7 @@ fn start<'a>(
     token: &'a Token,
     slots: &'a [RefCell<Slot>],
     current: &'a Cell<Option<Message>>,
+    states: &'a [RefCell<ClientState>],
 ) -> Result<ServerLoop<'a>, externally_driven_async_rt::Error> {
     static STORAGE: ServerStorage = ServerStorage::new();
     ServerLoop::new(
@@ -88,7 +90,7 @@ fn start<'a>(
         selector,
         DummyState,
         async move |ctx: &ServerContext<'a>| {
-            accept_loop(ctx, listener, token, slots, current).await;
+            accept_loop(ctx, listener, token, slots, current, states).await;
         },
     )
 }
@@ -99,6 +101,7 @@ async fn accept_loop<'a>(
     token: &'a Token,
     slots: &'a [RefCell<Slot>],
     current: &'a Cell<Option<Message>>,
+    states: &'a [RefCell<ClientState>],
 ) {
     loop {
         let task = ctx.reserve_task().await;
@@ -109,8 +112,12 @@ async fn accept_loop<'a>(
             }
         };
         log::trace!("[{peer}] accepted");
+        let Some(state) = states.iter().find_map(|state| state.try_borrow_mut().ok()) else {
+            log::error!("[{peer}] no free client state");
+            continue;
+        };
         task.spawn(async move |ctx| {
-            client::client(ctx, stream, peer, token, slots, current).await;
+            client::client(ctx, stream, peer, token, slots, current, state).await;
         });
     }
 }
@@ -137,6 +144,8 @@ pub fn run() -> i32 {
     let token = config.token;
     let current = Cell::new(None);
     let slots = [const { RefCell::new(Slot::Free) }; MAX_CLIENTS];
+    let states: [RefCell<ClientState>; MAX_CLIENTS] =
+        core::array::from_fn(|_| RefCell::new(ClientState::default()));
 
     let mut selector = match Selector::new() {
         Ok(selector) => selector,
@@ -145,7 +154,7 @@ pub fn run() -> i32 {
             return 1;
         }
     };
-    let mut event_loop = match start(&mut selector, listener, &token, &slots, &current) {
+    let mut event_loop = match start(&mut selector, listener, &token, &slots, &current, &states) {
         Ok(event_loop) => event_loop,
         Err(err) => {
             log::error!("failed to start the event loop: {err}");

@@ -63,15 +63,20 @@ impl<'a> SlotGuard<'a> {
         .await
     }
 
+    pub(crate) fn id(&self) -> ID {
+        let Slot::Taken { id, .. } = *self.slot.borrow() else {
+            unreachable!("a guarded slot is always taken");
+        };
+        id
+    }
+
     pub(crate) fn publish(&self, message: Message) {
         if self.current.get() == Some(message) {
             return;
         }
         self.current.set(Some(message));
 
-        let Slot::Taken { id: sender, .. } = *self.slot.borrow() else {
-            unreachable!("a guarded slot is always taken");
-        };
+        let sender = self.id();
         log::info!("[{sender}] broadcasting {message:?}");
 
         for slot in self.slots {
