@@ -1,5 +1,12 @@
 #![no_std]
 
+#[cfg(test)]
+extern crate std;
+
+mod fixed_str;
+mod message;
+mod message_reader;
+mod request_reader;
 mod stderr;
 pub use stderr::Stderr;
 
