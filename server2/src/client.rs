@@ -32,7 +32,7 @@ pub(crate) async fn client(
         log::info!("[{peer}] no handshake within {REAP_STRANGER_AFTER:?}");
         return;
     };
-    let Ok((id, mut reader, leftover_message)) = handshake else {
+    let Ok((id, reader, leftover_message)) = handshake else {
         return;
     };
 
@@ -45,6 +45,75 @@ pub(crate) async fn client(
         guard.publish(message);
     }
 
+    serve(ctx, stream, id, reader, guard).await;
+}
+
+async fn handshake(
+    ctx: &ServerContext<'_>,
+    stream: &mut TcpStream,
+    peer: SocketAddr,
+    token: &Token,
+) -> Result<(ID, MessageReader, Option<Message>), ()> {
+    let (request, reader, leftover_message) = {
+        let mut request_reader = RequestReader::default();
+        loop {
+            let len = match stream.read(ctx, request_reader.unfilled()).await {
+                Ok(0) => {
+                    log::info!("[{peer}] disconnected during handshake");
+                    return Err(());
+                }
+                Ok(len) => len,
+                Err(err) => {
+                    log::error!("[{peer}] read() failed during handshake: {err}");
+                    return Err(());
+                }
+            };
+
+            match request_reader.filled(len) {
+                Ok(None) => {}
+                Ok(Some((request, leftover))) => {
+                    let mut reader = MessageReader::default();
+                    let Ok(leftover_message) = reader.received(leftover) else {
+                        log::error!("[{peer}] sent a malformed frame right after the request");
+                        return Err(());
+                    };
+                    break (request, reader, leftover_message);
+                }
+                Err(err) => {
+                    log::error!("[{peer}] {err}");
+                    return Err(());
+                }
+            }
+        }
+    };
+
+    let authorized = request.token == *token;
+    let response = if authorized {
+        SWITCHING_PROTOCOLS
+    } else {
+        log::info!("[{}] invalid token={:?}", request.id, request.token);
+        UNAUTHORIZED
+    };
+    let written = write_all(ctx, stream, response).await;
+
+    if !authorized {
+        return Err(());
+    }
+    if written.is_err() {
+        log::error!("[{}] failed to send 101 Switching Protocols", request.id);
+        return Err(());
+    }
+
+    Ok((request.id, reader, leftover_message))
+}
+
+async fn serve(
+    ctx: &ServerContext<'_>,
+    mut stream: TcpStream,
+    id: ID,
+    mut reader: MessageReader,
+    guard: SlotGuard<'_>,
+) {
     let mut buf = [0; Message::BYTESIZE];
     loop {
         match select(stream.read(ctx, &mut buf), guard.notified()).await {
@@ -75,57 +144,6 @@ pub(crate) async fn client(
             }
         }
     }
-}
-
-async fn handshake(
-    ctx: &ServerContext<'_>,
-    stream: &mut TcpStream,
-    peer: SocketAddr,
-    token: &Token,
-) -> Result<(ID, MessageReader, Option<Message>), ()> {
-    let mut request_reader = RequestReader::default();
-    let (request, reader, leftover_message) = loop {
-        let len = match stream.read(ctx, request_reader.unfilled()).await {
-            Ok(0) => {
-                log::info!("[{peer}] disconnected during handshake");
-                return Err(());
-            }
-            Ok(len) => len,
-            Err(err) => {
-                log::error!("[{peer}] read() failed during handshake: {err}");
-                return Err(());
-            }
-        };
-
-        match request_reader.filled(len) {
-            Ok(None) => {}
-            Ok(Some((request, leftover))) => {
-                let mut reader = MessageReader::default();
-                let Ok(leftover_message) = reader.received(leftover) else {
-                    log::error!("[{peer}] sent a malformed frame right after the request");
-                    return Err(());
-                };
-                break (request, reader, leftover_message);
-            }
-            Err(err) => {
-                log::error!("[{peer}] {err}");
-                return Err(());
-            }
-        }
-    };
-
-    if request.token != *token {
-        log::info!("[{}] invalid token={:?}", request.id, request.token);
-        let _ = write_all(ctx, stream, UNAUTHORIZED).await;
-        return Err(());
-    }
-
-    if write_all(ctx, stream, SWITCHING_PROTOCOLS).await.is_err() {
-        log::error!("[{}] failed to send 101 Switching Protocols", request.id);
-        return Err(());
-    }
-
-    Ok((request.id, reader, leftover_message))
 }
 
 async fn write_all(
