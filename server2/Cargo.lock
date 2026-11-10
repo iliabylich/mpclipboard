@@ -21,6 +21,8 @@ dependencies = [
 [[package]]
 name = "externally-driven-async-rt"
 version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c6ce877ab05f0d1c092d98d65732135de95f8ce080aad397e393bdf5a1c85ff8"
 dependencies = [
  "rustix",
 ]

@@ -28,7 +28,7 @@ pub use errors::ServerError;
 pub use stderr::Stderr;
 
 use acceptor::Acceptor;
-use constants::{IO_COUNT, ROOT_TASK_SIZE, TASK_COUNT, TASK_SIZE, TIMER_COUNT};
+use constants::{FDS, ROOT_TASK_SIZE, TASK_SIZE, TASKS, TIMERS};
 use core::convert::Infallible;
 use externally_driven_async_rt::{Context, EventLoop, LoopStorage, Selector, net::TcpListener};
 use logger::Logger;
@@ -37,11 +37,9 @@ use rustix::{
     io::Errno,
 };
 
-type ServerContext<'a> =
-    Context<'a, (), TASK_COUNT, TASK_SIZE, ROOT_TASK_SIZE, TIMER_COUNT, IO_COUNT>;
-type ServerLoop<'a> =
-    EventLoop<'a, (), TASK_COUNT, TASK_SIZE, ROOT_TASK_SIZE, TIMER_COUNT, IO_COUNT>;
-type ServerStorage = LoopStorage<(), TASK_COUNT, TASK_SIZE, ROOT_TASK_SIZE, TIMER_COUNT, IO_COUNT>;
+type ServerContext<'a> = Context<'a, (), TASKS, TASK_SIZE, ROOT_TASK_SIZE, TIMERS, FDS>;
+type ServerLoop<'a> = EventLoop<'a, (), TASKS, TASK_SIZE, ROOT_TASK_SIZE, TIMERS, FDS>;
+type ServerStorage = LoopStorage<(), TASKS, TASK_SIZE, ROOT_TASK_SIZE, TIMERS, FDS>;
 
 pub fn run() -> Result<Infallible, ServerError> {
     Logger::init()?;

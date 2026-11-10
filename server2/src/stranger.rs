@@ -1,6 +1,6 @@
 use crate::{
-    ServerContext, client::Client, constants::HANDSHAKE_REQUEST_SIZE, errors::ClientError, id::ID,
-    message::Message, message_reader::MessageReader, pubsub::PubSubHandle, token::Token,
+    ServerContext, client::Client, constants::HANDSHAKE_REQUEST_BUFFER_SIZE, errors::ClientError,
+    id::ID, message::Message, message_reader::MessageReader, pubsub::PubSubHandle, token::Token,
     write_all::write_all,
 };
 use core::time::Duration;
@@ -10,7 +10,7 @@ pub(crate) struct Stranger<'a> {
     stream: TcpStream,
     token: &'a Token,
     pubsub: PubSubHandle<'a>,
-    buf: [u8; HANDSHAKE_REQUEST_SIZE],
+    buf: [u8; HANDSHAKE_REQUEST_BUFFER_SIZE],
     len: usize,
 }
 
@@ -20,7 +20,7 @@ impl<'a> Stranger<'a> {
             stream,
             token,
             pubsub,
-            buf: [0; HANDSHAKE_REQUEST_SIZE],
+            buf: [0; HANDSHAKE_REQUEST_BUFFER_SIZE],
             len: 0,
         }
     }
