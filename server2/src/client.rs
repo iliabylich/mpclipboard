@@ -2,7 +2,7 @@ use crate::{
     ServerContext,
     message::Message,
     message_reader::MessageReader,
-    request_reader::{ID, RequestReader, Token},
+    request_reader::{self, ID, MAX_REQUEST_SIZE, Token},
     select::{Either, select},
     slot::{Slot, SlotGuard},
 };
@@ -32,7 +32,7 @@ pub(crate) async fn client(
     let mut reader = MessageReader::default();
 
     let guard = {
-        let handshake = handshake(&ctx, &mut stream, peer, token, &mut buf, &mut reader);
+        let handshake = handshake(&ctx, &mut stream, peer, token, &mut reader);
         let Some(handshake) = ctx.timeout(REAP_STRANGER_AFTER, handshake).await else {
             log::info!(
                 "[{peer}] no handshake within {}s",
@@ -64,25 +64,26 @@ async fn handshake(
     stream: &mut TcpStream,
     peer: SocketAddr,
     token: &Token,
-    buf: &mut [u8; Message::BYTESIZE],
     reader: &mut MessageReader,
 ) -> Result<(ID, Option<Message>), ()> {
+    let mut buf = [0; MAX_REQUEST_SIZE];
+    let mut len = 0;
+
     let (id, authorized, leftover) = {
-        let mut request_reader = RequestReader::default();
         let (request, leftover) = loop {
-            let len = match stream.read(ctx, buf).await {
+            len += match stream.read(ctx, &mut buf[len..]).await {
                 Ok(0) => {
                     log::info!("[{peer}] disconnected during handshake");
                     return Err(());
                 }
-                Ok(len) => len,
+                Ok(read) => read,
                 Err(err) => {
                     log::error!("[{peer}] read() failed during handshake: {err}");
                     return Err(());
                 }
             };
 
-            match request_reader.received(&buf[..len]) {
+            match request_reader::parse(&buf[..len]) {
                 Ok(None) => {}
                 Ok(Some((request, consumed))) => break (request, consumed..len),
                 Err(err) => {

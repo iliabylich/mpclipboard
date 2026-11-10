@@ -16,6 +16,7 @@ rustix = { version = "1", default-features = false, features = [
     "stdio",
 ] }
 log = { version = "0.4", default-features = false }
+httparse = { version = "1", default-features = false }
 
 [features]
 strace-like = ["externally-driven-async-rt/strace-like"]

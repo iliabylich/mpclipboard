@@ -4,10 +4,10 @@ use core::str::Utf8Error;
 pub(crate) type Token = FixedStr<20>;
 pub(crate) type ID = FixedStr<20>;
 
-const START_LINE: &str = "GET / HTTP/1.1";
+pub(crate) const MAX_REQUEST_SIZE: usize = 2048;
+const MAX_HEADERS: usize = 32;
 const PROTOCOL_VERSION: &str = "6";
 const UPGRADE_PROTOCOL: &str = "mpclipboard-raw";
-const USED_HEADERS: [&str; 5] = ["Token", "ID", "Version", "Connection", "Upgrade"];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Request {
@@ -15,198 +15,68 @@ pub(crate) struct Request {
     pub(crate) id: ID,
 }
 
-pub(crate) struct RequestReader {
-    line: [u8; Self::LINE_CAPACITY],
-    len: usize,
-    state: State,
-    headers: usize,
-    token: Option<Token>,
-    id: Option<ID>,
-    version: Version,
-    connection_upgrade: bool,
-    upgrade: bool,
+pub(crate) fn parse(bytes: &[u8]) -> Result<Option<(Request, usize)>, RequestReaderError> {
+    let mut headers = [httparse::EMPTY_HEADER; MAX_HEADERS];
+    let mut req = httparse::Request::new(&mut headers);
+    let httparse::Status::Complete(len) = req.parse(bytes)? else {
+        if bytes.len() >= MAX_REQUEST_SIZE {
+            return Err(RequestReaderError::TooLarge);
+        }
+        return Ok(None);
+    };
+
+    let request = parse_request(&req)?;
+    Ok(Some((request, len)))
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum State {
-    StartLine,
-    Header,
-    SkippingHeader,
-}
+fn parse_request(req: &httparse::Request<'_, '_>) -> Result<Request, RequestReaderError> {
+    use RequestReaderError::{
+        InvalidID, InvalidStartLine, InvalidToken, MissingHeader, NotUpgrade, UnsupportedUpgrade,
+        UnsupportedVersion,
+    };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Version {
-    Missing,
-    Supported,
-    Unsupported,
-}
-
-impl RequestReader {
-    const MAX_LINE_LENGTH: usize = 30;
-    const LINE_CAPACITY: usize = Self::MAX_LINE_LENGTH + 2;
-    const MAX_HEADERS: usize = 16;
-
-    pub(crate) fn received(
-        &mut self,
-        bytes: &[u8],
-    ) -> Result<Option<(Request, usize)>, RequestReaderError> {
-        for (index, byte) in bytes.iter().copied().enumerate() {
-            if self.state == State::SkippingHeader {
-                self.skip(byte)?;
-                continue;
-            }
-
-            if self.len == Self::LINE_CAPACITY {
-                self.overflow()?;
-                self.skip(byte)?;
-                continue;
-            }
-
-            self.line[self.len] = byte;
-            self.len += 1;
-            if byte != b'\n' {
-                continue;
-            }
-
-            let len = core::mem::take(&mut self.len);
-            if let Some(request) = self.line_received(len)? {
-                return Ok(Some((request, index + 1)));
-            }
-        }
-
-        Ok(None)
+    if req.method != Some("GET") || req.path != Some("/") || req.version != Some(1) {
+        return Err(InvalidStartLine);
     }
 
-    fn skip(&mut self, byte: u8) -> Result<(), RequestReaderError> {
-        if byte == b'\n' {
-            self.state = State::Header;
-            self.count_header()?;
-        }
-        Ok(())
-    }
+    let mut token = None;
+    let mut id = None;
+    let mut version = None;
+    let mut connection_upgrade = false;
+    let mut upgrade = false;
 
-    fn overflow(&mut self) -> Result<(), RequestReaderError> {
-        if self.state == State::StartLine {
-            return Err(RequestReaderError::LineTooLong);
-        }
+    for header in req.headers.iter() {
+        let name = header.name;
+        let value = || core::str::from_utf8(header.value);
 
-        let line = &self.line[..self.len];
-        if let Some(colon) = line.iter().position(|byte| *byte == b':') {
-            let name = &line[..colon];
-            if USED_HEADERS
-                .iter()
-                .any(|used| name.eq_ignore_ascii_case(used.as_bytes()))
-            {
-                return Err(RequestReaderError::LineTooLong);
-            }
-        }
-
-        self.state = State::SkippingHeader;
-        self.len = 0;
-        Ok(())
-    }
-
-    fn count_header(&mut self) -> Result<(), RequestReaderError> {
-        self.headers += 1;
-        if self.headers > Self::MAX_HEADERS {
-            return Err(RequestReaderError::TooManyHeaders);
-        }
-        Ok(())
-    }
-
-    fn line_received(&mut self, len: usize) -> Result<Option<Request>, RequestReaderError> {
-        let line = self.line;
-        let Some(line) = line[..len].strip_suffix(b"\r\n") else {
-            return Err(RequestReaderError::MalformedLine);
-        };
-
-        match self.state {
-            State::StartLine => {
-                if line != START_LINE.as_bytes() {
-                    return Err(RequestReaderError::InvalidStartLine);
-                }
-                self.state = State::Header;
-            }
-            State::Header if line.is_empty() => return self.finish().map(Some),
-            State::Header => {
-                self.count_header()?;
-                let Some(colon) = line.iter().position(|byte| *byte == b':') else {
-                    return Err(RequestReaderError::MalformedHeader);
-                };
-                let (name, value) = (&line[..colon], line[colon + 1..].trim_ascii());
-                if name.is_empty() || name.iter().any(u8::is_ascii_whitespace) {
-                    return Err(RequestReaderError::MalformedHeader);
-                }
-                self.header_received(name, value)?;
-            }
-            State::SkippingHeader => unreachable!("skipped lines are never buffered"),
-        }
-
-        Ok(None)
-    }
-
-    fn header_received(&mut self, name: &[u8], value: &[u8]) -> Result<(), RequestReaderError> {
-        use RequestReaderError::{InvalidID, InvalidToken};
-
-        let utf8 = || core::str::from_utf8(value);
-
-        if name.eq_ignore_ascii_case(b"Token") {
-            self.token = Some(Token::new(utf8()?).map_err(InvalidToken)?);
-        } else if name.eq_ignore_ascii_case(b"ID") {
-            self.id = Some(ID::new(utf8()?).map_err(InvalidID)?);
-        } else if name.eq_ignore_ascii_case(b"Version") {
-            self.version = if value == PROTOCOL_VERSION.as_bytes() {
-                Version::Supported
-            } else {
-                Version::Unsupported
-            };
-        } else if name.eq_ignore_ascii_case(b"Connection") {
-            self.connection_upgrade = has_token(value, "upgrade");
-        } else if name.eq_ignore_ascii_case(b"Upgrade") {
-            self.upgrade = has_token(value, UPGRADE_PROTOCOL);
-        }
-
-        Ok(())
-    }
-
-    fn finish(&self) -> Result<Request, RequestReaderError> {
-        use RequestReaderError::{
-            MissingHeader, NotUpgrade, UnsupportedUpgrade, UnsupportedVersion,
-        };
-
-        if !self.connection_upgrade {
-            return Err(NotUpgrade);
-        }
-        if !self.upgrade {
-            return Err(UnsupportedUpgrade);
-        }
-        match self.version {
-            Version::Missing => return Err(MissingHeader("Version")),
-            Version::Unsupported => return Err(UnsupportedVersion),
-            Version::Supported => {}
-        }
-
-        Ok(Request {
-            token: self.token.ok_or(MissingHeader("Token"))?,
-            id: self.id.ok_or(MissingHeader("ID"))?,
-        })
-    }
-}
-
-impl Default for RequestReader {
-    fn default() -> Self {
-        Self {
-            line: [0; Self::LINE_CAPACITY],
-            len: 0,
-            state: State::StartLine,
-            headers: 0,
-            token: None,
-            id: None,
-            version: Version::Missing,
-            connection_upgrade: false,
-            upgrade: false,
+        if name.eq_ignore_ascii_case("Token") {
+            token = Some(Token::new(value()?).map_err(InvalidToken)?);
+        } else if name.eq_ignore_ascii_case("ID") {
+            id = Some(ID::new(value()?).map_err(InvalidID)?);
+        } else if name.eq_ignore_ascii_case("Version") {
+            version = Some(header.value);
+        } else if name.eq_ignore_ascii_case("Connection") {
+            connection_upgrade = has_token(header.value, "upgrade");
+        } else if name.eq_ignore_ascii_case("Upgrade") {
+            upgrade = has_token(header.value, UPGRADE_PROTOCOL);
         }
     }
+
+    if !connection_upgrade {
+        return Err(NotUpgrade);
+    }
+    if !upgrade {
+        return Err(UnsupportedUpgrade);
+    }
+    let version = version.ok_or(MissingHeader("Version"))?;
+    if version != PROTOCOL_VERSION.as_bytes() {
+        return Err(UnsupportedVersion);
+    }
+
+    Ok(Request {
+        token: token.ok_or(MissingHeader("Token"))?,
+        id: id.ok_or(MissingHeader("ID"))?,
+    })
 }
 
 fn has_token(value: &[u8], token: &str) -> bool {
@@ -217,10 +87,8 @@ fn has_token(value: &[u8], token: &str) -> bool {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum RequestReaderError {
-    LineTooLong,
-    TooManyHeaders,
-    MalformedLine,
-    MalformedHeader,
+    Parse(httparse::Error),
+    TooLarge,
     InvalidStartLine,
     NonUtf8(Utf8Error),
     InvalidToken(FixedStrError),
@@ -234,19 +102,9 @@ pub(crate) enum RequestReaderError {
 impl core::fmt::Display for RequestReaderError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            Self::LineTooLong => write!(
-                f,
-                "request line or used header exceeds {} bytes",
-                RequestReader::MAX_LINE_LENGTH
-            ),
-            Self::TooManyHeaders => write!(
-                f,
-                "request has more than {} headers",
-                RequestReader::MAX_HEADERS
-            ),
-            Self::MalformedLine => f.write_str("request line doesn't end with CRLF"),
-            Self::MalformedHeader => f.write_str("malformed header, expected Name: value"),
-            Self::InvalidStartLine => write!(f, "unexpected start line, expected {START_LINE}"),
+            Self::Parse(err) => write!(f, "malformed HTTP request: {err}"),
+            Self::TooLarge => write!(f, "HTTP request exceeds {MAX_REQUEST_SIZE} bytes"),
+            Self::InvalidStartLine => f.write_str("unexpected start line, expected GET / HTTP/1.1"),
             Self::NonUtf8(err) => write!(f, "non-utf8 header: {err}"),
             Self::InvalidToken(err) => write!(f, "malformed token: {err}"),
             Self::InvalidID(err) => write!(f, "malformed id: {err}"),
@@ -265,6 +123,12 @@ impl core::fmt::Display for RequestReaderError {
     }
 }
 
+impl From<httparse::Error> for RequestReaderError {
+    fn from(err: httparse::Error) -> Self {
+        Self::Parse(err)
+    }
+}
+
 impl From<Utf8Error> for RequestReaderError {
     fn from(err: Utf8Error) -> Self {
         Self::NonUtf8(err)
@@ -273,7 +137,7 @@ impl From<Utf8Error> for RequestReaderError {
 
 #[cfg(test)]
 mod tests {
-    use super::{ID, Request, RequestReader, RequestReaderError, Token};
+    use super::{ID, MAX_REQUEST_SIZE, Request, RequestReaderError, Token, parse};
     use crate::fixed_str::FixedStrError;
     use std::{format, string::String, vec::Vec};
 
@@ -302,19 +166,26 @@ Accept-Encoding: gzip\r\n\
     }
 
     fn read_in_chunks(bytes: &[u8], chunk_size: usize) -> Parsed {
-        let mut reader = RequestReader::default();
-        let mut offset = 0;
-        for chunk in bytes.chunks(chunk_size) {
-            if let Some((request, consumed)) = reader.received(chunk)? {
-                return Ok(Some((request, bytes[offset + consumed..].to_vec())));
+        let mut len = 0;
+        loop {
+            let read = chunk_size
+                .min(MAX_REQUEST_SIZE - len)
+                .min(bytes.len() - len);
+            if read == 0 {
+                return Ok(None);
             }
-            offset += chunk.len();
+            len += read;
+            if let Some((request, consumed)) = parse(&bytes[..len])? {
+                return Ok(Some((request, bytes[consumed..].to_vec())));
+            }
         }
-        Ok(None)
     }
 
     fn read_all(bytes: &str) -> Parsed {
-        let bytes = bytes.as_bytes();
+        read_all_bytes(bytes.as_bytes())
+    }
+
+    fn read_all_bytes(bytes: &[u8]) -> Parsed {
         let whole = read_in_chunks(bytes, bytes.len());
         for chunk_size in [1, 3, 20] {
             assert_eq!(
@@ -407,9 +278,17 @@ Accept-Encoding: gzip\r\n\
     }
 
     #[test]
-    fn test_start_line_too_long() {
-        let bytes = REQUEST.replace("GET / HTTP/1.1", "GET /aaaaaaaaaaaaaaaaaaaa HTTP/1.1");
-        assert_eq!(read_all(&bytes), Err(RequestReaderError::LineTooLong));
+    fn test_too_large() {
+        let bytes = with_header(&format!("X-Long: {}", "a".repeat(MAX_REQUEST_SIZE)));
+        assert_eq!(read_all(&bytes), Err(RequestReaderError::TooLarge));
+    }
+
+    #[test]
+    fn test_leftover_frames() {
+        let frames = [1_u8; 3 * 256];
+        let mut bytes = REQUEST.as_bytes().to_vec();
+        bytes.extend_from_slice(&frames);
+        assert_eq!(read_all_bytes(&bytes), Ok(Some((req(), frames.to_vec()))));
     }
 
     #[test]
@@ -421,7 +300,7 @@ Accept-Encoding: gzip\r\n\
     }
 
     #[test]
-    fn test_token_too_long_but_line_fits() {
+    fn test_token_too_long() {
         let bytes = REQUEST.replace("Token: sekret", &format!("Token: {}", "a".repeat(23)));
         assert_eq!(
             read_all(&bytes),
@@ -432,12 +311,9 @@ Accept-Encoding: gzip\r\n\
     }
 
     #[test]
-    fn test_used_header_line_too_long() {
-        let bytes = REQUEST.replace("Token: sekret", &format!("Token: {}", "a".repeat(24)));
-        assert_eq!(read_all(&bytes), Err(RequestReaderError::LineTooLong));
-
+    fn test_long_connection_list() {
         let bytes = REQUEST.replace("Connection: Upgrade", "Connection: keep-alive, Upgrade");
-        assert_eq!(read_all(&bytes), Err(RequestReaderError::LineTooLong));
+        assert_eq!(read_all(&bytes), Ok(Some((req(), Vec::new()))));
     }
 
     #[test]
@@ -466,32 +342,23 @@ Accept-Encoding: gzip\r\n\
     fn test_garbage_start_line() {
         assert_eq!(
             read_all("boo\r\n\r\n"),
-            Err(RequestReaderError::InvalidStartLine)
+            Err(RequestReaderError::Parse(httparse::Error::Token))
         );
-    }
-
-    #[test]
-    fn test_lf_without_cr() {
-        let bytes = REQUEST.replacen("\r\n", "\n", 1);
-        assert_eq!(read_all(&bytes), Err(RequestReaderError::MalformedLine));
-
-        let bytes = REQUEST.replace("Version: 6\r\n", "Version: 6\n");
-        assert_eq!(read_all(&bytes), Err(RequestReaderError::MalformedLine));
     }
 
     #[test]
     fn test_malformed_header() {
         assert_eq!(
             read_all(&with_header("no colon")),
-            Err(RequestReaderError::MalformedHeader)
+            Err(RequestReaderError::Parse(httparse::Error::HeaderName))
         );
         assert_eq!(
             read_all(&with_header(": empty name")),
-            Err(RequestReaderError::MalformedHeader)
+            Err(RequestReaderError::Parse(httparse::Error::HeaderName))
         );
         assert_eq!(
             read_all(&with_header("Token : sekret")),
-            Err(RequestReaderError::MalformedHeader)
+            Err(RequestReaderError::Parse(httparse::Error::HeaderName))
         );
     }
 
@@ -512,7 +379,7 @@ Accept-Encoding: gzip\r\n\
     #[test]
     fn test_max_headers() {
         assert_eq!(
-            read_all(&with_extra_headers(4)),
+            read_all(&with_extra_headers(20)),
             Ok(Some((req(), Vec::new())))
         );
     }
@@ -520,16 +387,8 @@ Accept-Encoding: gzip\r\n\
     #[test]
     fn test_too_many_headers() {
         assert_eq!(
-            read_all(&with_extra_headers(5)),
-            Err(RequestReaderError::TooManyHeaders)
+            read_all(&with_extra_headers(21)),
+            Err(RequestReaderError::Parse(httparse::Error::TooManyHeaders))
         );
-    }
-
-    #[test]
-    fn test_skipped_headers_count() {
-        let long = format!("X-Long: {}\r\n", "a".repeat(100));
-        let extra = long.repeat(5);
-        let bytes = REQUEST.replacen("\r\n\r\n", &format!("\r\n{extra}\r\n"), 1);
-        assert_eq!(read_all(&bytes), Err(RequestReaderError::TooManyHeaders));
     }
 }
