@@ -21,15 +21,17 @@ const SWITCHING_PROTOCOLS: &[u8] =
 const UNAUTHORIZED: &[u8] = b"HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\n\r\n";
 
 pub(crate) struct ClientState {
+    peer: SocketAddr,
     buf: [u8; Message::BYTESIZE],
     out: [u8; Message::BYTESIZE],
     request_reader: RequestReader,
     reader: MessageReader,
 }
 
-impl Default for ClientState {
-    fn default() -> Self {
+impl ClientState {
+    pub(crate) fn new(peer: SocketAddr) -> Self {
         Self {
+            peer,
             buf: [0; Message::BYTESIZE],
             out: [0; Message::BYTESIZE],
             request_reader: RequestReader::default(),
@@ -42,22 +44,19 @@ impl Default for ClientState {
 pub(crate) async fn client(
     ctx: ServerContext<'_>,
     mut stream: TcpStream,
-    peer: SocketAddr,
     token: &Token,
     slots: &[RefCell<Slot>],
     current: &Cell<Option<Message>>,
     mut state: RefMut<'_, ClientState>,
 ) {
-    *state = ClientState::default();
     let state = &mut *state;
 
-    let (mut rx, mut tx) = stream.split();
-
     let guard = {
-        let handshake = handshake(&ctx, &mut rx, &mut tx, peer, token, state);
+        let handshake = handshake(&ctx, &mut stream, token, state);
         let Some(handshake) = ctx.timeout(REAP_STRANGER_AFTER, handshake).await else {
             log::info!(
-                "[{peer}] no handshake within {}s",
+                "[{}] no handshake within {}s",
+                state.peer,
                 REAP_STRANGER_AFTER.as_secs()
             );
             return;
@@ -69,7 +68,7 @@ pub(crate) async fn client(
         let Ok(guard) = SlotGuard::take(slots, current, id) else {
             return;
         };
-        log::info!("[{id}] connected from {peer}");
+        log::info!("[{id}] connected from {}", state.peer);
 
         if let Some(message) = leftover_message {
             guard.publish(message);
@@ -77,27 +76,27 @@ pub(crate) async fn client(
         guard
     };
 
+    let (mut rx, mut tx) = stream.split();
     serve(&ctx, &mut rx, &mut tx, state, &guard).await;
 }
 
 async fn handshake(
     ctx: &ServerContext<'_>,
-    rx: &mut BorrowedReadHalf<'_>,
-    tx: &mut BorrowedWriteHalf<'_>,
-    peer: SocketAddr,
+    stream: &mut TcpStream,
     token: &Token,
     state: &mut ClientState,
 ) -> Result<(ID, Option<Message>), ()> {
     let ClientState {
+        peer,
         buf,
         request_reader,
         reader,
         ..
     } = state;
 
-    let (request, leftover) = {
-        loop {
-            let len = match rx.read(ctx, buf).await {
+    let (id, authorized, leftover) = {
+        let (request, leftover) = loop {
+            let len = match stream.read(ctx, buf).await {
                 Ok(0) => {
                     log::info!("[{peer}] disconnected during handshake");
                     return Err(());
@@ -117,34 +116,36 @@ async fn handshake(
                     return Err(());
                 }
             }
+        };
+
+        let authorized = request.token == *token;
+        if !authorized {
+            log::info!("[{}] invalid token=\"{}\"", request.id, request.token);
         }
+        (request.id, authorized, leftover)
     };
 
-    let authorized = request.token == *token;
     let response = if authorized {
         SWITCHING_PROTOCOLS
     } else {
-        log::info!("[{}] invalid token=\"{}\"", request.id, request.token);
         UNAUTHORIZED
     };
-    let written = write_all(ctx, tx, response).await;
+    let (_, mut tx) = stream.split();
+    let written = write_all(ctx, &mut tx, response).await;
 
     if !authorized {
         return Err(());
     }
     if written.is_err() {
-        log::error!("[{}] failed to send 101 Switching Protocols", request.id);
+        log::error!("[{id}] failed to send 101 Switching Protocols");
         return Err(());
     }
 
     let Ok(leftover_message) = reader.received(&buf[leftover]) else {
-        log::error!(
-            "[{}] sent a malformed frame right after the request",
-            request.id
-        );
+        log::error!("[{id}] sent a malformed frame right after the request");
         return Err(());
     };
-    Ok((request.id, leftover_message))
+    Ok((id, leftover_message))
 }
 
 async fn serve(
