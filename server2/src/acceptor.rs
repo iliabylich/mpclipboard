@@ -1,12 +1,10 @@
-use crate::{MAX_CLIENTS, ServerContext, client, handshake::Token, message::Message, slot::Slot};
-use core::cell::{Cell, RefCell};
+use crate::{ServerContext, client, handshake::Token, pubsub::PubSub};
 use externally_driven_async_rt::net::TcpListener;
 
 pub(crate) struct Acceptor {
     listener: TcpListener,
     token: Token,
-    current: Cell<Option<Message>>,
-    slots: [RefCell<Slot>; MAX_CLIENTS],
+    pubsub: PubSub,
 }
 
 impl Acceptor {
@@ -14,8 +12,7 @@ impl Acceptor {
         Self {
             listener,
             token,
-            current: Cell::new(None),
-            slots: [const { RefCell::new(Slot::Free) }; MAX_CLIENTS],
+            pubsub: PubSub::new(),
         }
     }
 
@@ -23,12 +20,10 @@ impl Acceptor {
         let Self {
             listener,
             token,
-            current,
-            slots,
+            pubsub,
         } = self;
         let token: &'a Token = token;
-        let current: &'a Cell<Option<Message>> = current;
-        let slots: &'a [RefCell<Slot>] = slots;
+        let pubsub: &'a PubSub = pubsub;
 
         loop {
             let task = ctx.reserve_task().await;
@@ -39,7 +34,10 @@ impl Acceptor {
                 }
             };
             log::trace!("[{peer}] accepted");
-            task.spawn(move |ctx| client::client(ctx, stream, peer, token, slots, current));
+            let Ok(pubsub) = pubsub.subscribe(peer) else {
+                continue;
+            };
+            task.spawn(move |ctx| client::client(ctx, stream, peer, token, pubsub));
         }
     }
 }
