@@ -1,0 +1,31 @@
+[package]
+name = "server2"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "server2"
+path = "src/main.rs"
+test = false
+bench = false
+
+[dependencies]
+externally-driven-async-rt = { version = "0.1.0" }
+rustix = { version = "1", default-features = false, features = [
+    "event",
+    "stdio",
+    "termios",
+] }
+httparse = { version = "1", default-features = false }
+
+[features]
+strace-like = ["externally-driven-async-rt/strace-like"]
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
+lto = "fat"
+codegen-units = 1
+strip = true
