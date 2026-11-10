@@ -8,15 +8,15 @@ pub(crate) fn from_env() -> Result<(SocketAddr, Token), ()> {
 }
 
 fn parse_address(s: Option<&str>) -> Result<SocketAddr, ()> {
-    let s = s.ok_or_else(|| log::error!("MPCLIPBOARD_BIND_ADDRESS is missing"))?;
+    let s = s.ok_or_else(|| error!("MPCLIPBOARD_BIND_ADDRESS is missing"))?;
     s.parse::<SocketAddr>().map_err(|err| {
-        log::error!("MPCLIPBOARD_BIND_ADDRESS must be an ip:port address: {err}");
+        error!("MPCLIPBOARD_BIND_ADDRESS must be an ip:port address: {err}");
     })
 }
 
 fn parse_token(s: Option<&str>) -> Result<Token, ()> {
-    let s = s.ok_or_else(|| log::error!("MPCLIPBOARD_TOKEN is missing"))?;
-    Token::new(s).map_err(|err| log::error!("MPCLIPBOARD_TOKEN is malformed: {err}"))
+    let s = s.ok_or_else(|| error!("MPCLIPBOARD_TOKEN is missing"))?;
+    Token::new(s).map_err(|err| error!("MPCLIPBOARD_TOKEN is malformed: {err}"))
 }
 
 #[cfg(test)]

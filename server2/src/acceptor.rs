@@ -32,10 +32,10 @@ impl Acceptor {
             let stream = loop {
                 match listener.accept(&ctx).await {
                     Ok((stream, _)) => break stream,
-                    Err(err) => log::error!("accept() failed: {err}"),
+                    Err(err) => error!("accept() failed: {err}"),
                 }
             };
-            log::trace!("accepted");
+            trace!("accepted");
             let Ok(pubsub) = pubsub.subscribe() else {
                 continue;
             };

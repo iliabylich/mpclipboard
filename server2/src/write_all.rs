@@ -9,12 +9,12 @@ pub(crate) async fn write_all(
     while !buf.is_empty() {
         match tx.write(ctx, buf).await {
             Ok(0) => {
-                log::error!("write() wrote 0 bytes");
+                error!("write() wrote 0 bytes");
                 return Err(());
             }
             Ok(len) => buf = &buf[len..],
             Err(err) => {
-                log::error!("write() failed: {err}");
+                error!("write() failed: {err}");
                 return Err(());
             }
         }

@@ -15,7 +15,7 @@ pub(crate) fn var(name: &CStr) -> Result<Option<&'static str>, ()> {
     let value = value
         .to_str()
         .inspect_err(|err| {
-            log::error!(
+            error!(
                 "env var {} must be valid utf-8: {err}",
                 name.to_str().unwrap_or("<non-utf8 name>")
             );

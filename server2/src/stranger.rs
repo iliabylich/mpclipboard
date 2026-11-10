@@ -33,11 +33,11 @@ impl<'a> Stranger<'a> {
 
         let read_write = self.read_write(ctx, &mut reader);
         let Some(read_write) = ctx.timeout(timeout, read_write).await else {
-            log::info!("no handshake within {}s", timeout.as_secs());
+            info!("no handshake within {}s", timeout.as_secs());
             return Err(());
         };
         let (id, leftover_message) = read_write?;
-        log::info!("[{id}] connected");
+        info!("[{id}] connected");
 
         if let Some(message) = leftover_message {
             self.pubsub.publish(id, message);
@@ -61,7 +61,7 @@ impl<'a> Stranger<'a> {
         self.write_101(ctx, id).await?;
 
         let Ok(leftover_message) = reader.received(&self.buf[consumed..self.len]) else {
-            log::error!("[{id}] sent a malformed frame right after the request");
+            error!("[{id}] sent a malformed frame right after the request");
             return Err(());
         };
         Ok((id, leftover_message))
@@ -71,14 +71,14 @@ impl<'a> Stranger<'a> {
         loop {
             match self.stream.read(ctx, &mut self.buf[self.len..]).await {
                 Ok(0) => {
-                    log::info!("disconnected during handshake");
+                    info!("disconnected during handshake");
                     return Err(());
                 }
                 Ok(read) => {
                     self.len += read;
                 }
                 Err(err) => {
-                    log::error!("read() failed during handshake: {err}");
+                    error!("read() failed during handshake: {err}");
                     return Err(());
                 }
             };
@@ -103,7 +103,7 @@ impl<'a> Stranger<'a> {
             .await
             .is_err()
         {
-            log::error!("[{id}] failed to send 101 Switching Protocols");
+            error!("[{id}] failed to send 101 Switching Protocols");
             return Err(());
         }
 
@@ -119,7 +119,7 @@ impl<'a> Stranger<'a> {
 
         let (_, mut tx) = self.stream.split();
 
-        log::info!("[{id}] invalid token=\"{wrong}\"",);
+        info!("[{id}] invalid token=\"{wrong}\"",);
         let _ = write_all(ctx, &mut tx, UNAUTHORIZED_RESPONSE.as_bytes()).await;
     }
 }

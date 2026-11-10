@@ -23,12 +23,12 @@ impl<'s> MessageStream<'s> {
         loop {
             let len = match self.rx.read(ctx, &mut self.buf).await {
                 Ok(0) => {
-                    log::info!("[{id}] disconnected");
+                    info!("[{id}] disconnected");
                     return Err(());
                 }
                 Ok(len) => len,
                 Err(err) => {
-                    log::error!("[{id}] read() failed: {err}");
+                    error!("[{id}] read() failed: {err}");
                     return Err(());
                 }
             };
@@ -37,7 +37,7 @@ impl<'s> MessageStream<'s> {
                 Ok(Some(message)) => return Ok(message),
                 Ok(None) => {}
                 Err(()) => {
-                    log::error!("[{id}] received a malformed frame");
+                    error!("[{id}] received a malformed frame");
                     return Err(());
                 }
             }

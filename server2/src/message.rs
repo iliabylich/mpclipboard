@@ -51,7 +51,7 @@ impl Frame {
             return Ok(Self::Heartbeat);
         };
         let text = core::str::from_utf8(&text[..len.get()])
-            .inspect_err(|err| log::error!("non-utf8 message text: {err}"))
+            .inspect_err(|err| error!("non-utf8 message text: {err}"))
             .map_err(|_| ())?;
         let text = FixedStr::new(text)
             .unwrap_or_else(|_| unreachable!("len is non-zero and fits into a u8"));

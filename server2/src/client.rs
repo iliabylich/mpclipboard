@@ -47,7 +47,7 @@ impl<'a> Client<'a> {
                 Either::Left(Err(())) => return,
                 Either::Right(message) => {
                     if write_all(ctx, &mut tx, &message.encode()).await.is_err() {
-                        log::error!("[{id}] failed to send a message");
+                        error!("[{id}] failed to send a message");
                         return;
                     }
                 }

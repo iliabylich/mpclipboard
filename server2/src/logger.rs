@@ -1,41 +1,96 @@
 use crate::Stderr;
-use core::fmt::Write as _;
-use log::{LevelFilter, Log, Metadata, Record};
+use core::{
+    fmt::Write as _,
+    sync::atomic::{AtomicU8, Ordering},
+};
+
+macro_rules! error {
+    ($($arg:tt)+) => {
+        $crate::logger::Logger::log($crate::logger::Level::Error, format_args!($($arg)+))
+    };
+}
+
+macro_rules! info {
+    ($($arg:tt)+) => {
+        $crate::logger::Logger::log($crate::logger::Level::Info, format_args!($($arg)+))
+    };
+}
+
+macro_rules! trace {
+    ($($arg:tt)+) => {
+        $crate::logger::Logger::log($crate::logger::Level::Trace, format_args!($($arg)+))
+    };
+}
 
 pub(crate) struct Logger;
 
-static LOGGER: Logger = Logger;
+static MAX_LEVEL: AtomicU8 = AtomicU8::new(LevelFilter::Off as u8);
 
 impl Logger {
     pub(crate) fn init() -> Result<(), ()> {
-        if log::set_logger(&LOGGER).is_err() {
-            let _ = writeln!(Stderr, "logger is already initialized");
-            return Err(());
-        }
-
         let level = match crate::env::var(c"RUST_LOG")? {
             None => LevelFilter::Error,
-            Some(value) => value
-                .parse::<LevelFilter>()
-                .inspect_err(|err| {
-                    let _ = writeln!(Stderr, "invalid RUST_LOG=\"{value}\": {err}");
-                })
-                .map_err(|_| ())?,
+            Some(value) => LevelFilter::parse(value).ok_or_else(|| {
+                let _ = writeln!(
+                    Stderr,
+                    "invalid RUST_LOG=\"{value}\": expected one of off, error, warn, info, debug, trace"
+                );
+            })?,
         };
-        log::set_max_level(level);
+        MAX_LEVEL.store(level as u8, Ordering::Relaxed);
 
         Ok(())
     }
+
+    #[inline(never)]
+    pub(crate) fn log(level: Level, args: core::fmt::Arguments<'_>) {
+        if level as u8 > MAX_LEVEL.load(Ordering::Relaxed) {
+            return;
+        }
+        let _ = writeln!(Stderr, "{} {args}", level.as_str());
+    }
 }
 
-impl Log for Logger {
-    fn enabled(&self, _metadata: &Metadata<'_>) -> bool {
-        true
-    }
+#[derive(Clone, Copy)]
+#[repr(u8)]
+pub(crate) enum Level {
+    Error = LevelFilter::Error as u8,
+    Info = LevelFilter::Info as u8,
+    Trace = LevelFilter::Trace as u8,
+}
 
-    fn log(&self, record: &Record<'_>) {
-        let _ = writeln!(Stderr, "{} {}", record.level(), record.args());
+impl Level {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Error => "ERROR",
+            Self::Info => "INFO",
+            Self::Trace => "TRACE",
+        }
     }
+}
 
-    fn flush(&self) {}
+#[derive(Clone, Copy)]
+#[repr(u8)]
+enum LevelFilter {
+    Off,
+    Error,
+    Warn,
+    Info,
+    Debug,
+    Trace,
+}
+
+impl LevelFilter {
+    fn parse(s: &str) -> Option<Self> {
+        [
+            ("off", Self::Off),
+            ("error", Self::Error),
+            ("warn", Self::Warn),
+            ("info", Self::Info),
+            ("debug", Self::Debug),
+            ("trace", Self::Trace),
+        ]
+        .into_iter()
+        .find_map(|(name, level)| s.eq_ignore_ascii_case(name).then_some(level))
+    }
 }

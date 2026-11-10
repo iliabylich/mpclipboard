@@ -10,7 +10,7 @@ use crate::{
 };
 
 pub(crate) fn parse(bytes: &[u8]) -> Result<Option<(Token, ID, usize)>, ()> {
-    parse_(bytes).map_err(|err| log::error!("{err}"))
+    parse_(bytes).map_err(|err| error!("{err}"))
 }
 
 pub(crate) fn parse_(bytes: &[u8]) -> Result<Option<(Token, ID, usize)>, ParseError> {

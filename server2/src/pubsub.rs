@@ -33,7 +33,7 @@ impl PubSub {
             .iter()
             .find(|slot| matches!(*slot.borrow(), Slot::Free))
         else {
-            log::error!("no free slot");
+            error!("no free slot");
             return Err(());
         };
 
@@ -74,7 +74,7 @@ impl PubSubHandle<'_> {
         }
         current.set(Some(message));
 
-        log::info!("[{id}] publishing {message:?}");
+        info!("[{id}] publishing {message:?}");
 
         for slot in &self.pubsub.slots {
             if core::ptr::eq(slot, self.slot) {
