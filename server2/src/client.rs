@@ -1,8 +1,8 @@
 use crate::{
     ServerContext,
+    handshake::{Handshake, ID, Token},
     message::Message,
     message_reader::MessageReader,
-    request_reader::{self, ID, MAX_REQUEST_SIZE, Token},
     select::{Either, select},
     slot::{Slot, SlotGuard},
 };
@@ -31,7 +31,7 @@ pub(crate) async fn client(
     let mut buf = [0; Message::BYTESIZE];
     let mut reader = MessageReader::default();
 
-    let guard = {
+    let (id, guard) = {
         let handshake = handshake(&ctx, &mut stream, peer, token, &mut reader);
         let Some(handshake) = ctx.timeout(REAP_STRANGER_AFTER, handshake).await else {
             log::info!(
@@ -50,13 +50,13 @@ pub(crate) async fn client(
         log::info!("[{id}] connected from {peer}");
 
         if let Some(message) = leftover_message {
-            guard.publish(message);
+            guard.publish(id, message);
         }
-        guard
+        (id, guard)
     };
 
     let (mut rx, mut tx) = stream.split();
-    serve(&ctx, &mut rx, &mut tx, &mut buf, &mut reader, &guard).await;
+    serve(&ctx, &mut rx, &mut tx, &mut buf, &mut reader, id, &guard).await;
 }
 
 async fn handshake(
@@ -66,57 +66,23 @@ async fn handshake(
     token: &Token,
     reader: &mut MessageReader,
 ) -> Result<(ID, Option<Message>), ()> {
-    let mut buf = [0; MAX_REQUEST_SIZE];
-    let mut len = 0;
+    let mut handshake = Handshake::default();
+    let (received_token, id, leftover) = handshake.read(ctx, stream, peer).await?;
 
-    let (id, authorized, leftover) = {
-        let (request, leftover) = loop {
-            len += match stream.read(ctx, &mut buf[len..]).await {
-                Ok(0) => {
-                    log::info!("[{peer}] disconnected during handshake");
-                    return Err(());
-                }
-                Ok(read) => read,
-                Err(err) => {
-                    log::error!("[{peer}] read() failed during handshake: {err}");
-                    return Err(());
-                }
-            };
-
-            match request_reader::parse(&buf[..len]) {
-                Ok(None) => {}
-                Ok(Some((request, consumed))) => break (request, consumed..len),
-                Err(err) => {
-                    log::error!("[{peer}] {err}");
-                    return Err(());
-                }
-            }
-        };
-
-        let authorized = request.token == *token;
-        if !authorized {
-            log::info!("[{}] invalid token=\"{}\"", request.id, request.token);
-        }
-        (request.id, authorized, leftover)
-    };
-
-    let response = if authorized {
-        SWITCHING_PROTOCOLS
-    } else {
-        UNAUTHORIZED
-    };
     let (_, mut tx) = stream.split();
-    let written = write_all(ctx, &mut tx, response).await;
 
-    if !authorized {
+    if received_token != *token {
+        log::info!("[{id}] invalid token=\"{received_token}\"");
+        let _ = write_all(ctx, &mut tx, UNAUTHORIZED).await;
         return Err(());
     }
-    if written.is_err() {
+
+    if write_all(ctx, &mut tx, SWITCHING_PROTOCOLS).await.is_err() {
         log::error!("[{id}] failed to send 101 Switching Protocols");
         return Err(());
     }
 
-    let Ok(leftover_message) = reader.received(&buf[leftover]) else {
+    let Ok(leftover_message) = reader.received(leftover) else {
         log::error!("[{id}] sent a malformed frame right after the request");
         return Err(());
     };
@@ -129,6 +95,7 @@ async fn serve(
     tx: &mut BorrowedWriteHalf<'_>,
     buf: &mut [u8; Message::BYTESIZE],
     reader: &mut MessageReader,
+    id: ID,
     guard: &SlotGuard<'_>,
 ) {
     loop {
@@ -140,7 +107,7 @@ async fn serve(
                     Either::Right(message) => message.encode(),
                 };
                 if write_all(ctx, tx, &out).await.is_err() {
-                    log::error!("[{}] failed to send a message", guard.id());
+                    log::error!("[{id}] failed to send a message");
                     return;
                 }
             }
@@ -148,19 +115,19 @@ async fn serve(
 
         match read {
             Ok(0) => {
-                log::info!("[{}] disconnected", guard.id());
+                log::info!("[{id}] disconnected");
                 return;
             }
             Ok(len) => match reader.received(&buf[..len]) {
-                Ok(Some(message)) => guard.publish(message),
+                Ok(Some(message)) => guard.publish(id, message),
                 Ok(None) => {}
                 Err(()) => {
-                    log::error!("[{}] received a malformed frame", guard.id());
+                    log::error!("[{id}] received a malformed frame");
                     return;
                 }
             },
             Err(err) => {
-                log::error!("[{}] read() failed: {err}", guard.id());
+                log::error!("[{id}] read() failed: {err}");
                 return;
             }
         }

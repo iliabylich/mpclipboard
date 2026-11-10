@@ -7,10 +7,10 @@ mod client;
 mod config;
 mod env;
 mod fixed_str;
+mod handshake;
 mod logger;
 mod message;
 mod message_reader;
-mod request_reader;
 mod select;
 mod slot;
 mod stderr;
@@ -21,9 +21,9 @@ use core::cell::{Cell, RefCell};
 use externally_driven_async_rt::{
     Context, EventLoop, LoopStorage, Selector, State, net::TcpListener,
 };
+use handshake::Token;
 use logger::Logger;
 use message::Message;
-use request_reader::Token;
 use rustix::{
     event::{PollFd, PollFlags, poll},
     io::Errno,
@@ -33,7 +33,7 @@ use slot::Slot;
 const MAX_CLIENTS: usize = 10;
 
 const MAX_TASKS_COUNT: usize = MAX_CLIENTS;
-const MAX_TASK_SIZE: usize = 3168;
+const MAX_TASK_SIZE: usize = 3208;
 const MAX_ROOT_TASK_SIZE: usize = 296;
 const MAX_TIMERS_COUNT: usize = MAX_CLIENTS;
 const MAX_IO_COUNT: usize = MAX_CLIENTS + 1;

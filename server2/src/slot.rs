@@ -1,4 +1,4 @@
-use crate::{message::Message, request_reader::ID};
+use crate::{handshake::ID, message::Message};
 use core::{
     cell::{Cell, RefCell},
     future::poll_fn,
@@ -9,7 +9,6 @@ use core::{
 pub(crate) enum Slot {
     Free,
     Taken {
-        id: ID,
         pending: Option<Message>,
         waker: Option<Waker>,
     },
@@ -36,7 +35,6 @@ impl<'a> SlotGuard<'a> {
         };
 
         *slot.borrow_mut() = Slot::Taken {
-            id,
             pending: current.get(),
             waker: None,
         };
@@ -50,7 +48,7 @@ impl<'a> SlotGuard<'a> {
     pub(crate) async fn notified(&self) -> Message {
         poll_fn(|cx| {
             let mut slot = self.slot.borrow_mut();
-            let Slot::Taken { pending, waker, .. } = &mut *slot else {
+            let Slot::Taken { pending, waker } = &mut *slot else {
                 unreachable!("a guarded slot is always taken");
             };
 
@@ -63,29 +61,24 @@ impl<'a> SlotGuard<'a> {
         .await
     }
 
-    pub(crate) fn id(&self) -> ID {
-        let Slot::Taken { id, .. } = *self.slot.borrow() else {
-            unreachable!("a guarded slot is always taken");
-        };
-        id
-    }
-
-    pub(crate) fn publish(&self, message: Message) {
+    pub(crate) fn publish(&self, id: ID, message: Message) {
         if self.current.get() == Some(message) {
             return;
         }
         self.current.set(Some(message));
 
-        let sender = self.id();
-        log::info!("[{sender}] broadcasting {message:?}");
+        log::info!("[{id}] broadcasting {message:?}");
 
         for slot in self.slots {
+            if core::ptr::eq(slot, self.slot) {
+                continue;
+            }
             let waker = match &mut *slot.borrow_mut() {
-                Slot::Taken { id, pending, waker } if *id != sender => {
+                Slot::Taken { pending, waker } => {
                     *pending = Some(message);
                     waker.take()
                 }
-                Slot::Taken { .. } | Slot::Free => None,
+                Slot::Free => None,
             };
             if let Some(waker) = waker {
                 waker.wake();
@@ -103,7 +96,7 @@ impl Drop for SlotGuard<'_> {
 #[cfg(test)]
 mod tests {
     use super::{Slot, SlotGuard};
-    use crate::{message::tests::message, request_reader::ID};
+    use crate::{handshake::ID, message::tests::message};
     use core::{
         cell::{Cell, RefCell},
         future::Future,
@@ -177,13 +170,27 @@ mod tests {
         assert_eq!(poll_notified(&a, &a_waker), None);
         assert_eq!(poll_notified(&b, &b_waker), None);
 
-        a.publish(message("from a"));
+        a.publish(id("a"), message("from a"));
 
         assert_eq!(current.get(), Some(message("from a")));
         assert_eq!(a_waker.0.load(Ordering::Relaxed), 0);
         assert_eq!(b_waker.0.load(Ordering::Relaxed), 1);
         assert_eq!(poll_notified(&a, &a_waker), None);
         assert_eq!(poll_notified(&b, &b_waker), Some("from a".into()));
+    }
+
+    #[test]
+    fn test_publish_reaches_other_connection_with_same_id() {
+        let slots = slots::<2>();
+        let current = Cell::new(None);
+        let waker = Arc::new(CountingWaker(AtomicUsize::new(0)));
+
+        let old = SlotGuard::take(&slots, &current, id("a")).unwrap();
+        let new = SlotGuard::take(&slots, &current, id("a")).unwrap();
+        assert_eq!(poll_notified(&old, &waker), None);
+
+        new.publish(id("a"), message("from new"));
+        assert_eq!(poll_notified(&old, &waker), Some("from new".into()));
     }
 
     #[test]
@@ -196,7 +203,7 @@ mod tests {
         let b = SlotGuard::take(&slots, &current, id("b")).unwrap();
         assert_eq!(poll_notified(&b, &waker), Some("same".into()));
 
-        a.publish(message("same"));
+        a.publish(id("a"), message("same"));
         assert_eq!(poll_notified(&b, &waker), None);
         assert_eq!(waker.0.load(Ordering::Relaxed), 0);
     }
@@ -210,8 +217,8 @@ mod tests {
         let a = SlotGuard::take(&slots, &current, id("a")).unwrap();
         let b = SlotGuard::take(&slots, &current, id("b")).unwrap();
 
-        a.publish(message("one"));
-        a.publish(message("two"));
+        a.publish(id("a"), message("one"));
+        a.publish(id("a"), message("two"));
         assert_eq!(poll_notified(&b, &waker), Some("two".into()));
         assert_eq!(poll_notified(&b, &waker), None);
     }

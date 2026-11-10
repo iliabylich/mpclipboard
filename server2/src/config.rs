@@ -1,4 +1,4 @@
-use crate::request_reader::Token;
+use crate::handshake::Token;
 use core::net::SocketAddr;
 
 pub(crate) struct Config {
