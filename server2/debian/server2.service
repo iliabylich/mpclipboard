@@ -1,0 +1,13 @@
+[Unit]
+AssertPathExists=/usr/bin/server2
+
+[Service]
+WorkingDirectory=~
+EnvironmentFile=/etc/mpclipboard-server/env
+ExecStart=/usr/bin/server2
+Restart=always
+PrivateTmp=false
+NoNewPrivileges=true
+
+[Install]
+WantedBy=default.target
