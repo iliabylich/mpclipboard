@@ -49,7 +49,7 @@ impl<const N: usize> core::fmt::Display for FixedStr<N> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum FixedStrError {
+pub enum FixedStrError {
     Empty,
     TooLong { len: usize },
 }

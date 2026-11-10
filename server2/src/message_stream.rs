@@ -1,4 +1,6 @@
-use crate::{ServerContext, id::ID, message::Message, message_reader::MessageReader};
+use crate::{
+    ServerContext, errors::ClientError, id::ID, message::Message, message_reader::MessageReader,
+};
 use externally_driven_async_rt::net::BorrowedReadHalf;
 
 pub(crate) struct MessageStream<'s> {
@@ -18,28 +20,25 @@ impl<'s> MessageStream<'s> {
         }
     }
 
-    pub(crate) async fn next(&mut self, ctx: &ServerContext<'_>) -> Result<Message, ()> {
+    pub(crate) async fn next(
+        &mut self,
+        ctx: &ServerContext<'_>,
+    ) -> Result<Option<Message>, ClientError> {
         let id = self.id;
         loop {
             let len = match self.rx.read(ctx, &mut self.buf).await {
                 Ok(0) => {
                     info!("[{id}] disconnected");
-                    return Err(());
+                    return Ok(None);
                 }
                 Ok(len) => len,
-                Err(err) => {
-                    error!("[{id}] read() failed: {err}");
-                    return Err(());
-                }
+                Err(err) => return Err(ClientError::Read { id, err }),
             };
 
-            match self.reader.received(&self.buf[..len]) {
-                Ok(Some(message)) => return Ok(message),
-                Ok(None) => {}
-                Err(()) => {
-                    error!("[{id}] received a malformed frame");
-                    return Err(());
-                }
+            let message = self.reader.received(&self.buf[..len]);
+            let message = message.map_err(|err| ClientError::MalformedFrame { id, err })?;
+            if let Some(message) = message {
+                return Ok(Some(message));
             }
         }
     }

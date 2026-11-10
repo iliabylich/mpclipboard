@@ -1,5 +1,6 @@
 use crate::{
     ServerContext,
+    errors::ClientError,
     id::ID,
     message_reader::MessageReader,
     message_stream::MessageStream,
@@ -31,7 +32,10 @@ impl<'a> Client<'a> {
         }
     }
 
-    pub(crate) async fn read_write_messages(self, ctx: &ServerContext<'_>) {
+    pub(crate) async fn read_write_messages(
+        self,
+        ctx: &ServerContext<'_>,
+    ) -> Result<(), ClientError> {
         let Self {
             mut stream,
             reader,
@@ -43,14 +47,10 @@ impl<'a> Client<'a> {
         let mut messages = MessageStream::new(rx, reader, id);
         loop {
             match select(messages.next(ctx), pubsub.receive()).await {
-                Either::Left(Ok(message)) => pubsub.publish(id, message),
-                Either::Left(Err(())) => return,
-                Either::Right(message) => {
-                    if write_all(ctx, &mut tx, &message.encode()).await.is_err() {
-                        error!("[{id}] failed to send a message");
-                        return;
-                    }
-                }
+                Either::Left(Ok(Some(message))) => pubsub.publish(id, message),
+                Either::Left(Ok(None)) => return Ok(()),
+                Either::Left(Err(err)) => return Err(err),
+                Either::Right(message) => write_all(ctx, &mut tx, &message.encode(), id).await?,
             }
         }
     }

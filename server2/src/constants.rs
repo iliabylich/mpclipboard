@@ -2,8 +2,8 @@ use core::time::Duration;
 
 pub(crate) const CLIENT_COUNT: usize = 10;
 
-pub(crate) const TASK_COUNT: usize = CLIENT_COUNT;
-pub(crate) const TASK_SIZE: usize = 5048;
+pub(crate) const TASK_COUNT: usize = CLIENT_COUNT + 1;
+pub(crate) const TASK_SIZE: usize = 5352;
 pub(crate) const ROOT_TASK_SIZE: usize = 232;
 pub(crate) const TIMER_COUNT: usize = CLIENT_COUNT;
 pub(crate) const IO_COUNT: usize = CLIENT_COUNT + 1;

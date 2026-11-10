@@ -1,3 +1,4 @@
+use crate::errors::ServerError;
 use core::ffi::{CStr, c_char};
 
 #[link(name = "c")]
@@ -5,7 +6,7 @@ unsafe extern "C" {
     fn getenv(name: *const c_char) -> *const c_char;
 }
 
-pub(crate) fn var(name: &CStr) -> Result<Option<&'static str>, ()> {
+pub(crate) fn var(name: &'static CStr) -> Result<Option<&'static str>, ServerError> {
     let value = unsafe { getenv(name.as_ptr()) };
     if value.is_null() {
         return Ok(None);
@@ -14,12 +15,6 @@ pub(crate) fn var(name: &CStr) -> Result<Option<&'static str>, ()> {
     let value = unsafe { CStr::from_ptr(value) };
     let value = value
         .to_str()
-        .inspect_err(|err| {
-            error!(
-                "env var {} must be valid utf-8: {err}",
-                name.to_str().unwrap_or("<non-utf8 name>")
-            );
-        })
-        .map_err(|_| ())?;
+        .map_err(|err| ServerError::NonUtf8EnvVar { name, err })?;
     Ok(Some(value))
 }

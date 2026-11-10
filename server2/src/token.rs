@@ -10,12 +10,4 @@ impl Token {
     pub(crate) fn new(s: &str) -> Result<Self, FixedStrError> {
         FixedStr::new(s).map(Self)
     }
-
-    pub(crate) fn compare<'a>(&self, received: &'a Self) -> Result<(), &'a str> {
-        if self == received {
-            Ok(())
-        } else {
-            Err(received.0.as_str())
-        }
-    }
 }

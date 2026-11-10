@@ -1,29 +1,28 @@
-use crate::token::Token;
+use crate::{errors::ServerError, token::Token};
 use core::net::SocketAddr;
 
-pub(crate) fn from_env() -> Result<(SocketAddr, Token), ()> {
+pub(crate) fn from_env() -> Result<(SocketAddr, Token), ServerError> {
     let bind_address = crate::env::var(c"MPCLIPBOARD_BIND_ADDRESS").and_then(parse_address)?;
     let token = crate::env::var(c"MPCLIPBOARD_TOKEN").and_then(parse_token)?;
     Ok((bind_address, token))
 }
 
-fn parse_address(s: Option<&str>) -> Result<SocketAddr, ()> {
-    let s = s.ok_or_else(|| error!("MPCLIPBOARD_BIND_ADDRESS is missing"))?;
-    s.parse::<SocketAddr>().map_err(|err| {
-        error!("MPCLIPBOARD_BIND_ADDRESS must be an ip:port address: {err}");
-    })
+fn parse_address(s: Option<&str>) -> Result<SocketAddr, ServerError> {
+    let s = s.ok_or(ServerError::MissingBindAddress)?;
+    let address = s.parse::<SocketAddr>()?;
+    Ok(address)
 }
 
-fn parse_token(s: Option<&str>) -> Result<Token, ()> {
-    let s = s.ok_or_else(|| error!("MPCLIPBOARD_TOKEN is missing"))?;
-    Token::new(s).map_err(|err| error!("MPCLIPBOARD_TOKEN is malformed: {err}"))
+fn parse_token(s: Option<&str>) -> Result<Token, ServerError> {
+    let s = s.ok_or(ServerError::MissingToken)?;
+    Token::new(s).map_err(ServerError::InvalidToken)
 }
 
 #[cfg(test)]
 mod tests {
     use core::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
 
-    use crate::token::Token;
+    use crate::{errors::ServerError, token::Token};
 
     use super::{parse_address, parse_token};
 
@@ -76,16 +75,28 @@ mod tests {
 
     #[test]
     fn test_rejected_addresses() {
-        assert_eq!(parse_address(Some("localhost:3000")), Err(()));
-        assert_eq!(parse_address(Some("http://127.0.0.1:3000")), Err(()));
-        assert_eq!(parse_address(Some("127.0.0.1")), Err(()));
-        assert_eq!(parse_address(Some("")), Err(()));
+        assert!(matches!(
+            parse_address(Some("localhost:3000")),
+            Err(ServerError::InvalidBindAddress(_))
+        ));
+        assert!(matches!(
+            parse_address(Some("http://127.0.0.1:3000")),
+            Err(ServerError::InvalidBindAddress(_))
+        ));
+        assert!(matches!(
+            parse_address(Some("127.0.0.1")),
+            Err(ServerError::InvalidBindAddress(_))
+        ));
+        assert!(matches!(
+            parse_address(Some("")),
+            Err(ServerError::InvalidBindAddress(_))
+        ));
     }
 
     #[test]
     fn test_missing() {
-        assert_eq!(parse_address(None), Err(()));
-        assert_eq!(parse_token(None), Err(()));
+        assert_eq!(parse_address(None), Err(ServerError::MissingBindAddress));
+        assert_eq!(parse_token(None), Err(ServerError::MissingToken));
     }
 
     #[test]

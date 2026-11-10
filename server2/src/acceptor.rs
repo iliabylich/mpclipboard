@@ -1,7 +1,12 @@
 use crate::{
-    ServerContext, constants::HANDSHAKE_TIMEOUT, pubsub::PubSub, stranger::Stranger, token::Token,
+    ServerContext,
+    constants::HANDSHAKE_TIMEOUT,
+    errors::ClientError,
+    pubsub::{PubSub, PubSubHandle},
+    stranger::Stranger,
+    token::Token,
 };
-use externally_driven_async_rt::net::TcpListener;
+use externally_driven_async_rt::net::{TcpListener, TcpStream};
 
 pub(crate) struct Acceptor {
     listener: TcpListener,
@@ -36,16 +41,27 @@ impl Acceptor {
                 }
             };
             trace!("accepted");
-            let Ok(pubsub) = pubsub.subscribe() else {
-                continue;
+            let Some(pubsub) = pubsub.subscribe() else {
+                unreachable!("every reserved task has a free pubsub slot");
             };
             task.spawn(move |ctx| async move {
-                let stranger = Stranger::new(stream, token, pubsub);
-                let Ok(client) = stranger.handshake(&ctx, HANDSHAKE_TIMEOUT).await else {
-                    return;
-                };
-                client.read_write_messages(&ctx).await;
+                if let Err(err) = serve(&ctx, stream, token, pubsub).await {
+                    error!("{err}");
+                }
             });
         }
     }
+}
+
+async fn serve<'a>(
+    ctx: &ServerContext<'_>,
+    stream: TcpStream,
+    token: &'a Token,
+    pubsub: PubSubHandle<'a>,
+) -> Result<(), ClientError> {
+    let stranger = Stranger::new(stream, token, pubsub);
+    let Some(client) = stranger.handshake(ctx, HANDSHAKE_TIMEOUT).await? else {
+        return Ok(());
+    };
+    client.read_write_messages(ctx).await
 }

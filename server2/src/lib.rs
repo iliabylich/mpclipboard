@@ -10,6 +10,7 @@ mod client;
 mod config;
 mod constants;
 mod env;
+mod errors;
 mod fixed_str;
 mod handshake;
 mod id;
@@ -23,6 +24,7 @@ mod stranger;
 mod token;
 mod write_all;
 
+pub use errors::ServerError;
 pub use stderr::Stderr;
 
 use acceptor::Acceptor;
@@ -41,16 +43,13 @@ type ServerLoop<'a> =
     EventLoop<'a, (), TASK_COUNT, TASK_SIZE, ROOT_TASK_SIZE, TIMER_COUNT, IO_COUNT>;
 type ServerStorage = LoopStorage<(), TASK_COUNT, TASK_SIZE, ROOT_TASK_SIZE, TIMER_COUNT, IO_COUNT>;
 
-#[expect(clippy::result_unit_err)]
-pub fn run() -> Result<Infallible, ()> {
+pub fn run() -> Result<Infallible, ServerError> {
     Logger::init()?;
 
     let (address, token) = config::from_env()?;
 
     info!("Trying to bind on {address}");
-    let listener = TcpListener::bind(address)
-        .inspect_err(|err| error!("failed to bind {}: {err}", address))
-        .map_err(|_| ())?;
+    let listener = TcpListener::bind(address).map_err(|err| ServerError::Bind { address, err })?;
     info!("listening on {}", address);
 
     let mut acceptor = Acceptor::new(listener, token);
@@ -61,26 +60,19 @@ pub fn run() -> Result<Infallible, ()> {
     let storage =
         unsafe { core::mem::transmute::<&ServerStorage, &'static ServerStorage>(&storage) };
 
-    let mut selector = Selector::new()
-        .inspect_err(|err| error!("failed to create a selector: {err}"))
-        .map_err(|_| ())?;
+    let mut selector = Selector::new().map_err(ServerError::Selector)?;
     let mut event_loop = ServerLoop::new(storage, &mut selector, (), |ctx| acceptor.run(ctx))
-        .inspect_err(|err| error!("failed to start the event loop: {err}"))
-        .map_err(|_| ())?;
+        .map_err(ServerError::EventLoopStart)?;
 
-    loop {
+    let err = loop {
         match poll(&mut [PollFd::new(&event_loop, PollFlags::IN)], None) {
             Ok(_) | Err(Errno::INTR) => {}
-            Err(err) => {
-                error!("poll() failed: {err}");
-                break;
-            }
+            Err(err) => break ServerError::Poll(err),
         }
         if let Err(err) = event_loop.drain_events_without_blocking() {
-            error!("{err}");
-            break;
+            break ServerError::EventLoop(err);
         }
-    }
+    };
     drop(event_loop);
-    Err(())
+    Err(err)
 }

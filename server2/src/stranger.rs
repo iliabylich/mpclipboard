@@ -1,6 +1,7 @@
 use crate::{
-    ServerContext, client::Client, constants::HANDSHAKE_REQUEST_SIZE, id::ID, message::Message,
-    message_reader::MessageReader, pubsub::PubSubHandle, token::Token, write_all::write_all,
+    ServerContext, client::Client, constants::HANDSHAKE_REQUEST_SIZE, errors::ClientError, id::ID,
+    message::Message, message_reader::MessageReader, pubsub::PubSubHandle, token::Token,
+    write_all::write_all,
 };
 use core::time::Duration;
 use externally_driven_async_rt::net::TcpStream;
@@ -28,68 +29,70 @@ impl<'a> Stranger<'a> {
         mut self,
         ctx: &ServerContext<'_>,
         timeout: Duration,
-    ) -> Result<Client<'a>, ()> {
+    ) -> Result<Option<Client<'a>>, ClientError> {
         let mut reader = MessageReader::new();
 
         let read_write = self.read_write(ctx, &mut reader);
         let Some(read_write) = ctx.timeout(timeout, read_write).await else {
-            info!("no handshake within {}s", timeout.as_secs());
-            return Err(());
+            return Err(ClientError::HandshakeTimeout(timeout));
         };
-        let (id, leftover_message) = read_write?;
+        let Some((id, leftover_message)) = read_write? else {
+            return Ok(None);
+        };
         info!("[{id}] connected");
 
         if let Some(message) = leftover_message {
             self.pubsub.publish(id, message);
         }
 
-        Ok(Client::new(self.stream, reader, id, self.pubsub))
+        Ok(Some(Client::new(self.stream, reader, id, self.pubsub)))
     }
 
     async fn read_write(
         &mut self,
         ctx: &ServerContext<'_>,
         reader: &mut MessageReader,
-    ) -> Result<(ID, Option<Message>), ()> {
-        let (received_token, id, consumed) = self.read(ctx).await?;
+    ) -> Result<Option<(ID, Option<Message>)>, ClientError> {
+        let Some((received, id, consumed)) = self.read(ctx).await? else {
+            return Ok(None);
+        };
 
-        if let Err(wrong) = self.token.compare(&received_token) {
-            self.write_401(ctx, id, wrong).await;
-            return Err(());
+        if *self.token != received {
+            self.write_401(ctx, id).await;
+            return Err(ClientError::InvalidToken { id });
         }
 
         self.write_101(ctx, id).await?;
 
-        let Ok(leftover_message) = reader.received(&self.buf[consumed..self.len]) else {
-            error!("[{id}] sent a malformed frame right after the request");
-            return Err(());
-        };
-        Ok((id, leftover_message))
+        let leftover_message = reader.received(&self.buf[consumed..self.len]);
+        let leftover_message =
+            leftover_message.map_err(|err| ClientError::MalformedFrame { id, err })?;
+        Ok(Some((id, leftover_message)))
     }
 
-    async fn read(&mut self, ctx: &ServerContext<'_>) -> Result<(Token, ID, usize), ()> {
+    async fn read(
+        &mut self,
+        ctx: &ServerContext<'_>,
+    ) -> Result<Option<(Token, ID, usize)>, ClientError> {
         loop {
             match self.stream.read(ctx, &mut self.buf[self.len..]).await {
                 Ok(0) => {
                     info!("disconnected during handshake");
-                    return Err(());
+                    return Ok(None);
                 }
                 Ok(read) => {
                     self.len += read;
                 }
-                Err(err) => {
-                    error!("read() failed during handshake: {err}");
-                    return Err(());
-                }
+                Err(err) => return Err(ClientError::HandshakeRead(err)),
             };
 
             if let Some(parsed) = crate::handshake::parse(&self.buf[..self.len])? {
-                return Ok(parsed);
+                return Ok(Some(parsed));
             }
         }
     }
 
-    async fn write_101(&mut self, ctx: &ServerContext<'_>, id: ID) -> Result<(), ()> {
+    async fn write_101(&mut self, ctx: &ServerContext<'_>, id: ID) -> Result<(), ClientError> {
         const SWITCHING_PROTOCOLS_RESPONSE: &str = concat!(
             "HTTP/1.1 101 Switching Protocols\r\n",
             "Connection: Upgrade\r\n",
@@ -98,19 +101,10 @@ impl<'a> Stranger<'a> {
         );
 
         let (_, mut tx) = self.stream.split();
-
-        if write_all(ctx, &mut tx, SWITCHING_PROTOCOLS_RESPONSE.as_bytes())
-            .await
-            .is_err()
-        {
-            error!("[{id}] failed to send 101 Switching Protocols");
-            return Err(());
-        }
-
-        Ok(())
+        write_all(ctx, &mut tx, SWITCHING_PROTOCOLS_RESPONSE.as_bytes(), id).await
     }
 
-    async fn write_401(&mut self, ctx: &ServerContext<'_>, id: ID, wrong: &str) {
+    async fn write_401(&mut self, ctx: &ServerContext<'_>, id: ID) {
         const UNAUTHORIZED_RESPONSE: &str = concat!(
             "HTTP/1.1 401 Unauthorized\r\n",
             "Content-Length: 0\r\n",
@@ -119,7 +113,6 @@ impl<'a> Stranger<'a> {
 
         let (_, mut tx) = self.stream.split();
 
-        info!("[{id}] invalid token=\"{wrong}\"",);
-        let _ = write_all(ctx, &mut tx, UNAUTHORIZED_RESPONSE.as_bytes()).await;
+        let _ = write_all(ctx, &mut tx, UNAUTHORIZED_RESPONSE.as_bytes(), id).await;
     }
 }

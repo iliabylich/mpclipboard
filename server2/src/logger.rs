@@ -1,4 +1,4 @@
-use crate::Stderr;
+use crate::{Stderr, errors::ServerError};
 use core::{
     fmt::Write as _,
     sync::atomic::{AtomicU8, Ordering},
@@ -27,15 +27,10 @@ pub(crate) struct Logger;
 static MAX_LEVEL: AtomicU8 = AtomicU8::new(LevelFilter::Off as u8);
 
 impl Logger {
-    pub(crate) fn init() -> Result<(), ()> {
+    pub(crate) fn init() -> Result<(), ServerError> {
         let level = match crate::env::var(c"RUST_LOG")? {
             None => LevelFilter::Error,
-            Some(value) => LevelFilter::parse(value).ok_or_else(|| {
-                let _ = writeln!(
-                    Stderr,
-                    "invalid RUST_LOG=\"{value}\": expected one of off, error, warn, info, debug, trace"
-                );
-            })?,
+            Some(value) => LevelFilter::parse(value).ok_or(ServerError::InvalidRustLog(value))?,
         };
         MAX_LEVEL.store(level as u8, Ordering::Relaxed);
 

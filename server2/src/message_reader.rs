@@ -1,4 +1,5 @@
 use crate::message::{Frame, Message};
+use core::str::Utf8Error;
 
 pub(crate) struct MessageReader {
     buf: [u8; Message::BYTESIZE],
@@ -13,7 +14,7 @@ impl MessageReader {
         }
     }
 
-    pub(crate) fn received(&mut self, mut bytes: &[u8]) -> Result<Option<Message>, ()> {
+    pub(crate) fn received(&mut self, mut bytes: &[u8]) -> Result<Option<Message>, Utf8Error> {
         let mut message = None;
 
         while !bytes.is_empty() {
@@ -41,9 +42,10 @@ mod tests {
         Frame, Message,
         tests::{frame, text},
     };
+    use core::str::Utf8Error;
     use std::{option::Option, string::String};
 
-    fn received(reader: &mut MessageReader, bytes: &[u8]) -> Result<Option<String>, ()> {
+    fn received(reader: &mut MessageReader, bytes: &[u8]) -> Result<Option<String>, Utf8Error> {
         let message = reader.received(bytes)?;
         Ok(message.map(|message| text(Frame::Message(message))))
     }
@@ -105,9 +107,6 @@ mod tests {
     #[test]
     fn test_receive_invalid() {
         let mut reader = MessageReader::new();
-        assert_eq!(
-            received(&mut reader, &[b'\xC8'; Message::BYTESIZE]),
-            Err(())
-        );
+        assert!(received(&mut reader, &[b'\xC8'; Message::BYTESIZE]).is_err());
     }
 }

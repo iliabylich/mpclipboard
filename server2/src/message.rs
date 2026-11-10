@@ -1,5 +1,5 @@
 use crate::{constants::MAX_TEXT_LENGTH, fixed_str::FixedStr};
-use core::num::NonZeroUsize;
+use core::{num::NonZeroUsize, str::Utf8Error};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Message {
@@ -44,15 +44,13 @@ pub(crate) enum Frame {
 }
 
 impl Frame {
-    pub(crate) fn decode(buf: &[u8; Message::BYTESIZE]) -> Result<Self, ()> {
+    pub(crate) fn decode(buf: &[u8; Message::BYTESIZE]) -> Result<Self, Utf8Error> {
         let [len, text @ ..] = buf;
 
         let Some(len) = NonZeroUsize::new(usize::from(*len)) else {
             return Ok(Self::Heartbeat);
         };
-        let text = core::str::from_utf8(&text[..len.get()])
-            .inspect_err(|err| error!("non-utf8 message text: {err}"))
-            .map_err(|_| ())?;
+        let text = core::str::from_utf8(&text[..len.get()])?;
         let text = FixedStr::new(text)
             .unwrap_or_else(|_| unreachable!("len is non-zero and fits into a u8"));
 
@@ -124,6 +122,6 @@ pub(crate) mod tests {
 
     #[test]
     fn test_decode_invalid() {
-        assert_eq!(Frame::decode(&[b'\xC8'; Message::BYTESIZE]), Err(()));
+        assert!(Frame::decode(&[b'\xC8'; Message::BYTESIZE]).is_err());
     }
 }

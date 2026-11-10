@@ -9,11 +9,7 @@ use crate::{
     token::Token,
 };
 
-pub(crate) fn parse(bytes: &[u8]) -> Result<Option<(Token, ID, usize)>, ()> {
-    parse_(bytes).map_err(|err| error!("{err}"))
-}
-
-pub(crate) fn parse_(bytes: &[u8]) -> Result<Option<(Token, ID, usize)>, ParseError> {
+pub(crate) fn parse(bytes: &[u8]) -> Result<Option<(Token, ID, usize)>, ParseError> {
     let mut headers = [httparse::EMPTY_HEADER; HANDSHAKE_REQUEST_MAX_HEADERS];
     let mut req = httparse::Request::new(&mut headers);
     let httparse::Status::Complete(len) = req.parse(bytes).map_err(InvalidHttpRequest)? else {
@@ -116,7 +112,7 @@ mod tests {
     use super::{
         HANDSHAKE_REQUEST_SIZE, ID,
         ParseError::{self, *},
-        Token, parse_,
+        Token, parse,
     };
     use crate::fixed_str::FixedStrError;
     use std::{format, string::String, vec::Vec};
@@ -156,7 +152,7 @@ Accept-Encoding: gzip\r\n\
                 return Ok(None);
             }
             len += read;
-            if let Some((token, id, consumed)) = parse_(&bytes[..len])? {
+            if let Some((token, id, consumed)) = parse(&bytes[..len])? {
                 return Ok(Some((token, id, bytes[consumed..].to_vec())));
             }
         }

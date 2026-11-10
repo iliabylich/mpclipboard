@@ -27,21 +27,17 @@ impl PubSub {
         }
     }
 
-    pub(crate) fn subscribe(&self) -> Result<PubSubHandle<'_>, ()> {
-        let Some(slot) = self
+    pub(crate) fn subscribe(&self) -> Option<PubSubHandle<'_>> {
+        let slot = self
             .slots
             .iter()
-            .find(|slot| matches!(*slot.borrow(), Slot::Free))
-        else {
-            error!("no free slot");
-            return Err(());
-        };
+            .find(|slot| matches!(*slot.borrow(), Slot::Free))?;
 
         *slot.borrow_mut() = Slot::Taken {
             pending: self.current.get(),
             waker: None,
         };
-        Ok(PubSubHandle { pubsub: self, slot })
+        Some(PubSubHandle { pubsub: self, slot })
     }
 }
 
@@ -229,8 +225,8 @@ mod tests {
         let mut handles: Vec<_> = (0..CLIENT_COUNT)
             .map(|_| pubsub.subscribe().unwrap())
             .collect();
-        assert!(pubsub.subscribe().is_err());
+        assert!(pubsub.subscribe().is_none());
         handles.pop();
-        assert!(pubsub.subscribe().is_ok());
+        assert!(pubsub.subscribe().is_some());
     }
 }
