@@ -77,6 +77,7 @@ impl State for DummyState {
 }
 
 fn start<'a>(
+    storage: &'static ServerStorage,
     selector: &'a mut Selector,
     listener: TcpListener,
     token: &'a Token,
@@ -84,9 +85,8 @@ fn start<'a>(
     current: &'a Cell<Option<Message>>,
     states: &'a [RefCell<Option<ClientState>>],
 ) -> Result<ServerLoop<'a>, externally_driven_async_rt::Error> {
-    static STORAGE: ServerStorage = ServerStorage::new();
     ServerLoop::new(
-        &STORAGE,
+        storage,
         selector,
         DummyState,
         move |ctx: ServerContext<'a>| accept_loop(ctx, listener, token, slots, current, states),
@@ -143,6 +143,12 @@ pub fn run() -> i32 {
     let slots = [const { RefCell::new(Slot::Free) }; MAX_CLIENTS];
     let states = [const { RefCell::new(None) }; MAX_CLIENTS];
 
+    let storage = ServerStorage::new();
+    // SAFETY: `storage` outlives `event_loop`, which is dropped explicitly below, and only the
+    // event loop's tasks call `wake()`, so no waker is woken after `storage` is gone.
+    let storage =
+        unsafe { core::mem::transmute::<&ServerStorage, &'static ServerStorage>(&storage) };
+
     let mut selector = match Selector::new() {
         Ok(selector) => selector,
         Err(err) => {
@@ -150,7 +156,15 @@ pub fn run() -> i32 {
             return 1;
         }
     };
-    let mut event_loop = match start(&mut selector, listener, &token, &slots, &current, &states) {
+    let mut event_loop = match start(
+        storage,
+        &mut selector,
+        listener,
+        &token,
+        &slots,
+        &current,
+        &states,
+    ) {
         Ok(event_loop) => event_loop,
         Err(err) => {
             log::error!("failed to start the event loop: {err}");
@@ -158,17 +172,19 @@ pub fn run() -> i32 {
         }
     };
 
-    loop {
+    let code = loop {
         match poll(&mut [PollFd::new(&event_loop, PollFlags::IN)], None) {
             Ok(_) | Err(Errno::INTR) => {}
             Err(err) => {
                 log::error!("poll() failed: {err}");
-                return 1;
+                break 1;
             }
         }
         if let Err(err) = event_loop.drain_events_without_blocking() {
             log::error!("{err}");
-            return 1;
+            break 1;
         }
-    }
+    };
+    drop(event_loop);
+    code
 }
