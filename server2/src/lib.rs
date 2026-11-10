@@ -10,6 +10,7 @@ mod constants;
 mod env;
 mod fixed_str;
 mod handshake;
+mod id;
 mod logger;
 mod message;
 mod message_reader;
@@ -18,74 +19,40 @@ mod pubsub;
 mod select;
 mod stderr;
 mod stranger;
+mod token;
 mod write_all;
+
 pub use stderr::Stderr;
 
 use acceptor::Acceptor;
-use config::Config;
-use constants::{
-    MAX_IO_COUNT, MAX_ROOT_TASK_SIZE, MAX_TASK_SIZE, MAX_TASKS_COUNT, MAX_TIMERS_COUNT,
-};
+use constants::{IO_COUNT, ROOT_TASK_SIZE, TASK_COUNT, TASK_SIZE, TIMER_COUNT};
 use core::convert::Infallible;
-use externally_driven_async_rt::{
-    Context, EventLoop, LoopStorage, Selector, State, net::TcpListener,
-};
+use externally_driven_async_rt::{Context, EventLoop, LoopStorage, Selector, net::TcpListener};
 use logger::Logger;
 use rustix::{
     event::{PollFd, PollFlags, poll},
     io::Errno,
 };
 
-type ServerContext<'a> = Context<
-    'a,
-    DummyState,
-    MAX_TASKS_COUNT,
-    MAX_TASK_SIZE,
-    MAX_ROOT_TASK_SIZE,
-    MAX_TIMERS_COUNT,
-    MAX_IO_COUNT,
->;
-type ServerLoop<'a> = EventLoop<
-    'a,
-    DummyState,
-    MAX_TASKS_COUNT,
-    MAX_TASK_SIZE,
-    MAX_ROOT_TASK_SIZE,
-    MAX_TIMERS_COUNT,
-    MAX_IO_COUNT,
->;
-type ServerStorage = LoopStorage<
-    DummyState,
-    MAX_TASKS_COUNT,
-    MAX_TASK_SIZE,
-    MAX_ROOT_TASK_SIZE,
-    MAX_TIMERS_COUNT,
-    MAX_IO_COUNT,
->;
-
-struct DummyState;
-
-impl State for DummyState {
-    type Event = Infallible;
-
-    fn apply(&mut self, event: Self::Event) {
-        match event {}
-    }
-}
+type ServerContext<'a> =
+    Context<'a, (), TASK_COUNT, TASK_SIZE, ROOT_TASK_SIZE, TIMER_COUNT, IO_COUNT>;
+type ServerLoop<'a> =
+    EventLoop<'a, (), TASK_COUNT, TASK_SIZE, ROOT_TASK_SIZE, TIMER_COUNT, IO_COUNT>;
+type ServerStorage = LoopStorage<(), TASK_COUNT, TASK_SIZE, ROOT_TASK_SIZE, TIMER_COUNT, IO_COUNT>;
 
 #[expect(clippy::result_unit_err)]
 pub fn run() -> Result<Infallible, ()> {
     Logger::init()?;
 
-    let config = Config::from_env()?;
-    log::info!("{config:?}");
+    let (address, token) = config::from_env()?;
 
-    let listener = TcpListener::bind(config.bind_address)
-        .inspect_err(|err| log::error!("failed to bind {}: {err}", config.bind_address))
+    log::info!("Trying to bind on {address}");
+    let listener = TcpListener::bind(address)
+        .inspect_err(|err| log::error!("failed to bind {}: {err}", address))
         .map_err(|_| ())?;
-    log::info!("listening on {}", config.bind_address);
+    log::info!("listening on {}", address);
 
-    let mut acceptor = Acceptor::new(listener, config.token);
+    let mut acceptor = Acceptor::new(listener, token);
 
     let storage = ServerStorage::new();
     // SAFETY: `storage` outlives `event_loop`, which is dropped explicitly below, and only the
@@ -96,10 +63,9 @@ pub fn run() -> Result<Infallible, ()> {
     let mut selector = Selector::new()
         .inspect_err(|err| log::error!("failed to create a selector: {err}"))
         .map_err(|_| ())?;
-    let mut event_loop =
-        ServerLoop::new(storage, &mut selector, DummyState, |ctx| acceptor.run(ctx))
-            .inspect_err(|err| log::error!("failed to start the event loop: {err}"))
-            .map_err(|_| ())?;
+    let mut event_loop = ServerLoop::new(storage, &mut selector, (), |ctx| acceptor.run(ctx))
+        .inspect_err(|err| log::error!("failed to start the event loop: {err}"))
+        .map_err(|_| ())?;
 
     loop {
         match poll(&mut [PollFd::new(&event_loop, PollFlags::IN)], None) {

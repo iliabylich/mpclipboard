@@ -1,16 +1,23 @@
 use core::str::Utf8Error;
 
 use crate::{
-    constants::{MAX_HEADERS, MAX_REQUEST_SIZE, PROTOCOL_VERSION, UPGRADE_PROTOCOL},
+    constants::{
+        HANDSHAKE_REQUEST_MAX_HEADERS, HANDSHAKE_REQUEST_SIZE, PROTOCOL_VERSION, UPGRADE_PROTOCOL,
+    },
     fixed_str::FixedStrError,
-    handshake::{ID, Token},
+    id::ID,
+    token::Token,
 };
 
-pub(crate) fn parse(bytes: &[u8]) -> Result<Option<(Token, ID, usize)>, ParseError> {
-    let mut headers = [httparse::EMPTY_HEADER; MAX_HEADERS];
+pub(crate) fn parse(bytes: &[u8]) -> Result<Option<(Token, ID, usize)>, ()> {
+    parse_(bytes).map_err(|err| log::error!("{err}"))
+}
+
+pub(crate) fn parse_(bytes: &[u8]) -> Result<Option<(Token, ID, usize)>, ParseError> {
+    let mut headers = [httparse::EMPTY_HEADER; HANDSHAKE_REQUEST_MAX_HEADERS];
     let mut req = httparse::Request::new(&mut headers);
     let httparse::Status::Complete(len) = req.parse(bytes).map_err(InvalidHttpRequest)? else {
-        if bytes.len() >= MAX_REQUEST_SIZE {
+        if bytes.len() >= HANDSHAKE_REQUEST_SIZE {
             return Err(ParseError::TooLarge);
         }
         return Ok(None);
@@ -84,7 +91,7 @@ impl core::fmt::Display for ParseError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             InvalidHttpRequest(err) => write!(f, "malformed HTTP request: {err}"),
-            TooLarge => write!(f, "HTTP request exceeds {MAX_REQUEST_SIZE} bytes"),
+            TooLarge => write!(f, "HTTP request exceeds {HANDSHAKE_REQUEST_SIZE} bytes"),
             InvalidStartLine => f.write_str("unexpected start line, expected GET / HTTP/1.1"),
             NonUtf8(err) => write!(f, "non-utf8 header: {err}"),
             InvalidToken(err) => write!(f, "malformed token: {err}"),
@@ -107,9 +114,9 @@ impl core::fmt::Display for ParseError {
 #[cfg(test)]
 mod tests {
     use super::{
-        ID, MAX_REQUEST_SIZE,
+        HANDSHAKE_REQUEST_SIZE, ID,
         ParseError::{self, *},
-        Token, parse,
+        Token, parse_,
     };
     use crate::fixed_str::FixedStrError;
     use std::{format, string::String, vec::Vec};
@@ -143,13 +150,13 @@ Accept-Encoding: gzip\r\n\
         let mut len = 0;
         loop {
             let read = chunk_size
-                .min(MAX_REQUEST_SIZE - len)
+                .min(HANDSHAKE_REQUEST_SIZE - len)
                 .min(bytes.len() - len);
             if read == 0 {
                 return Ok(None);
             }
             len += read;
-            if let Some((token, id, consumed)) = parse(&bytes[..len])? {
+            if let Some((token, id, consumed)) = parse_(&bytes[..len])? {
                 return Ok(Some((token, id, bytes[consumed..].to_vec())));
             }
         }
@@ -238,7 +245,7 @@ Accept-Encoding: gzip\r\n\
 
     #[test]
     fn test_too_large() {
-        let bytes = with_header(&format!("X-Long: {}", "a".repeat(MAX_REQUEST_SIZE)));
+        let bytes = with_header(&format!("X-Long: {}", "a".repeat(HANDSHAKE_REQUEST_SIZE)));
         assert_eq!(read_all(&bytes), Err(TooLarge));
     }
 

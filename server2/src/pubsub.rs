@@ -1,4 +1,4 @@
-use crate::{constants::MAX_CLIENTS, handshake::ID, message::Message};
+use crate::{constants::CLIENT_COUNT, id::ID, message::Message};
 use core::{
     cell::{Cell, RefCell},
     future::poll_fn,
@@ -7,7 +7,7 @@ use core::{
 
 pub(crate) struct PubSub {
     current: Cell<Option<Message>>,
-    slots: [RefCell<Slot>; MAX_CLIENTS],
+    slots: [RefCell<Slot>; CLIENT_COUNT],
 }
 
 #[expect(clippy::large_enum_variant)]
@@ -23,7 +23,7 @@ impl PubSub {
     pub(crate) fn new() -> Self {
         Self {
             current: Cell::new(None),
-            slots: [const { RefCell::new(Slot::Free) }; MAX_CLIENTS],
+            slots: [const { RefCell::new(Slot::Free) }; CLIENT_COUNT],
         }
     }
 
@@ -103,7 +103,7 @@ impl Drop for PubSubHandle<'_> {
 #[cfg(test)]
 mod tests {
     use super::{PubSub, PubSubHandle};
-    use crate::{constants::MAX_CLIENTS, handshake::ID, message::tests::message};
+    use crate::{constants::CLIENT_COUNT, id::ID, message::tests::message};
     use core::{
         future::Future,
         pin::pin,
@@ -226,7 +226,7 @@ mod tests {
     fn test_drop_frees_slot() {
         let pubsub = PubSub::new();
 
-        let mut handles: Vec<_> = (0..MAX_CLIENTS)
+        let mut handles: Vec<_> = (0..CLIENT_COUNT)
             .map(|_| pubsub.subscribe().unwrap())
             .collect();
         assert!(pubsub.subscribe().is_err());

@@ -6,6 +6,13 @@ pub(crate) struct MessageReader {
 }
 
 impl MessageReader {
+    pub(crate) const fn new() -> Self {
+        Self {
+            buf: [0; Message::BYTESIZE],
+            filled: 0,
+        }
+    }
+
     pub(crate) fn received(&mut self, mut bytes: &[u8]) -> Result<Option<Message>, ()> {
         let mut message = None;
 
@@ -27,15 +34,6 @@ impl MessageReader {
     }
 }
 
-impl Default for MessageReader {
-    fn default() -> Self {
-        Self {
-            buf: [0; Message::BYTESIZE],
-            filled: 0,
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::MessageReader;
@@ -52,7 +50,7 @@ mod tests {
 
     #[test]
     fn test_receive_full() {
-        let mut reader = MessageReader::default();
+        let mut reader = MessageReader::new();
         assert_eq!(received(&mut reader, &frame("BOO")), Ok(Some("BOO".into())));
     }
 
@@ -63,7 +61,7 @@ mod tests {
         let (first, rest) = stream.split_at(100);
         let (second, third) = rest.split_at(Message::BYTESIZE);
 
-        let mut reader = MessageReader::default();
+        let mut reader = MessageReader::new();
         assert_eq!(received(&mut reader, first), Ok(None));
         assert_eq!(received(&mut reader, second), Ok(Some("one".into())));
         assert_eq!(received(&mut reader, third), Ok(Some("twotwo".into())));
@@ -75,7 +73,7 @@ mod tests {
 
         let (head, tail) = stream.split_at(Message::BYTESIZE * 2 + 10);
 
-        let mut reader = MessageReader::default();
+        let mut reader = MessageReader::new();
         assert_eq!(received(&mut reader, head), Ok(Some("twotwo".into())));
         assert_eq!(received(&mut reader, tail), Ok(Some("three".into())));
     }
@@ -84,7 +82,7 @@ mod tests {
     fn test_receive_byte_by_byte() {
         let stream = [frame("one"), frame("two")].concat();
 
-        let mut reader = MessageReader::default();
+        let mut reader = MessageReader::new();
         let mut out = std::vec::Vec::new();
         for byte in &stream {
             if let Some(message) = received(&mut reader, &[*byte]).unwrap() {
@@ -99,14 +97,14 @@ mod tests {
         let stream = [[0; Message::BYTESIZE], frame("one")].concat();
         let (heartbeat, message) = stream.split_at(Message::BYTESIZE);
 
-        let mut reader = MessageReader::default();
+        let mut reader = MessageReader::new();
         assert_eq!(received(&mut reader, heartbeat), Ok(None));
         assert_eq!(received(&mut reader, message), Ok(Some("one".into())));
     }
 
     #[test]
     fn test_receive_invalid() {
-        let mut reader = MessageReader::default();
+        let mut reader = MessageReader::new();
         assert_eq!(
             received(&mut reader, &[b'\xC8'; Message::BYTESIZE]),
             Err(())

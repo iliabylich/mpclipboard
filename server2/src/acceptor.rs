@@ -1,6 +1,5 @@
 use crate::{
-    ServerContext, constants::REAP_STRANGER_AFTER, handshake::Token, pubsub::PubSub,
-    stranger::Stranger,
+    ServerContext, constants::HANDSHAKE_TIMEOUT, pubsub::PubSub, stranger::Stranger, token::Token,
 };
 use externally_driven_async_rt::net::TcpListener;
 
@@ -42,7 +41,7 @@ impl Acceptor {
             };
             task.spawn(move |ctx| async move {
                 let stranger = Stranger::new(stream, token, pubsub);
-                let Ok(client) = stranger.handshake(&ctx, REAP_STRANGER_AFTER).await else {
+                let Ok(client) = stranger.handshake(&ctx, HANDSHAKE_TIMEOUT).await else {
                     return;
                 };
                 client.read_write_messages(&ctx).await;

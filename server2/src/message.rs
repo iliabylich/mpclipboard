@@ -1,14 +1,14 @@
-use crate::{constants::MAX_TEXT_LEN, fixed_str::FixedStr};
+use crate::{constants::MAX_TEXT_LENGTH, fixed_str::FixedStr};
 use core::num::NonZeroUsize;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Message {
-    text: FixedStr<MAX_TEXT_LEN>,
+    text: FixedStr<MAX_TEXT_LENGTH>,
 }
 
 impl Message {
     pub(crate) const BYTESIZE: usize = {
-        let size = size_of::<u8>() + MAX_TEXT_LEN;
+        let size = size_of::<u8>() + MAX_TEXT_LENGTH;
         assert!(size == 256);
         size
     };
@@ -63,7 +63,7 @@ impl Frame {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::{Frame, Message};
-    use crate::constants::MAX_TEXT_LEN;
+    use crate::constants::MAX_TEXT_LENGTH;
     use std::string::String;
 
     pub(crate) fn frame(text: &str) -> [u8; Message::BYTESIZE] {
@@ -100,7 +100,7 @@ pub(crate) mod tests {
 
     #[test]
     fn test_encode_decode_max_len() {
-        let max = "a".repeat(MAX_TEXT_LEN);
+        let max = "a".repeat(MAX_TEXT_LENGTH);
         let buf = frame(&max);
         let decoded = Frame::decode(&buf).unwrap();
         assert_eq!(text(decoded), max);

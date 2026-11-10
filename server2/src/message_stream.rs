@@ -1,4 +1,4 @@
-use crate::{ServerContext, handshake::ID, message::Message, message_reader::MessageReader};
+use crate::{ServerContext, id::ID, message::Message, message_reader::MessageReader};
 use externally_driven_async_rt::net::BorrowedReadHalf;
 
 pub(crate) struct MessageStream<'s> {

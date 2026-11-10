@@ -1,6 +1,6 @@
 use crate::{
     ServerContext,
-    handshake::ID,
+    id::ID,
     message_reader::MessageReader,
     message_stream::MessageStream,
     pubsub::PubSubHandle,
