@@ -1,16 +1,17 @@
 use crate::{errors::ServerError, token::Token};
 use core::net::SocketAddr;
 
-pub(crate) fn from_env() -> Result<(SocketAddr, Token), ServerError> {
-    let bind_address = crate::env::var(c"MPCLIPBOARD_BIND_ADDRESS").and_then(parse_address)?;
+pub(crate) fn from_env() -> Result<(SocketAddr, &'static str, Token), ServerError> {
+    let (bind_address, raw_bind_address) =
+        crate::env::var(c"MPCLIPBOARD_BIND_ADDRESS").and_then(parse_address)?;
     let token = crate::env::var(c"MPCLIPBOARD_TOKEN").and_then(parse_token)?;
-    Ok((bind_address, token))
+    Ok((bind_address, raw_bind_address, token))
 }
 
-fn parse_address(s: Option<&str>) -> Result<SocketAddr, ServerError> {
+fn parse_address(s: Option<&str>) -> Result<(SocketAddr, &str), ServerError> {
     let s = s.ok_or(ServerError::MissingBindAddress)?;
     let address = s.parse::<SocketAddr>()?;
-    Ok(address)
+    Ok((address, s))
 }
 
 fn parse_token(s: Option<&str>) -> Result<Token, ServerError> {
@@ -55,21 +56,24 @@ mod tests {
     fn test_ipv4() {
         assert_eq!(
             parse_address(Some("127.0.0.1:3000")),
-            Ok(ipv4(127, 0, 0, 1, 3000))
+            Ok((ipv4(127, 0, 0, 1, 3000), "127.0.0.1:3000"))
         );
-        assert_eq!(parse_address(Some("0.0.0.0:80")), Ok(ipv4(0, 0, 0, 0, 80)));
+        assert_eq!(
+            parse_address(Some("0.0.0.0:80")),
+            Ok((ipv4(0, 0, 0, 0, 80), "0.0.0.0:80"))
+        );
     }
 
     #[test]
     fn test_ipv6() {
         assert_eq!(
             parse_address(Some("[::1]:3000")),
-            Ok(ipv6(0, 0, 0, 0, 0, 0, 0, 1, 3000, 0, 0))
+            Ok((ipv6(0, 0, 0, 0, 0, 0, 0, 1, 3000, 0, 0), "[::1]:3000"))
         );
 
         assert_eq!(
             parse_address(Some("[::]:3000")),
-            Ok(ipv6(0, 0, 0, 0, 0, 0, 0, 0, 3000, 0, 0))
+            Ok((ipv6(0, 0, 0, 0, 0, 0, 0, 0, 3000, 0, 0), "[::]:3000"))
         );
     }
 

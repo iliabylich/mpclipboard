@@ -46,11 +46,14 @@ type ServerStorage = LoopStorage<(), TASK_COUNT, TASK_SIZE, ROOT_TASK_SIZE, TIME
 pub fn run() -> Result<Infallible, ServerError> {
     Logger::init()?;
 
-    let (address, token) = config::from_env()?;
+    let (address, raw_address, token) = config::from_env()?;
 
-    info!("Trying to bind on {address}");
-    let listener = TcpListener::bind(address).map_err(|err| ServerError::Bind { address, err })?;
-    info!("listening on {}", address);
+    info!("Trying to bind on {raw_address}");
+    let listener = TcpListener::bind(address).map_err(|err| ServerError::Bind {
+        address: raw_address,
+        err,
+    })?;
+    info!("listening on {raw_address}");
 
     let mut acceptor = Acceptor::new(listener, token);
 

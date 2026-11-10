@@ -1,10 +1,5 @@
 use crate::{fixed_str::FixedStrError, handshake::ParseError, id::ID};
-use core::{
-    ffi::CStr,
-    net::{AddrParseError, SocketAddr},
-    str::Utf8Error,
-    time::Duration,
-};
+use core::{ffi::CStr, net::AddrParseError, str::Utf8Error, time::Duration};
 use rustix::io::Errno;
 
 #[derive(Debug, PartialEq, Eq)]
@@ -15,7 +10,7 @@ pub enum ServerError {
     InvalidBindAddress(AddrParseError),
     MissingToken,
     InvalidToken(FixedStrError),
-    Bind { address: SocketAddr, err: Errno },
+    Bind { address: &'static str, err: Errno },
     Selector(Errno),
     EventLoopStart(externally_driven_async_rt::Error),
     Poll(Errno),
