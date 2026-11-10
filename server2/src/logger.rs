@@ -15,13 +15,12 @@ impl Logger {
 
         let level = match crate::env::var(c"RUST_LOG")? {
             None => LevelFilter::Error,
-            Some(value) => match value.parse::<LevelFilter>() {
-                Ok(level) => level,
-                Err(err) => {
+            Some(value) => value
+                .parse::<LevelFilter>()
+                .inspect_err(|err| {
                     let _ = writeln!(Stderr, "invalid RUST_LOG=\"{value}\": {err}");
-                    return Err(());
-                }
-            },
+                })
+                .map_err(|_| ())?,
         };
         log::set_max_level(level);
 

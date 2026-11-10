@@ -18,27 +18,22 @@ impl Config {
             log::error!("MPCLIPBOARD_BIND_ADDRESS is missing");
             return Err(());
         };
-        let bind_address = match bind_address.parse::<SocketAddr>() {
-            Ok(bind_address) => bind_address,
-            Err(err) => {
+        let bind_address = bind_address
+            .parse::<SocketAddr>()
+            .inspect_err(|err| {
                 log::error!(
                     "MPCLIPBOARD_BIND_ADDRESS=\"{bind_address}\" must be an ip:port address: {err}"
                 );
-                return Err(());
-            }
-        };
+            })
+            .map_err(|_| ())?;
 
         let Some(token) = token else {
             log::error!("MPCLIPBOARD_TOKEN is missing");
             return Err(());
         };
-        let token = match Token::new(token) {
-            Ok(token) => token,
-            Err(err) => {
-                log::error!("MPCLIPBOARD_TOKEN is malformed: {err}");
-                return Err(());
-            }
-        };
+        let token = Token::new(token)
+            .inspect_err(|err| log::error!("MPCLIPBOARD_TOKEN is malformed: {err}"))
+            .map_err(|_| ())?;
 
         Ok(Self {
             bind_address,

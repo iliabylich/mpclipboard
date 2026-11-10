@@ -12,14 +12,14 @@ pub(crate) fn var(name: &CStr) -> Result<Option<&'static str>, ()> {
     }
 
     let value = unsafe { CStr::from_ptr(value) };
-    match value.to_str() {
-        Ok(value) => Ok(Some(value)),
-        Err(err) => {
+    let value = value
+        .to_str()
+        .inspect_err(|err| {
             log::error!(
                 "env var {} must be valid utf-8: {err}",
                 name.to_str().unwrap_or("<non-utf8 name>")
             );
-            Err(())
-        }
-    }
+        })
+        .map_err(|_| ())?;
+    Ok(Some(value))
 }

@@ -94,13 +94,9 @@ pub fn run() -> Result<Infallible, ()> {
     let config = Config::from_env()?;
     log::info!("{config:?}");
 
-    let listener = match TcpListener::bind(config.bind_address) {
-        Ok(listener) => listener,
-        Err(err) => {
-            log::error!("failed to bind {}: {err}", config.bind_address);
-            return Err(());
-        }
-    };
+    let listener = TcpListener::bind(config.bind_address)
+        .inspect_err(|err| log::error!("failed to bind {}: {err}", config.bind_address))
+        .map_err(|_| ())?;
     log::info!("listening on {}", config.bind_address);
 
     let mut acceptor = Acceptor::new(listener, config.token);
@@ -111,20 +107,12 @@ pub fn run() -> Result<Infallible, ()> {
     let storage =
         unsafe { core::mem::transmute::<&ServerStorage, &'static ServerStorage>(&storage) };
 
-    let mut selector = match Selector::new() {
-        Ok(selector) => selector,
-        Err(err) => {
-            log::error!("failed to create a selector: {err}");
-            return Err(());
-        }
-    };
-    let mut event_loop = match start(storage, &mut selector, &mut acceptor) {
-        Ok(event_loop) => event_loop,
-        Err(err) => {
-            log::error!("failed to start the event loop: {err}");
-            return Err(());
-        }
-    };
+    let mut selector = Selector::new()
+        .inspect_err(|err| log::error!("failed to create a selector: {err}"))
+        .map_err(|_| ())?;
+    let mut event_loop = start(storage, &mut selector, &mut acceptor)
+        .inspect_err(|err| log::error!("failed to start the event loop: {err}"))
+        .map_err(|_| ())?;
 
     loop {
         match poll(&mut [PollFd::new(&event_loop, PollFlags::IN)], None) {

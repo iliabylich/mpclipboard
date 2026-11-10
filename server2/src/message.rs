@@ -52,13 +52,9 @@ impl Frame {
         let Some(len) = NonZeroUsize::new(usize::from(*len)) else {
             return Ok(Self::Heartbeat);
         };
-        let text = match core::str::from_utf8(&text[..len.get()]) {
-            Ok(text) => text,
-            Err(err) => {
-                log::error!("non-utf8 message text: {err}");
-                return Err(());
-            }
-        };
+        let text = core::str::from_utf8(&text[..len.get()])
+            .inspect_err(|err| log::error!("non-utf8 message text: {err}"))
+            .map_err(|_| ())?;
         let text = FixedStr::new(text)
             .unwrap_or_else(|_| unreachable!("len is non-zero and fits into a u8"));
 
