@@ -15,6 +15,7 @@ mod message_reader;
 mod select;
 mod slot;
 mod stderr;
+mod write_all;
 pub use stderr::Stderr;
 
 use acceptor::Acceptor;
@@ -74,19 +75,6 @@ impl State for DummyState {
     }
 }
 
-fn start<'a>(
-    storage: &'static ServerStorage,
-    selector: &'a mut Selector,
-    acceptor: &'a mut Acceptor,
-) -> Result<ServerLoop<'a>, externally_driven_async_rt::Error> {
-    ServerLoop::new(
-        storage,
-        selector,
-        DummyState,
-        move |ctx: ServerContext<'a>| acceptor.run(ctx),
-    )
-}
-
 #[expect(clippy::result_unit_err)]
 pub fn run() -> Result<Infallible, ()> {
     Logger::init()?;
@@ -110,9 +98,10 @@ pub fn run() -> Result<Infallible, ()> {
     let mut selector = Selector::new()
         .inspect_err(|err| log::error!("failed to create a selector: {err}"))
         .map_err(|_| ())?;
-    let mut event_loop = start(storage, &mut selector, &mut acceptor)
-        .inspect_err(|err| log::error!("failed to start the event loop: {err}"))
-        .map_err(|_| ())?;
+    let mut event_loop =
+        ServerLoop::new(storage, &mut selector, DummyState, |ctx| acceptor.run(ctx))
+            .inspect_err(|err| log::error!("failed to start the event loop: {err}"))
+            .map_err(|_| ())?;
 
     loop {
         match poll(&mut [PollFd::new(&event_loop, PollFlags::IN)], None) {

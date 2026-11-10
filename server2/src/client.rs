@@ -5,6 +5,7 @@ use crate::{
     message_reader::MessageReader,
     select::{Either, select},
     slot::{Slot, SlotGuard},
+    write_all::write_all,
 };
 use core::{
     cell::{Cell, RefCell},
@@ -15,10 +16,6 @@ use core::{
 use externally_driven_async_rt::net::{BorrowedReadHalf, BorrowedWriteHalf, TcpStream};
 
 const REAP_STRANGER_AFTER: Duration = Duration::from_secs(3);
-
-const SWITCHING_PROTOCOLS: &[u8] =
-    b"HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: mpclipboard-raw\r\n\r\n";
-const UNAUTHORIZED: &[u8] = b"HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\n\r\n";
 
 pub(crate) async fn client(
     ctx: ServerContext<'_>,
@@ -32,7 +29,7 @@ pub(crate) async fn client(
     let mut reader = MessageReader::default();
 
     let (id, guard) = {
-        let handshake = handshake(&ctx, &mut stream, peer, token, &mut reader);
+        let handshake = Handshake::read_write(&ctx, &mut stream, peer, token, &mut reader);
         let Some(handshake) = ctx.timeout(REAP_STRANGER_AFTER, handshake).await else {
             log::info!(
                 "[{peer}] no handshake within {}s",
@@ -59,36 +56,6 @@ pub(crate) async fn client(
     serve(&ctx, &mut rx, &mut tx, &mut buf, &mut reader, id, &guard).await;
 }
 
-async fn handshake(
-    ctx: &ServerContext<'_>,
-    stream: &mut TcpStream,
-    peer: SocketAddr,
-    token: &Token,
-    reader: &mut MessageReader,
-) -> Result<(ID, Option<Message>), ()> {
-    let mut handshake = Handshake::default();
-    let (received_token, id, leftover) = handshake.read(ctx, stream, peer).await?;
-
-    let (_, mut tx) = stream.split();
-
-    if received_token != *token {
-        log::info!("[{id}] invalid token=\"{received_token}\"");
-        let _ = write_all(ctx, &mut tx, UNAUTHORIZED).await;
-        return Err(());
-    }
-
-    if write_all(ctx, &mut tx, SWITCHING_PROTOCOLS).await.is_err() {
-        log::error!("[{id}] failed to send 101 Switching Protocols");
-        return Err(());
-    }
-
-    let Ok(leftover_message) = reader.received(leftover) else {
-        log::error!("[{id}] sent a malformed frame right after the request");
-        return Err(());
-    };
-    Ok((id, leftover_message))
-}
-
 async fn serve(
     ctx: &ServerContext<'_>,
     rx: &mut BorrowedReadHalf<'_>,
@@ -102,7 +69,7 @@ async fn serve(
         let read = {
             let mut read = pin!(rx.read(ctx, buf));
             loop {
-                let out = match select(read.as_mut(), pin!(guard.notified())).await {
+                let out = match select(read.as_mut(), guard.notified()).await {
                     Either::Left(read) => break read,
                     Either::Right(message) => message.encode(),
                 };
@@ -132,25 +99,4 @@ async fn serve(
             }
         }
     }
-}
-
-async fn write_all(
-    ctx: &ServerContext<'_>,
-    tx: &mut BorrowedWriteHalf<'_>,
-    mut buf: &[u8],
-) -> Result<(), ()> {
-    while !buf.is_empty() {
-        match tx.write(ctx, buf).await {
-            Ok(0) => {
-                log::error!("write() wrote 0 bytes");
-                return Err(());
-            }
-            Ok(len) => buf = &buf[len..],
-            Err(err) => {
-                log::error!("write() failed: {err}");
-                return Err(());
-            }
-        }
-    }
-    Ok(())
 }
