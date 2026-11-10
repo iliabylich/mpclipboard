@@ -34,8 +34,8 @@ use slot::Slot;
 const MAX_CLIENTS: usize = 10;
 
 const MAX_TASKS_COUNT: usize = MAX_CLIENTS;
-const MAX_TASK_SIZE: usize = 632;
-const MAX_ROOT_TASK_SIZE: usize = 288;
+const MAX_TASK_SIZE: usize = 704;
+const MAX_ROOT_TASK_SIZE: usize = 328;
 const MAX_TIMERS_COUNT: usize = MAX_CLIENTS;
 const MAX_IO_COUNT: usize = MAX_CLIENTS + 1;
 

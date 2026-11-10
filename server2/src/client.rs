@@ -12,7 +12,7 @@ use core::{
     pin::pin,
     time::Duration,
 };
-use externally_driven_async_rt::net::TcpStream;
+use externally_driven_async_rt::net::{BorrowedReadHalf, BorrowedWriteHalf, TcpStream};
 
 const REAP_STRANGER_AFTER: Duration = Duration::from_secs(3);
 
@@ -22,6 +22,7 @@ const UNAUTHORIZED: &[u8] = b"HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\n
 
 pub(crate) struct ClientState {
     buf: [u8; Message::BYTESIZE],
+    out: [u8; Message::BYTESIZE],
     request_reader: RequestReader,
     reader: MessageReader,
 }
@@ -30,6 +31,7 @@ impl Default for ClientState {
     fn default() -> Self {
         Self {
             buf: [0; Message::BYTESIZE],
+            out: [0; Message::BYTESIZE],
             request_reader: RequestReader::default(),
             reader: MessageReader::default(),
         }
@@ -49,8 +51,10 @@ pub(crate) async fn client(
     *state = ClientState::default();
     let state = &mut *state;
 
+    let (mut rx, mut tx) = stream.split();
+
     let guard = {
-        let handshake = handshake(&ctx, &mut stream, peer, token, state);
+        let handshake = handshake(&ctx, &mut rx, &mut tx, peer, token, state);
         let Some(handshake) = ctx.timeout(REAP_STRANGER_AFTER, handshake).await else {
             log::info!(
                 "[{peer}] no handshake within {}s",
@@ -73,12 +77,13 @@ pub(crate) async fn client(
         guard
     };
 
-    serve(&ctx, stream, state, &guard).await;
+    serve(&ctx, &mut rx, &mut tx, state, &guard).await;
 }
 
 async fn handshake(
     ctx: &ServerContext<'_>,
-    stream: &mut TcpStream,
+    rx: &mut BorrowedReadHalf<'_>,
+    tx: &mut BorrowedWriteHalf<'_>,
     peer: SocketAddr,
     token: &Token,
     state: &mut ClientState,
@@ -87,11 +92,12 @@ async fn handshake(
         buf,
         request_reader,
         reader,
+        ..
     } = state;
 
     let (request, leftover) = {
         loop {
-            let len = match stream.read(ctx, buf).await {
+            let len = match rx.read(ctx, buf).await {
                 Ok(0) => {
                     log::info!("[{peer}] disconnected during handshake");
                     return Err(());
@@ -121,7 +127,7 @@ async fn handshake(
         log::info!("[{}] invalid token=\"{}\"", request.id, request.token);
         UNAUTHORIZED
     };
-    let written = write_all(ctx, stream, response).await;
+    let written = write_all(ctx, tx, response).await;
 
     if !authorized {
         return Err(());
@@ -143,51 +149,58 @@ async fn handshake(
 
 async fn serve(
     ctx: &ServerContext<'_>,
-    mut stream: TcpStream,
+    rx: &mut BorrowedReadHalf<'_>,
+    tx: &mut BorrowedWriteHalf<'_>,
     state: &mut ClientState,
     guard: &SlotGuard<'_>,
 ) {
-    let ClientState { buf, reader, .. } = state;
+    let ClientState {
+        buf, out, reader, ..
+    } = state;
 
     loop {
-        let event = select(pin!(stream.read(ctx, buf)), pin!(guard.notified())).await;
-        match event {
-            Either::Left(Ok(0)) => {
+        let read = {
+            let mut read = pin!(rx.read(ctx, buf));
+            loop {
+                match select(read.as_mut(), pin!(guard.notified())).await {
+                    Either::Left(read) => break read,
+                    Either::Right(message) => *out = message.encode(),
+                }
+                if write_all(ctx, tx, out).await.is_err() {
+                    log::error!("[{}] failed to send a message", guard.id());
+                    return;
+                }
+            }
+        };
+
+        match read {
+            Ok(0) => {
                 log::info!("[{}] disconnected", guard.id());
                 return;
             }
-            Either::Left(Ok(len)) => {
-                match reader.received(&buf[..len]) {
-                    Ok(Some(message)) => guard.publish(message),
-                    Ok(None) => {}
-                    Err(()) => {
-                        log::error!("[{}] received a malformed frame", guard.id());
-                        return;
-                    }
+            Ok(len) => match reader.received(&buf[..len]) {
+                Ok(Some(message)) => guard.publish(message),
+                Ok(None) => {}
+                Err(()) => {
+                    log::error!("[{}] received a malformed frame", guard.id());
+                    return;
                 }
-                continue;
-            }
-            Either::Left(Err(err)) => {
+            },
+            Err(err) => {
                 log::error!("[{}] read() failed: {err}", guard.id());
                 return;
             }
-            Either::Right(message) => *buf = message.encode(),
-        }
-
-        if write_all(ctx, &mut stream, buf).await.is_err() {
-            log::error!("[{}] failed to send a message", guard.id());
-            return;
         }
     }
 }
 
 async fn write_all(
     ctx: &ServerContext<'_>,
-    stream: &mut TcpStream,
+    tx: &mut BorrowedWriteHalf<'_>,
     mut buf: &[u8],
 ) -> Result<(), ()> {
     while !buf.is_empty() {
-        match stream.write(ctx, buf).await {
+        match tx.write(ctx, buf).await {
             Ok(0) => {
                 log::error!("write() wrote 0 bytes");
                 return Err(());

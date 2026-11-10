@@ -11,8 +11,14 @@ bench = false
 
 [dependencies]
 externally-driven-async-rt = { path = "../../externally-driven-async-rt" }
-rustix = { version = "1", default-features = false, features = ["event", "stdio"] }
+rustix = { version = "1", default-features = false, features = [
+    "event",
+    "stdio",
+] }
 log = { version = "0.4", default-features = false }
+
+[features]
+strace-like = ["externally-driven-async-rt/strace-like"]
 
 [profile.dev]
 panic = "abort"
