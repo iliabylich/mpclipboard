@@ -1,5 +1,8 @@
-use crate::{ServerContext, client, handshake::Token, pubsub::PubSub};
+use crate::{ServerContext, handshake::Token, pubsub::PubSub, stranger::Stranger};
+use core::time::Duration;
 use externally_driven_async_rt::net::TcpListener;
+
+const REAP_STRANGER_AFTER: Duration = Duration::from_secs(3);
 
 pub(crate) struct Acceptor {
     listener: TcpListener,
@@ -37,7 +40,13 @@ impl Acceptor {
             let Ok(pubsub) = pubsub.subscribe() else {
                 continue;
             };
-            task.spawn(move |ctx| client::client(ctx, stream, token, pubsub));
+            task.spawn(move |ctx| async move {
+                let stranger = Stranger::new(stream, token, pubsub);
+                let Ok(client) = stranger.handshake(&ctx, REAP_STRANGER_AFTER).await else {
+                    return;
+                };
+                client.read_write_messages(&ctx).await;
+            });
         }
     }
 }

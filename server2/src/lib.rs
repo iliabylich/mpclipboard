@@ -16,6 +16,7 @@ mod message_stream;
 mod pubsub;
 mod select;
 mod stderr;
+mod stranger;
 mod write_all;
 pub use stderr::Stderr;
 
@@ -34,7 +35,7 @@ use rustix::{
 const MAX_CLIENTS: usize = 10;
 
 const MAX_TASKS_COUNT: usize = MAX_CLIENTS;
-const MAX_TASK_SIZE: usize = 3464;
+const MAX_TASK_SIZE: usize = 4896;
 const MAX_ROOT_TASK_SIZE: usize = 232;
 const MAX_TIMERS_COUNT: usize = MAX_CLIENTS;
 const MAX_IO_COUNT: usize = MAX_CLIENTS + 1;
