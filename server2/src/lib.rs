@@ -3,6 +3,7 @@
 #[cfg(test)]
 extern crate std;
 
+mod acceptor;
 mod client;
 mod config;
 mod env;
@@ -16,25 +17,23 @@ mod slot;
 mod stderr;
 pub use stderr::Stderr;
 
+use acceptor::Acceptor;
 use config::Config;
-use core::cell::{Cell, RefCell};
+use core::convert::Infallible;
 use externally_driven_async_rt::{
     Context, EventLoop, LoopStorage, Selector, State, net::TcpListener,
 };
-use handshake::Token;
 use logger::Logger;
-use message::Message;
 use rustix::{
     event::{PollFd, PollFlags, poll},
     io::Errno,
 };
-use slot::Slot;
 
 const MAX_CLIENTS: usize = 10;
 
 const MAX_TASKS_COUNT: usize = MAX_CLIENTS;
 const MAX_TASK_SIZE: usize = 3208;
-const MAX_ROOT_TASK_SIZE: usize = 296;
+const MAX_ROOT_TASK_SIZE: usize = 248;
 const MAX_TIMERS_COUNT: usize = MAX_CLIENTS;
 const MAX_IO_COUNT: usize = MAX_CLIENTS + 1;
 
@@ -68,7 +67,7 @@ type ServerStorage = LoopStorage<
 struct DummyState;
 
 impl State for DummyState {
-    type Event = core::convert::Infallible;
+    type Event = Infallible;
 
     fn apply(&mut self, event: Self::Event) {
         match event {}
@@ -78,61 +77,33 @@ impl State for DummyState {
 fn start<'a>(
     storage: &'static ServerStorage,
     selector: &'a mut Selector,
-    listener: TcpListener,
-    token: &'a Token,
-    slots: &'a [RefCell<Slot>],
-    current: &'a Cell<Option<Message>>,
+    acceptor: &'a mut Acceptor,
 ) -> Result<ServerLoop<'a>, externally_driven_async_rt::Error> {
     ServerLoop::new(
         storage,
         selector,
         DummyState,
-        move |ctx: ServerContext<'a>| accept_loop(ctx, listener, token, slots, current),
+        move |ctx: ServerContext<'a>| acceptor.run(ctx),
     )
 }
 
-async fn accept_loop<'a>(
-    ctx: ServerContext<'a>,
-    mut listener: TcpListener,
-    token: &'a Token,
-    slots: &'a [RefCell<Slot>],
-    current: &'a Cell<Option<Message>>,
-) {
-    loop {
-        let task = ctx.reserve_task().await;
-        let (stream, peer) = loop {
-            match listener.accept(&ctx).await {
-                Ok(accepted) => break accepted,
-                Err(err) => log::error!("accept() failed: {err}"),
-            }
-        };
-        log::trace!("[{peer}] accepted");
-        task.spawn(move |ctx| client::client(ctx, stream, peer, token, slots, current));
-    }
-}
+#[expect(clippy::result_unit_err)]
+pub fn run() -> Result<Infallible, ()> {
+    Logger::init()?;
 
-pub fn run() -> i32 {
-    if Logger::init().is_err() {
-        return 1;
-    }
-
-    let Ok(config) = Config::from_env() else {
-        return 1;
-    };
+    let config = Config::from_env()?;
     log::info!("{config:?}");
 
     let listener = match TcpListener::bind(config.bind_address) {
         Ok(listener) => listener,
         Err(err) => {
             log::error!("failed to bind {}: {err}", config.bind_address);
-            return 1;
+            return Err(());
         }
     };
     log::info!("listening on {}", config.bind_address);
 
-    let token = config.token;
-    let current = Cell::new(None);
-    let slots = [const { RefCell::new(Slot::Free) }; MAX_CLIENTS];
+    let mut acceptor = Acceptor::new(listener, config.token);
 
     let storage = ServerStorage::new();
     // SAFETY: `storage` outlives `event_loop`, which is dropped explicitly below, and only the
@@ -144,30 +115,30 @@ pub fn run() -> i32 {
         Ok(selector) => selector,
         Err(err) => {
             log::error!("failed to create a selector: {err}");
-            return 1;
+            return Err(());
         }
     };
-    let mut event_loop = match start(storage, &mut selector, listener, &token, &slots, &current) {
+    let mut event_loop = match start(storage, &mut selector, &mut acceptor) {
         Ok(event_loop) => event_loop,
         Err(err) => {
             log::error!("failed to start the event loop: {err}");
-            return 1;
+            return Err(());
         }
     };
 
-    let code = loop {
+    loop {
         match poll(&mut [PollFd::new(&event_loop, PollFlags::IN)], None) {
             Ok(_) | Err(Errno::INTR) => {}
             Err(err) => {
                 log::error!("poll() failed: {err}");
-                break 1;
+                break;
             }
         }
         if let Err(err) = event_loop.drain_events_without_blocking() {
             log::error!("{err}");
-            break 1;
+            break;
         }
-    };
+    }
     drop(event_loop);
-    code
+    Err(())
 }

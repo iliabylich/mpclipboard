@@ -9,7 +9,8 @@ unsafe extern "C" {
 
 #[unsafe(no_mangle)]
 extern "C" fn main(_argc: i32, _argv: *const *const u8) -> i32 {
-    server2::run()
+    let Err(()) = server2::run();
+    1
 }
 
 #[unsafe(no_mangle)]
