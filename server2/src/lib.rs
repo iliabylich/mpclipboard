@@ -12,6 +12,7 @@ mod handshake;
 mod logger;
 mod message;
 mod message_reader;
+mod message_stream;
 mod select;
 mod slot;
 mod stderr;
@@ -33,7 +34,7 @@ use rustix::{
 const MAX_CLIENTS: usize = 10;
 
 const MAX_TASKS_COUNT: usize = MAX_CLIENTS;
-const MAX_TASK_SIZE: usize = 3208;
+const MAX_TASK_SIZE: usize = 2952;
 const MAX_ROOT_TASK_SIZE: usize = 248;
 const MAX_TIMERS_COUNT: usize = MAX_CLIENTS;
 const MAX_IO_COUNT: usize = MAX_CLIENTS + 1;

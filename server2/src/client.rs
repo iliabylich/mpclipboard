@@ -3,6 +3,7 @@ use crate::{
     handshake::{Handshake, ID, Token},
     message::Message,
     message_reader::MessageReader,
+    message_stream::MessageStream,
     select::{Either, select},
     slot::{Slot, SlotGuard},
     write_all::write_all,
@@ -13,7 +14,7 @@ use core::{
     pin::pin,
     time::Duration,
 };
-use externally_driven_async_rt::net::{BorrowedReadHalf, BorrowedWriteHalf, TcpStream};
+use externally_driven_async_rt::net::{BorrowedWriteHalf, TcpStream};
 
 const REAP_STRANGER_AFTER: Duration = Duration::from_secs(3);
 
@@ -25,7 +26,6 @@ pub(crate) async fn client(
     slots: &[RefCell<Slot>],
     current: &Cell<Option<Message>>,
 ) {
-    let mut buf = [0; Message::BYTESIZE];
     let mut reader = MessageReader::default();
 
     let (id, guard) = {
@@ -52,51 +52,37 @@ pub(crate) async fn client(
         (id, guard)
     };
 
-    let (mut rx, mut tx) = stream.split();
-    serve(&ctx, &mut rx, &mut tx, &mut buf, &mut reader, id, &guard).await;
+    let (rx, mut tx) = stream.split();
+    let mut messages = MessageStream::new(rx, reader, id);
+    serve(&ctx, &mut messages, &mut tx, id, &guard).await;
 }
 
 async fn serve(
     ctx: &ServerContext<'_>,
-    rx: &mut BorrowedReadHalf<'_>,
+    messages: &mut MessageStream<'_>,
     tx: &mut BorrowedWriteHalf<'_>,
-    buf: &mut [u8; Message::BYTESIZE],
-    reader: &mut MessageReader,
     id: ID,
     guard: &SlotGuard<'_>,
 ) {
     loop {
-        let read = {
-            let mut read = pin!(rx.read(ctx, buf));
+        let next = {
+            let mut next = pin!(messages.next(ctx));
             loop {
-                let out = match select(read.as_mut(), guard.notified()).await {
-                    Either::Left(read) => break read,
-                    Either::Right(message) => message.encode(),
-                };
-                if write_all(ctx, tx, &out).await.is_err() {
-                    log::error!("[{id}] failed to send a message");
-                    return;
+                match select(next.as_mut(), guard.notified()).await {
+                    Either::Left(next) => break next,
+                    Either::Right(message) => {
+                        if write_all(ctx, tx, &message.encode()).await.is_err() {
+                            log::error!("[{id}] failed to send a message");
+                            return;
+                        }
+                    }
                 }
             }
         };
 
-        match read {
-            Ok(0) => {
-                log::info!("[{id}] disconnected");
-                return;
-            }
-            Ok(len) => match reader.received(&buf[..len]) {
-                Ok(Some(message)) => guard.publish(id, message),
-                Ok(None) => {}
-                Err(()) => {
-                    log::error!("[{id}] received a malformed frame");
-                    return;
-                }
-            },
-            Err(err) => {
-                log::error!("[{id}] read() failed: {err}");
-                return;
-            }
-        }
+        let Ok(Some(message)) = next else {
+            return;
+        };
+        guard.publish(id, message);
     }
 }
