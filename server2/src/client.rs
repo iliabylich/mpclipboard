@@ -7,7 +7,7 @@ use crate::{
     slot::{Slot, SlotGuard},
 };
 use core::{
-    cell::{Cell, RefCell, RefMut},
+    cell::{Cell, RefCell},
     net::SocketAddr,
     pin::pin,
     time::Duration,
@@ -20,43 +20,22 @@ const SWITCHING_PROTOCOLS: &[u8] =
     b"HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: mpclipboard-raw\r\n\r\n";
 const UNAUTHORIZED: &[u8] = b"HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\n\r\n";
 
-pub(crate) struct ClientState {
-    peer: SocketAddr,
-    buf: [u8; Message::BYTESIZE],
-    out: [u8; Message::BYTESIZE],
-    request_reader: RequestReader,
-    reader: MessageReader,
-}
-
-impl ClientState {
-    pub(crate) fn new(peer: SocketAddr) -> Self {
-        Self {
-            peer,
-            buf: [0; Message::BYTESIZE],
-            out: [0; Message::BYTESIZE],
-            request_reader: RequestReader::default(),
-            reader: MessageReader::default(),
-        }
-    }
-}
-
-#[expect(clippy::await_holding_refcell_ref)]
 pub(crate) async fn client(
     ctx: ServerContext<'_>,
     mut stream: TcpStream,
+    peer: SocketAddr,
     token: &Token,
     slots: &[RefCell<Slot>],
     current: &Cell<Option<Message>>,
-    mut state: RefMut<'_, ClientState>,
 ) {
-    let state = &mut *state;
+    let mut buf = [0; Message::BYTESIZE];
+    let mut reader = MessageReader::default();
 
     let guard = {
-        let handshake = handshake(&ctx, &mut stream, token, state);
+        let handshake = handshake(&ctx, &mut stream, peer, token, &mut buf, &mut reader);
         let Some(handshake) = ctx.timeout(REAP_STRANGER_AFTER, handshake).await else {
             log::info!(
-                "[{}] no handshake within {}s",
-                state.peer,
+                "[{peer}] no handshake within {}s",
                 REAP_STRANGER_AFTER.as_secs()
             );
             return;
@@ -68,7 +47,7 @@ pub(crate) async fn client(
         let Ok(guard) = SlotGuard::take(slots, current, id) else {
             return;
         };
-        log::info!("[{id}] connected from {}", state.peer);
+        log::info!("[{id}] connected from {peer}");
 
         if let Some(message) = leftover_message {
             guard.publish(message);
@@ -77,24 +56,19 @@ pub(crate) async fn client(
     };
 
     let (mut rx, mut tx) = stream.split();
-    serve(&ctx, &mut rx, &mut tx, state, &guard).await;
+    serve(&ctx, &mut rx, &mut tx, &mut buf, &mut reader, &guard).await;
 }
 
 async fn handshake(
     ctx: &ServerContext<'_>,
     stream: &mut TcpStream,
+    peer: SocketAddr,
     token: &Token,
-    state: &mut ClientState,
+    buf: &mut [u8; Message::BYTESIZE],
+    reader: &mut MessageReader,
 ) -> Result<(ID, Option<Message>), ()> {
-    let ClientState {
-        peer,
-        buf,
-        request_reader,
-        reader,
-        ..
-    } = state;
-
     let (id, authorized, leftover) = {
+        let mut request_reader = RequestReader::default();
         let (request, leftover) = loop {
             let len = match stream.read(ctx, buf).await {
                 Ok(0) => {
@@ -152,22 +126,19 @@ async fn serve(
     ctx: &ServerContext<'_>,
     rx: &mut BorrowedReadHalf<'_>,
     tx: &mut BorrowedWriteHalf<'_>,
-    state: &mut ClientState,
+    buf: &mut [u8; Message::BYTESIZE],
+    reader: &mut MessageReader,
     guard: &SlotGuard<'_>,
 ) {
-    let ClientState {
-        buf, out, reader, ..
-    } = state;
-
     loop {
         let read = {
             let mut read = pin!(rx.read(ctx, buf));
             loop {
-                match select(read.as_mut(), pin!(guard.notified())).await {
+                let out = match select(read.as_mut(), pin!(guard.notified())).await {
                     Either::Left(read) => break read,
-                    Either::Right(message) => *out = message.encode(),
-                }
-                if write_all(ctx, tx, out).await.is_err() {
+                    Either::Right(message) => message.encode(),
+                };
+                if write_all(ctx, tx, &out).await.is_err() {
                     log::error!("[{}] failed to send a message", guard.id());
                     return;
                 }
