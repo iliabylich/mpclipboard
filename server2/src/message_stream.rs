@@ -18,13 +18,13 @@ impl<'s> MessageStream<'s> {
         }
     }
 
-    pub(crate) async fn next(&mut self, ctx: &ServerContext<'_>) -> Result<Option<Message>, ()> {
+    pub(crate) async fn next(&mut self, ctx: &ServerContext<'_>) -> Result<Message, ()> {
         let id = self.id;
         loop {
             let len = match self.rx.read(ctx, &mut self.buf).await {
                 Ok(0) => {
                     log::info!("[{id}] disconnected");
-                    return Ok(None);
+                    return Err(());
                 }
                 Ok(len) => len,
                 Err(err) => {
@@ -34,7 +34,7 @@ impl<'s> MessageStream<'s> {
             };
 
             match self.reader.received(&self.buf[..len]) {
-                Ok(Some(message)) => return Ok(Some(message)),
+                Ok(Some(message)) => return Ok(message),
                 Ok(None) => {}
                 Err(()) => {
                     log::error!("[{id}] received a malformed frame");

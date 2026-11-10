@@ -2,7 +2,6 @@ use crate::{
     ServerContext, fixed_str::FixedStr, message::Message, message_reader::MessageReader,
     write_all::write_all,
 };
-use core::net::SocketAddr;
 use externally_driven_async_rt::net::TcpStream;
 
 mod parse;
@@ -29,7 +28,6 @@ impl Handshake {
     pub(crate) async fn read_write(
         ctx: &ServerContext<'_>,
         stream: &mut TcpStream,
-        peer: SocketAddr,
         token: &Token,
         reader: &mut MessageReader,
     ) -> Result<(ID, Option<Message>), ()> {
@@ -37,7 +35,7 @@ impl Handshake {
             buf: [0; MAX_REQUEST_SIZE],
             len: 0,
         };
-        let (received_token, id, leftover) = handshake.read(ctx, stream, peer).await?;
+        let (received_token, id, leftover) = handshake.read(ctx, stream).await?;
 
         let (_, mut tx) = stream.split();
 
@@ -63,17 +61,16 @@ impl Handshake {
         &mut self,
         ctx: &ServerContext<'_>,
         stream: &mut TcpStream,
-        peer: SocketAddr,
     ) -> Result<(Token, ID, &[u8]), ()> {
         loop {
             self.len += match stream.read(ctx, &mut self.buf[self.len..]).await {
                 Ok(0) => {
-                    log::info!("[{peer}] disconnected during handshake");
+                    log::info!("disconnected during handshake");
                     return Err(());
                 }
                 Ok(read) => read,
                 Err(err) => {
-                    log::error!("[{peer}] read() failed during handshake: {err}");
+                    log::error!("read() failed during handshake: {err}");
                     return Err(());
                 }
             };
@@ -84,7 +81,7 @@ impl Handshake {
                     return Ok((token, id, &self.buf[consumed..self.len]));
                 }
                 Err(err) => {
-                    log::error!("[{peer}] {err}");
+                    log::error!("{err}");
                     return Err(());
                 }
             }

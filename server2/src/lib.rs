@@ -34,7 +34,7 @@ use rustix::{
 const MAX_CLIENTS: usize = 10;
 
 const MAX_TASKS_COUNT: usize = MAX_CLIENTS;
-const MAX_TASK_SIZE: usize = 2936;
+const MAX_TASK_SIZE: usize = 3392;
 const MAX_ROOT_TASK_SIZE: usize = 232;
 const MAX_TIMERS_COUNT: usize = MAX_CLIENTS;
 const MAX_IO_COUNT: usize = MAX_CLIENTS + 1;

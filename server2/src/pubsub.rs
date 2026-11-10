@@ -2,7 +2,6 @@ use crate::{MAX_CLIENTS, handshake::ID, message::Message};
 use core::{
     cell::{Cell, RefCell},
     future::poll_fn,
-    net::SocketAddr,
     task::{Poll, Waker},
 };
 
@@ -28,13 +27,13 @@ impl PubSub {
         }
     }
 
-    pub(crate) fn subscribe(&self, peer: SocketAddr) -> Result<PubSubHandle<'_>, ()> {
+    pub(crate) fn subscribe(&self) -> Result<PubSubHandle<'_>, ()> {
         let Some(slot) = self
             .slots
             .iter()
             .find(|slot| matches!(*slot.borrow(), Slot::Free))
         else {
-            log::error!("[{peer}] no free slot");
+            log::error!("no free slot");
             return Err(());
         };
 
@@ -107,7 +106,6 @@ mod tests {
     use crate::{MAX_CLIENTS, handshake::ID, message::tests::message};
     use core::{
         future::Future,
-        net::SocketAddr,
         pin::pin,
         task::{Context, Poll},
     };
@@ -133,10 +131,6 @@ mod tests {
         ID::new(id).unwrap()
     }
 
-    fn peer() -> SocketAddr {
-        "127.0.0.1:1".parse().unwrap()
-    }
-
     fn poll_receive(pubsub: &PubSubHandle<'_>, waker: &Arc<CountingWaker>) -> Option<String> {
         let waker = waker.clone().into();
         let mut cx = Context::from_waker(&waker);
@@ -152,7 +146,7 @@ mod tests {
         pubsub.current.set(Some(message("hello")));
         let waker = Arc::new(CountingWaker(AtomicUsize::new(0)));
 
-        let handle = pubsub.subscribe(peer()).unwrap();
+        let handle = pubsub.subscribe().unwrap();
         assert_eq!(poll_receive(&handle, &waker), Some("hello".into()));
         assert_eq!(poll_receive(&handle, &waker), None);
     }
@@ -162,7 +156,7 @@ mod tests {
         let pubsub = PubSub::new();
         let waker = Arc::new(CountingWaker(AtomicUsize::new(0)));
 
-        let handle = pubsub.subscribe(peer()).unwrap();
+        let handle = pubsub.subscribe().unwrap();
         assert_eq!(poll_receive(&handle, &waker), None);
     }
 
@@ -172,8 +166,8 @@ mod tests {
         let a_waker = Arc::new(CountingWaker(AtomicUsize::new(0)));
         let b_waker = Arc::new(CountingWaker(AtomicUsize::new(0)));
 
-        let a = pubsub.subscribe(peer()).unwrap();
-        let b = pubsub.subscribe(peer()).unwrap();
+        let a = pubsub.subscribe().unwrap();
+        let b = pubsub.subscribe().unwrap();
         assert_eq!(poll_receive(&a, &a_waker), None);
         assert_eq!(poll_receive(&b, &b_waker), None);
 
@@ -191,8 +185,8 @@ mod tests {
         let pubsub = PubSub::new();
         let waker = Arc::new(CountingWaker(AtomicUsize::new(0)));
 
-        let old = pubsub.subscribe(peer()).unwrap();
-        let new = pubsub.subscribe(peer()).unwrap();
+        let old = pubsub.subscribe().unwrap();
+        let new = pubsub.subscribe().unwrap();
         assert_eq!(poll_receive(&old, &waker), None);
 
         new.publish(id("a"), message("from new"));
@@ -205,8 +199,8 @@ mod tests {
         pubsub.current.set(Some(message("same")));
         let waker = Arc::new(CountingWaker(AtomicUsize::new(0)));
 
-        let a = pubsub.subscribe(peer()).unwrap();
-        let b = pubsub.subscribe(peer()).unwrap();
+        let a = pubsub.subscribe().unwrap();
+        let b = pubsub.subscribe().unwrap();
         assert_eq!(poll_receive(&b, &waker), Some("same".into()));
 
         a.publish(id("a"), message("same"));
@@ -219,8 +213,8 @@ mod tests {
         let pubsub = PubSub::new();
         let waker = Arc::new(CountingWaker(AtomicUsize::new(0)));
 
-        let a = pubsub.subscribe(peer()).unwrap();
-        let b = pubsub.subscribe(peer()).unwrap();
+        let a = pubsub.subscribe().unwrap();
+        let b = pubsub.subscribe().unwrap();
 
         a.publish(id("a"), message("one"));
         a.publish(id("a"), message("two"));
@@ -233,10 +227,10 @@ mod tests {
         let pubsub = PubSub::new();
 
         let mut handles: Vec<_> = (0..MAX_CLIENTS)
-            .map(|_| pubsub.subscribe(peer()).unwrap())
+            .map(|_| pubsub.subscribe().unwrap())
             .collect();
-        assert!(pubsub.subscribe(peer()).is_err());
+        assert!(pubsub.subscribe().is_err());
         handles.pop();
-        assert!(pubsub.subscribe(peer()).is_ok());
+        assert!(pubsub.subscribe().is_ok());
     }
 }

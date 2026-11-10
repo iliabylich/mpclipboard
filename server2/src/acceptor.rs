@@ -27,17 +27,17 @@ impl Acceptor {
 
         loop {
             let task = ctx.reserve_task().await;
-            let (stream, peer) = loop {
+            let stream = loop {
                 match listener.accept(&ctx).await {
-                    Ok(accepted) => break accepted,
+                    Ok((stream, _)) => break stream,
                     Err(err) => log::error!("accept() failed: {err}"),
                 }
             };
-            log::trace!("[{peer}] accepted");
-            let Ok(pubsub) = pubsub.subscribe(peer) else {
+            log::trace!("accepted");
+            let Ok(pubsub) = pubsub.subscribe() else {
                 continue;
             };
-            task.spawn(move |ctx| client::client(ctx, stream, peer, token, pubsub));
+            task.spawn(move |ctx| client::client(ctx, stream, token, pubsub));
         }
     }
 }
