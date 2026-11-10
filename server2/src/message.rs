@@ -1,7 +1,5 @@
-use crate::fixed_str::FixedStr;
+use crate::{constants::MAX_TEXT_LEN, fixed_str::FixedStr};
 use core::num::NonZeroUsize;
-
-const MAX_TEXT_LEN: usize = 255;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Message {
@@ -64,7 +62,8 @@ impl Frame {
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use super::{Frame, MAX_TEXT_LEN, Message};
+    use super::{Frame, Message};
+    use crate::constants::MAX_TEXT_LEN;
     use std::string::String;
 
     pub(crate) fn frame(text: &str) -> [u8; Message::BYTESIZE] {

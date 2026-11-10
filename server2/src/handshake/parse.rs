@@ -1,8 +1,9 @@
 use core::str::Utf8Error;
 
 use crate::{
+    constants::{MAX_HEADERS, MAX_REQUEST_SIZE, PROTOCOL_VERSION, UPGRADE_PROTOCOL},
     fixed_str::FixedStrError,
-    handshake::{ID, MAX_HEADERS, MAX_REQUEST_SIZE, PROTOCOL_VERSION, Token, UPGRADE_PROTOCOL},
+    handshake::{ID, Token},
 };
 
 pub(crate) fn parse(bytes: &[u8]) -> Result<Option<(Token, ID, usize)>, ParseError> {

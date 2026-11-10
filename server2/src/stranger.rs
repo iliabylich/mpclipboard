@@ -1,7 +1,8 @@
 use crate::{
     ServerContext,
     client::Client,
-    handshake::{ID, MAX_REQUEST_SIZE, Token, parse},
+    constants::{MAX_REQUEST_SIZE, SWITCHING_PROTOCOLS, UNAUTHORIZED},
+    handshake::{ID, Token, parse},
     message::Message,
     message_reader::MessageReader,
     pubsub::PubSubHandle,
@@ -9,10 +10,6 @@ use crate::{
 };
 use core::time::Duration;
 use externally_driven_async_rt::net::TcpStream;
-
-const SWITCHING_PROTOCOLS: &[u8] =
-    b"HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: mpclipboard-raw\r\n\r\n";
-const UNAUTHORIZED: &[u8] = b"HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\n\r\n";
 
 pub(crate) struct Stranger<'a> {
     stream: TcpStream,

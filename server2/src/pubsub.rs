@@ -1,4 +1,4 @@
-use crate::{MAX_CLIENTS, handshake::ID, message::Message};
+use crate::{constants::MAX_CLIENTS, handshake::ID, message::Message};
 use core::{
     cell::{Cell, RefCell},
     future::poll_fn,
@@ -103,7 +103,7 @@ impl Drop for PubSubHandle<'_> {
 #[cfg(test)]
 mod tests {
     use super::{PubSub, PubSubHandle};
-    use crate::{MAX_CLIENTS, handshake::ID, message::tests::message};
+    use crate::{constants::MAX_CLIENTS, handshake::ID, message::tests::message};
     use core::{
         future::Future,
         pin::pin,

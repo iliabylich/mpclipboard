@@ -1,8 +1,8 @@
-use crate::{ServerContext, handshake::Token, pubsub::PubSub, stranger::Stranger};
-use core::time::Duration;
+use crate::{
+    ServerContext, constants::REAP_STRANGER_AFTER, handshake::Token, pubsub::PubSub,
+    stranger::Stranger,
+};
 use externally_driven_async_rt::net::TcpListener;
-
-const REAP_STRANGER_AFTER: Duration = Duration::from_secs(3);
 
 pub(crate) struct Acceptor {
     listener: TcpListener,

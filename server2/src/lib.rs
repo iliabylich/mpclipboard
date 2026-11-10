@@ -6,6 +6,7 @@ extern crate std;
 mod acceptor;
 mod client;
 mod config;
+mod constants;
 mod env;
 mod fixed_str;
 mod handshake;
@@ -22,6 +23,9 @@ pub use stderr::Stderr;
 
 use acceptor::Acceptor;
 use config::Config;
+use constants::{
+    MAX_IO_COUNT, MAX_ROOT_TASK_SIZE, MAX_TASK_SIZE, MAX_TASKS_COUNT, MAX_TIMERS_COUNT,
+};
 use core::convert::Infallible;
 use externally_driven_async_rt::{
     Context, EventLoop, LoopStorage, Selector, State, net::TcpListener,
@@ -31,14 +35,6 @@ use rustix::{
     event::{PollFd, PollFlags, poll},
     io::Errno,
 };
-
-const MAX_CLIENTS: usize = 10;
-
-const MAX_TASKS_COUNT: usize = MAX_CLIENTS;
-const MAX_TASK_SIZE: usize = 4896;
-const MAX_ROOT_TASK_SIZE: usize = 232;
-const MAX_TIMERS_COUNT: usize = MAX_CLIENTS;
-const MAX_IO_COUNT: usize = MAX_CLIENTS + 1;
 
 type ServerContext<'a> = Context<
     'a,
