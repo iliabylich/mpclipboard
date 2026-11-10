@@ -2,6 +2,7 @@ use crate::{
     ServerContext, fixed_str::FixedStr, message::Message, message_reader::MessageReader,
     write_all::write_all,
 };
+use core::time::Duration;
 use externally_driven_async_rt::net::TcpStream;
 
 mod parse;
@@ -25,7 +26,22 @@ pub(crate) struct Handshake {
 }
 
 impl Handshake {
-    pub(crate) async fn read_write(
+    pub(crate) async fn read_write_with_timeout(
+        ctx: &ServerContext<'_>,
+        stream: &mut TcpStream,
+        token: &Token,
+        reader: &mut MessageReader,
+        timeout: Duration,
+    ) -> Result<(ID, Option<Message>), ()> {
+        let handshake = Self::read_write(ctx, stream, token, reader);
+        let Some(handshake) = ctx.timeout(timeout, handshake).await else {
+            log::info!("no handshake within {}s", timeout.as_secs());
+            return Err(());
+        };
+        handshake
+    }
+
+    async fn read_write(
         ctx: &ServerContext<'_>,
         stream: &mut TcpStream,
         token: &Token,

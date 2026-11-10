@@ -20,12 +20,15 @@ pub(crate) async fn client(
 ) {
     let mut reader = MessageReader::default();
 
-    let handshake = Handshake::read_write(&ctx, &mut stream, token, &mut reader);
-    let Some(handshake) = ctx.timeout(REAP_STRANGER_AFTER, handshake).await else {
-        log::info!("no handshake within {}s", REAP_STRANGER_AFTER.as_secs());
-        return;
-    };
-    let Ok((id, leftover_message)) = handshake else {
+    let Ok((id, leftover_message)) = Handshake::read_write_with_timeout(
+        &ctx,
+        &mut stream,
+        token,
+        &mut reader,
+        REAP_STRANGER_AFTER,
+    )
+    .await
+    else {
         return;
     };
     log::info!("[{id}] connected");
