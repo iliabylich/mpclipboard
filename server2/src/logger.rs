@@ -1,7 +1,7 @@
 use crate::{Stderr, errors::ServerError};
 use core::{
     fmt::Write as _,
-    sync::atomic::{AtomicU8, Ordering},
+    sync::atomic::{AtomicBool, AtomicU8, Ordering},
 };
 
 macro_rules! error {
@@ -25,6 +25,12 @@ macro_rules! trace {
 pub(crate) struct Logger;
 
 static MAX_LEVEL: AtomicU8 = AtomicU8::new(LevelFilter::Off as u8);
+static COLORED: AtomicBool = AtomicBool::new(false);
+
+const RED: &str = "\x1b[31m";
+const GREEN: &str = "\x1b[32m";
+const CYAN: &str = "\x1b[36m";
+const NC: &str = "\x1b[0m";
 
 impl Logger {
     pub(crate) fn init() -> Result<(), ServerError> {
@@ -34,6 +40,9 @@ impl Logger {
         };
         MAX_LEVEL.store(level as u8, Ordering::Relaxed);
 
+        let stderr = unsafe { rustix::stdio::stderr() };
+        COLORED.store(rustix::termios::isatty(stderr), Ordering::Relaxed);
+
         Ok(())
     }
 
@@ -42,7 +51,8 @@ impl Logger {
         if level as u8 > MAX_LEVEL.load(Ordering::Relaxed) {
             return;
         }
-        let _ = writeln!(Stderr, "{} {args}", level.as_str());
+        let (color, level, nc) = level.pre_level_post();
+        let _ = writeln!(Stderr, "{color}{level}{nc} {args}");
     }
 }
 
@@ -55,11 +65,19 @@ pub(crate) enum Level {
 }
 
 impl Level {
-    fn as_str(self) -> &'static str {
-        match self {
-            Self::Error => "ERROR",
-            Self::Info => "INFO",
-            Self::Trace => "TRACE",
+    fn pre_level_post(self) -> (&'static str, &'static str, &'static str) {
+        let colored = COLORED.load(Ordering::Relaxed);
+
+        let (pre, level, post) = match self {
+            Self::Error => (RED, "ERROR", NC),
+            Self::Info => (GREEN, "INFO", NC),
+            Self::Trace => (CYAN, "TRACE", NC),
+        };
+
+        if colored {
+            (pre, level, post)
+        } else {
+            ("", level, "")
         }
     }
 }

@@ -14,6 +14,7 @@ externally-driven-async-rt = { path = "../../externally-driven-async-rt" }
 rustix = { version = "1", default-features = false, features = [
     "event",
     "stdio",
+    "termios",
 ] }
 httparse = { version = "1", default-features = false }
 
