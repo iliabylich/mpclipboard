@@ -44,7 +44,7 @@ impl Acceptor {
             let Some(pubsub) = pubsub.subscribe() else {
                 unreachable!("every reserved task has a free pubsub slot");
             };
-            task.spawn(move |ctx| async move {
+            let _ = task.spawn(async move {
                 if let Err(err) = serve(&ctx, stream, token, pubsub).await {
                     error!("{err}");
                 }

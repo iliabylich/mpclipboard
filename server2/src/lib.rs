@@ -29,7 +29,7 @@ pub use stderr::Stderr;
 
 use acceptor::Acceptor;
 use constants::{FDS, ROOT_TASK_SIZE, TASK_SIZE, TASKS, TIMERS};
-use core::convert::Infallible;
+use core::{cell::RefCell, convert::Infallible};
 use externally_driven_async_rt::{Context, EventLoop, LoopStorage, Selector, net::TcpListener};
 use logger::Logger;
 use rustix::{
@@ -39,7 +39,7 @@ use rustix::{
 
 type ServerContext<'a> = Context<'a, (), TASKS, TASK_SIZE, ROOT_TASK_SIZE, TIMERS, FDS>;
 type ServerLoop<'a> = EventLoop<'a, (), TASKS, TASK_SIZE, ROOT_TASK_SIZE, TIMERS, FDS>;
-type ServerStorage = LoopStorage<(), TASKS, TASK_SIZE, ROOT_TASK_SIZE, TIMERS, FDS>;
+type ServerStorage = LoopStorage<TASKS, TASK_SIZE, ROOT_TASK_SIZE, TIMERS, FDS>;
 
 pub fn run() -> Result<Infallible, ServerError> {
     Logger::init()?;
@@ -62,8 +62,10 @@ pub fn run() -> Result<Infallible, ServerError> {
         unsafe { core::mem::transmute::<&ServerStorage, &'static ServerStorage>(&storage) };
 
     let mut selector = Selector::new().map_err(ServerError::Selector)?;
-    let mut event_loop = ServerLoop::new(storage, &mut selector, (), |ctx| acceptor.run(ctx))
-        .map_err(ServerError::EventLoopStart)?;
+    let mut state = RefCell::new(());
+    let mut event_loop =
+        ServerLoop::new(storage, &mut selector, &mut state, |ctx| acceptor.run(ctx))
+            .map_err(ServerError::EventLoopStart)?;
 
     let err = loop {
         match poll(&mut [PollFd::new(&event_loop, PollFlags::IN)], None) {
