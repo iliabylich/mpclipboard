@@ -9,6 +9,29 @@ MPCLIPBOARD_BIND_ADDRESS = "127.0.0.1:3000"
 hide = true
 run = "cargo build"
 
-[tasks.dev]
+[tasks.app]
+hide = true
 depends = ["build:debug"]
 run = "target/debug/server2"
+
+[tasks.caddy]
+hide = true
+tools = { caddy = "latest" }
+run = '''
+caddy run --adapter caddyfile --config - <<'EOF'
+{
+	default_sni 127.0.0.1
+	auto_https disable_redirects
+}
+
+localhost:8443, 127.0.0.1:8443 {
+	tls ../dev-certs/cert.pem ../dev-certs/key.pem
+	reverse_proxy 127.0.0.1:3000 {
+		flush_interval -1
+	}
+}
+EOF
+'''
+
+[tasks.dev]
+depends = ["app", "caddy"]
