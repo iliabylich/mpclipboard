@@ -18,7 +18,6 @@ mod message;
 mod message_reader;
 mod message_stream;
 mod pubsub;
-mod select;
 mod stderr;
 mod stranger;
 mod token;

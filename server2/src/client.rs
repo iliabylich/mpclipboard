@@ -1,14 +1,8 @@
 use crate::{
-    ServerContext,
-    errors::ClientError,
-    id::ID,
-    message_reader::MessageReader,
-    message_stream::MessageStream,
-    pubsub::PubSubHandle,
-    select::{Either, select},
-    write_all::write_all,
+    ServerContext, errors::ClientError, id::ID, message_reader::MessageReader,
+    message_stream::MessageStream, pubsub::PubSubHandle, write_all::write_all,
 };
-use externally_driven_async_rt::net::TcpStream;
+use externally_driven_async_rt::{Either, net::TcpStream, select};
 
 pub(crate) struct Client<'a> {
     stream: TcpStream,
