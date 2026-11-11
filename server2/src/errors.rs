@@ -1,5 +1,6 @@
 use crate::{fixed_str::FixedStrError, handshake::ParseError, id::ID};
 use core::{ffi::CStr, net::AddrParseError, str::Utf8Error, time::Duration};
+use externally_driven_async_rt::io::WriteAllError;
 use rustix::io::Errno;
 
 #[derive(Debug, PartialEq, Eq)]
@@ -61,8 +62,7 @@ pub(crate) enum ClientError {
     InvalidToken { id: ID },
     Read { id: ID, err: Errno },
     MalformedFrame { id: ID, err: Utf8Error },
-    Write { id: ID, err: Errno },
-    WriteZero { id: ID },
+    Write { id: ID, err: WriteAllError },
 }
 
 impl core::fmt::Display for ClientError {
@@ -78,8 +78,7 @@ impl core::fmt::Display for ClientError {
             Self::MalformedFrame { id, err } => {
                 write!(f, "[{id}] received a malformed frame: {err}")
             }
-            Self::Write { id, err } => write!(f, "[{id}] write() failed: {err}"),
-            Self::WriteZero { id } => write!(f, "[{id}] write() wrote 0 bytes"),
+            Self::Write { id, err } => write!(f, "[{id}] {err}"),
         }
     }
 }

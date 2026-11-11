@@ -1,10 +1,12 @@
 use crate::{
     ServerContext, client::Client, constants::HANDSHAKE_REQUEST_BUFFER_SIZE, errors::ClientError,
     id::ID, message::Message, message_reader::MessageReader, pubsub::PubSubHandle, token::Token,
-    write_all::write_all,
 };
 use core::time::Duration;
-use externally_driven_async_rt::net::TcpStream;
+use externally_driven_async_rt::{
+    io::{AsyncRead, AsyncWriteExt},
+    net::TcpStream,
+};
 
 pub(crate) struct Stranger<'a> {
     stream: TcpStream,
@@ -58,7 +60,7 @@ impl<'a> Stranger<'a> {
         };
 
         if *self.token != received {
-            self.write_401(ctx, id).await;
+            self.write_401(ctx).await;
             return Err(ClientError::InvalidToken { id });
         }
 
@@ -101,10 +103,12 @@ impl<'a> Stranger<'a> {
         );
 
         let (_, mut tx) = self.stream.split();
-        write_all(ctx, &mut tx, SWITCHING_PROTOCOLS_RESPONSE.as_bytes(), id).await
+        tx.write_all(ctx, SWITCHING_PROTOCOLS_RESPONSE.as_bytes())
+            .await
+            .map_err(|err| ClientError::Write { id, err })
     }
 
-    async fn write_401(&mut self, ctx: &ServerContext<'_>, id: ID) {
+    async fn write_401(&mut self, ctx: &ServerContext<'_>) {
         const UNAUTHORIZED_RESPONSE: &str = concat!(
             "HTTP/1.1 401 Unauthorized\r\n",
             "Content-Length: 0\r\n",
@@ -113,6 +117,6 @@ impl<'a> Stranger<'a> {
 
         let (_, mut tx) = self.stream.split();
 
-        let _ = write_all(ctx, &mut tx, UNAUTHORIZED_RESPONSE.as_bytes(), id).await;
+        let _ = tx.write_all(ctx, UNAUTHORIZED_RESPONSE.as_bytes()).await;
     }
 }

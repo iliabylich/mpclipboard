@@ -1,7 +1,7 @@
 use crate::{
     ServerContext, errors::ClientError, id::ID, message::Message, message_reader::MessageReader,
 };
-use externally_driven_async_rt::net::BorrowedReadHalf;
+use externally_driven_async_rt::{io::AsyncRead, net::BorrowedReadHalf};
 
 pub(crate) struct MessageStream<'s> {
     rx: BorrowedReadHalf<'s>,

@@ -1,8 +1,8 @@
 use crate::{
     ServerContext, errors::ClientError, id::ID, message_reader::MessageReader,
-    message_stream::MessageStream, pubsub::PubSubHandle, write_all::write_all,
+    message_stream::MessageStream, pubsub::PubSubHandle,
 };
-use externally_driven_async_rt::{Either, net::TcpStream, select};
+use externally_driven_async_rt::{Either, io::AsyncWriteExt, net::TcpStream, select};
 
 pub(crate) struct Client<'a> {
     stream: TcpStream,
@@ -44,7 +44,10 @@ impl<'a> Client<'a> {
                 Either::Left(Ok(Some(message))) => pubsub.publish(id, message),
                 Either::Left(Ok(None)) => return Ok(()),
                 Either::Left(Err(err)) => return Err(err),
-                Either::Right(message) => write_all(ctx, &mut tx, &message.encode(), id).await?,
+                Either::Right(message) => tx
+                    .write_all(ctx, &message.encode())
+                    .await
+                    .map_err(|err| ClientError::Write { id, err })?,
             }
         }
     }

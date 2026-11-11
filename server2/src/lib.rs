@@ -21,7 +21,6 @@ mod pubsub;
 mod stderr;
 mod stranger;
 mod token;
-mod write_all;
 
 pub use errors::ServerError;
 pub use stderr::Stderr;
