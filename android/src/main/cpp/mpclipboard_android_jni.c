@@ -38,27 +38,15 @@ static void bytes_release(JNIEnv *env, bytes_t bytes) {
                                    JNI_ABORT);
 }
 
-static jobject box_int(JNIEnv *env, jint value) {
-  jclass integer_class = (*env)->FindClass(env, "java/lang/Integer");
-  CHECK(integer_class != NULL, "failed to find java.lang.Integer");
-  jmethodID value_of = (*env)->GetStaticMethodID(env, integer_class, "valueOf",
-                                                 "(I)Ljava/lang/Integer;");
-  CHECK(value_of != NULL, "failed to find Integer.valueOf(int)");
-  jobject boxed =
-      (*env)->CallStaticObjectMethod(env, integer_class, value_of, value);
-  CHECK(boxed != NULL, "failed to box integer");
-  return boxed;
-}
-
-static jobject new_pair(JNIEnv *env, jobject first, jobject second) {
-  jclass pair_class = (*env)->FindClass(env, "kotlin/Pair");
-  CHECK(pair_class != NULL, "failed to find kotlin.Pair");
-  jmethodID ctor = (*env)->GetMethodID(
-      env, pair_class, "<init>", "(Ljava/lang/Object;Ljava/lang/Object;)V");
-  CHECK(ctor != NULL, "failed to find Pair constructor");
-  jobject pair = (*env)->NewObject(env, pair_class, ctor, first, second);
-  CHECK(pair != NULL, "failed to construct Pair");
-  return pair;
+static jobject new_output(JNIEnv *env, jboolean has_connectivity,
+                          jint connectivity, jbyteArray text) {
+  jclass output_class =
+      (*env)->FindClass(env, "dev/ibylich/mpclipboard/Output");
+  CHECK(output_class != NULL, "failed to find dev.ibylich.mpclipboard.Output");
+  jmethodID ctor = (*env)->GetMethodID(env, output_class, "<init>", "(ZI[B)V");
+  CHECK(ctor != NULL, "failed to find Output constructor");
+  return (*env)->NewObject(env, output_class, ctor, has_connectivity,
+                           connectivity, text);
 }
 
 static jbyteArray new_jbytearray(JNIEnv *env, mpclipboard_OwnedString text) {
@@ -75,7 +63,7 @@ static jbyteArray new_jbytearray(JNIEnv *env, mpclipboard_OwnedString text) {
 }
 
 #define CONSTANT(NAME, VALUE)                                                  \
-  JNIEXPORT jint JNICALL Java_dev_ibylich_mpclipboard_Ffi_##NAME(              \
+  JNIEXPORT jint JNICALL Java_dev_ibylich_mpclipboard_MPClipboard_##NAME(              \
       [[maybe_unused]] JNIEnv *env, [[maybe_unused]] jclass clazz) {           \
     return VALUE;                                                              \
   }
@@ -87,7 +75,7 @@ CONSTANT(connectivityDisconnected, MPCLIPBOARD_CONNECTIVITY_DISCONNECTED)
 #undef CONSTANT
 
 JNIEXPORT
-jlong JNICALL Java_dev_ibylich_mpclipboard_Ffi_mpclipboard_1new_1inline(
+jlong JNICALL Java_dev_ibylich_mpclipboard_MPClipboard_mpclipboard_1new_1inline(
     JNIEnv *env, [[maybe_unused]] jclass clazz, jbyteArray uri,
     jbyteArray token, jbyteArray name) {
 
@@ -104,7 +92,7 @@ jlong JNICALL Java_dev_ibylich_mpclipboard_Ffi_mpclipboard_1new_1inline(
   return (jlong)(intptr_t)mpclipboard;
 }
 
-JNIEXPORT jint JNICALL Java_dev_ibylich_mpclipboard_Ffi_mpclipboard_1get_1fd(
+JNIEXPORT jint JNICALL Java_dev_ibylich_mpclipboard_MPClipboard_mpclipboard_1get_1fd(
     JNIEnv *env, [[maybe_unused]] jclass clazz, jlong mpclipboard_ptr) {
   mpclipboard_MPClipboard *mpclipboard =
       (mpclipboard_MPClipboard *)(intptr_t)mpclipboard_ptr;
@@ -112,7 +100,7 @@ JNIEXPORT jint JNICALL Java_dev_ibylich_mpclipboard_Ffi_mpclipboard_1get_1fd(
   return mpclipboard_get_fd(mpclipboard);
 }
 
-JNIEXPORT void JNICALL Java_dev_ibylich_mpclipboard_Ffi_mpclipboard_1drop(
+JNIEXPORT void JNICALL Java_dev_ibylich_mpclipboard_MPClipboard_mpclipboard_1drop(
     [[maybe_unused]] JNIEnv *env, [[maybe_unused]] jclass clazz,
     jlong mpclipboard_ptr) {
   mpclipboard_MPClipboard *mpclipboard =
@@ -121,7 +109,7 @@ JNIEXPORT void JNICALL Java_dev_ibylich_mpclipboard_Ffi_mpclipboard_1drop(
   mpclipboard_drop(mpclipboard);
 }
 
-JNIEXPORT jobject JNICALL Java_dev_ibylich_mpclipboard_Ffi_mpclipboard_1read(
+JNIEXPORT jobject JNICALL Java_dev_ibylich_mpclipboard_MPClipboard_mpclipboard_1read(
     JNIEnv *env, [[maybe_unused]] jclass clazz, jlong mpclipboard_ptr) {
   mpclipboard_MPClipboard *mpclipboard =
       (mpclipboard_MPClipboard *)(intptr_t)mpclipboard_ptr;
@@ -129,23 +117,20 @@ JNIEXPORT jobject JNICALL Java_dev_ibylich_mpclipboard_Ffi_mpclipboard_1read(
   mpclipboard_Output output = mpclipboard_read(mpclipboard);
   CHECK(!output.error, "mpclipboard_read failed");
 
-  jobject connectivity = NULL;
-  jbyteArray text = NULL;
-
-  if (output.has_connectivity) {
-    connectivity = box_int(env, (jint)output.connectivity);
+  if (!output.has_connectivity && output.text.ptr == NULL) {
+    return NULL;
   }
+
+  jbyteArray text = NULL;
   if (output.text.ptr != NULL) {
     text = new_jbytearray(env, output.text);
   }
 
-  if (connectivity == NULL && text == NULL) {
-    return NULL;
-  }
-  return new_pair(env, connectivity, text);
+  return new_output(env, output.has_connectivity ? JNI_TRUE : JNI_FALSE,
+                    (jint)output.connectivity, text);
 }
 
-JNIEXPORT void JNICALL Java_dev_ibylich_mpclipboard_Ffi_mpclipboard_1push_1text(
+JNIEXPORT void JNICALL Java_dev_ibylich_mpclipboard_MPClipboard_mpclipboard_1push_1text(
     JNIEnv *env, [[maybe_unused]] jclass clazz, jlong mpclipboard_ptr,
     jbyteArray text) {
 

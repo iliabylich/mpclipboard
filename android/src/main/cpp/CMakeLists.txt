@@ -29,6 +29,8 @@ target_link_options(
     mpclipboard_android
     PRIVATE
     -Wl,--build-id=none
+    -Wl,--exclude-libs,ALL
+    -Wl,--gc-sections
 )
 
 target_link_libraries(

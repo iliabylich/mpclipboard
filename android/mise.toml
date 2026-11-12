@@ -7,17 +7,11 @@ shell = "bash -euo pipefail -c"
 java = "temurin-25"
 gradle = "9.8.0"
 android-sdk = "17.0"
-imagemagick = "latest"
 
 [env]
 GRADLE_USER_HOME = "{{config_root}}/.cache/gradle"
 ANDROID_USER_HOME = "{{config_root}}/.cache/android"
-ANDROID_EMULATOR_HOME = "{{config_root}}/.cache/android"
-ANDROID_AVD_HOME = "{{config_root}}/.cache/android/avd"
 ANDROID_CMAKE_VERSION = "4.1.2"
-_.path = ["{{config_root}}/.cache/android-sdk/platform-tools"]
-ANDROID_KEY_ALIAS = "release"
-_.file = { path = ".env", redacted = true }
 
 [hooks]
 postinstall = { task = "setup" }
@@ -29,7 +23,6 @@ run = """
 
     (set +o pipefail; yes | sdkmanager --sdk_root="$ANDROID_HOME" --licenses > /dev/null)
     sdkmanager --sdk_root="$ANDROID_HOME" \
-        "platform-tools" \
         "platforms;android-37.0" \
         "build-tools;$ANDROID_BUILD_TOOLS_VERSION" \
         "ndk;$ANDROID_NDK_VERSION" \
@@ -40,47 +33,28 @@ run = """
     gradle --no-daemon wrapper --gradle-version "$(mise current gradle)"
 """
 
-[tasks."debug:apk"]
+[tasks."build:debug"]
 depends = ["//generic-client:build:android:debug"]
 run = """
     gradle --no-daemon assembleDebug
-    ls -l build/outputs/apk/debug/mpclipboard-debug.apk
+    ls -l build/outputs/aar/mpclipboard-debug.aar
 """
 
-[tasks."release:apk"]
+[tasks."build:release"]
 depends = ["//generic-client:build:android:release"]
+run = """
+    gradle --no-daemon assembleRelease
+    ls -l build/outputs/aar/mpclipboard-release.aar
+"""
+
+[tasks.release]
 usage = '''
-flag "--version <version>" required=#true help="Release version in MAJOR.MINOR.PATCH format"
-flag "--out <out>" required=#true help="Absolute path to write the .apk to"
+flag "--debug-out <debug_out>" required=#true help="Absolute path to write the debug .aar to"
+flag "--release-out <release_out>" required=#true help="Absolute path to write the release .aar to"
 '''
-run = """
-    gradle --no-daemon assembleRelease -PappVersion="{{usage.version}}"
-    cp build/outputs/apk/release/mpclipboard-release.apk "{{usage.out}}"
-"""
-
-[tasks."install:debug"]
-run = "adb install -r build/outputs/apk/debug/mpclipboard-debug.apk"
-
-[tasks."install:release"]
-run = "adb install -r build/outputs/apk/release/mpclipboard-release.apk"
-
-[tasks.logs]
-run = """
-    adb logcat --pid="$(adb shell pidof -s dev.ibylich.mpclipboard)"
-"""
-
-[tasks.generate]
-run = """
-    mkdir -p src/main/res/drawable-nodpi
-    magick ../icon_512x512.png \
-        -resize 230x230 \
-        -background none \
-        -gravity center \
-        -extent 432x432 \
-        -strip \
-        -define png:exclude-chunks=date,time \
-        src/main/res/drawable-nodpi/icon.png
-"""
-
-[tasks."macos:androidstudio"]
-run = '"/Applications/Android Studio.app/Contents/MacOS/studio" "$PWD"'
+run = [
+    { task = "build:debug" },
+    { task = "build:release" },
+    'cp build/outputs/aar/mpclipboard-debug.aar "{{usage.debug_out}}"',
+    'cp build/outputs/aar/mpclipboard-release.aar "{{usage.release_out}}"',
+]

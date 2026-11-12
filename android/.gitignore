@@ -1,9 +1,6 @@
-.env
-bindings.h
 .cache
 .cxx
 .gradle
-.kotlin
 build
 .idea
 gradle/
