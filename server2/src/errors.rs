@@ -1,6 +1,6 @@
-use crate::handshake::ParseError;
-use core::{ffi::CStr, net::AddrParseError, str::Utf8Error, time::Duration};
-use externally_driven_async_rt::io::WriteAllError;
+use crate::{constants::UPGRADE_TIMEOUT, upgrade::ParseError};
+use core::{ffi::CStr, net::AddrParseError, str::Utf8Error};
+use externally_driven_async_rt::io::{FrameWriterError, WriteAllError};
 use mpclipboard_shared2::{FixedStrError, ID, MessageReaderError};
 use rustix::io::Errno;
 
@@ -57,14 +57,19 @@ impl From<AddrParseError> for ServerError {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ClientError {
-    HandshakeTimeout(Duration),
-    HandshakeRead(Errno),
-    Handshake(ParseError),
+    UpgradeTimeout,
+    UpgradeRead(Errno),
+    DisconnectedDuringUpgrade,
+    Upgrade(ParseError),
     InvalidToken {
         id: ID,
     },
-    BytesAfterHandshake {
+    BytesAfterUpgrade {
         id: ID,
+    },
+    UpgradeWrite {
+        id: ID,
+        err: WriteAllError<Errno>,
     },
     Read {
         id: ID,
@@ -72,21 +77,25 @@ pub(crate) enum ClientError {
     },
     Write {
         id: ID,
-        err: WriteAllError<Errno>,
+        err: FrameWriterError<Errno>,
     },
 }
 
 impl core::fmt::Display for ClientError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            Self::HandshakeTimeout(timeout) => {
-                write!(f, "no handshake within {}s", timeout.as_secs())
+            Self::UpgradeTimeout => {
+                write!(f, "no upgrade within {}s", UPGRADE_TIMEOUT.as_secs())
             }
-            Self::HandshakeRead(err) => write!(f, "read() failed during handshake: {err}"),
-            Self::Handshake(err) => write!(f, "{err}"),
+            Self::UpgradeRead(err) => write!(f, "read() failed during upgrade: {err}"),
+            Self::DisconnectedDuringUpgrade => f.write_str("disconnected during upgrade"),
+            Self::Upgrade(err) => write!(f, "{err}"),
             Self::InvalidToken { id } => write!(f, "[{id}] invalid token"),
-            Self::BytesAfterHandshake { id } => {
+            Self::BytesAfterUpgrade { id } => {
                 write!(f, "[{id}] sent bytes before receiving 101")
+            }
+            Self::UpgradeWrite { id, err } => {
+                write!(f, "[{id}] failed to write 101 response: {err}")
             }
             Self::Read { id, err } => write!(f, "[{id}] {err}"),
             Self::Write { id, err } => write!(f, "[{id}] {err}"),
@@ -96,6 +105,6 @@ impl core::fmt::Display for ClientError {
 
 impl From<ParseError> for ClientError {
     fn from(err: ParseError) -> Self {
-        Self::Handshake(err)
+        Self::Upgrade(err)
     }
 }

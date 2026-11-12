@@ -3,13 +3,13 @@ use mpclipboard_shared2::{
     FixedStrError, ID, PROTOCOL_VERSION, Token, UPGRADE_PROTOCOL, http::has_token,
 };
 
-use crate::constants::{HANDSHAKE_REQUEST_BUFFER_SIZE, HANDSHAKE_REQUEST_MAX_HEADERS};
+use crate::constants::{UPGRADE_REQUEST_BUFFER_SIZE, UPGRADE_REQUEST_MAX_HEADERS};
 
 pub(crate) fn parse(bytes: &[u8]) -> Result<Option<(Token, ID, usize)>, ParseError> {
-    let mut headers = [httparse::EMPTY_HEADER; HANDSHAKE_REQUEST_MAX_HEADERS];
+    let mut headers = [httparse::EMPTY_HEADER; UPGRADE_REQUEST_MAX_HEADERS];
     let mut req = httparse::Request::new(&mut headers);
     let httparse::Status::Complete(len) = req.parse(bytes).map_err(InvalidHttpRequest)? else {
-        if bytes.len() >= HANDSHAKE_REQUEST_BUFFER_SIZE {
+        if bytes.len() >= UPGRADE_REQUEST_BUFFER_SIZE {
             return Err(ParseError::TooLarge);
         }
         return Ok(None);
@@ -79,7 +79,7 @@ impl core::fmt::Display for ParseError {
             InvalidHttpRequest(err) => write!(f, "malformed HTTP request: {err}"),
             TooLarge => write!(
                 f,
-                "HTTP request exceeds {HANDSHAKE_REQUEST_BUFFER_SIZE} bytes"
+                "HTTP request exceeds {UPGRADE_REQUEST_BUFFER_SIZE} bytes"
             ),
             InvalidStartLine => f.write_str("unexpected start line, expected GET / HTTP/1.1"),
             NonUtf8(err) => write!(f, "non-utf8 header: {err}"),
@@ -103,9 +103,9 @@ impl core::fmt::Display for ParseError {
 #[cfg(test)]
 mod tests {
     use super::{
-        HANDSHAKE_REQUEST_BUFFER_SIZE, ID,
+        ID,
         ParseError::{self, *},
-        Token, parse,
+        Token, UPGRADE_REQUEST_BUFFER_SIZE, parse,
     };
     use mpclipboard_shared2::FixedStrError;
     use std::{format, string::String, vec::Vec};
@@ -139,7 +139,7 @@ Accept-Encoding: gzip\r\n\
         let mut len = 0;
         loop {
             let read = chunk_size
-                .min(HANDSHAKE_REQUEST_BUFFER_SIZE - len)
+                .min(UPGRADE_REQUEST_BUFFER_SIZE - len)
                 .min(bytes.len() - len);
             if read == 0 {
                 return Ok(None);
@@ -236,7 +236,7 @@ Accept-Encoding: gzip\r\n\
     fn test_too_large() {
         let bytes = with_header(&format!(
             "X-Long: {}",
-            "a".repeat(HANDSHAKE_REQUEST_BUFFER_SIZE)
+            "a".repeat(UPGRADE_REQUEST_BUFFER_SIZE)
         ));
         assert_eq!(read_all(&bytes), Err(TooLarge));
     }

@@ -1,6 +1,6 @@
 use crate::{ServerContext, errors::ClientError, pubsub::PubSubHandle};
-use externally_driven_async_rt::{Either, io::AsyncWriteExt, net::TcpStream, select};
-use mpclipboard_shared2::{ID, MessageReader};
+use externally_driven_async_rt::{Either3, net::TcpStream, select3};
+use mpclipboard_shared2::{ID, MessageReader, MessageWriter};
 
 pub(crate) struct Client<'a> {
     stream: TcpStream,
@@ -23,20 +23,22 @@ impl<'a> Client<'a> {
             pubsub,
         } = self;
 
-        let (rx, mut tx) = stream.split();
+        let (rx, tx) = stream.split();
         let mut reader = MessageReader::new(rx);
+        let mut writer = MessageWriter::new(tx);
         loop {
-            match select(reader.read(ctx), pubsub.receive()).await {
-                Either::Left(Ok(Some(message))) => pubsub.publish(id, message),
-                Either::Left(Ok(None)) => {
+            match select3(reader.read(ctx), pubsub.receive(), writer.run(ctx)).await {
+                Either3::First(Ok(Some(message))) => pubsub.publish(id, message),
+                Either3::First(Ok(None)) => {
                     info!("[{id}] disconnected");
                     return Ok(());
                 }
-                Either::Left(Err(err)) => return Err(ClientError::Read { id, err }),
-                Either::Right(message) => tx
-                    .write_all(ctx, &message.encode())
-                    .await
-                    .map_err(|err| ClientError::Write { id, err })?,
+                Either3::First(Err(err)) => return Err(ClientError::Read { id, err }),
+                Either3::Second(message) => writer.push(message),
+                Either3::Third(written) => {
+                    let Err(err) = written;
+                    return Err(ClientError::Write { id, err });
+                }
             }
         }
     }

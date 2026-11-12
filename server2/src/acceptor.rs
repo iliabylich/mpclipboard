@@ -1,9 +1,10 @@
 use crate::{
     ServerContext,
-    constants::HANDSHAKE_TIMEOUT,
+    client::Client,
+    constants::UPGRADE_TIMEOUT,
     errors::ClientError,
     pubsub::{PubSub, PubSubHandle},
-    stranger::Stranger,
+    upgrade::{UpgradeReader, UpgradeWriter},
 };
 use externally_driven_async_rt::net::{TcpListener, TcpStream};
 use mpclipboard_shared2::Token;
@@ -59,9 +60,34 @@ async fn serve<'a>(
     token: &'a Token,
     pubsub: PubSubHandle<'a>,
 ) -> Result<(), ClientError> {
-    let stranger = Stranger::new(stream, token, pubsub);
-    let Some(client) = stranger.handshake(ctx, HANDSHAKE_TIMEOUT).await? else {
-        return Ok(());
-    };
+    let upgrade = upgrade(ctx, stream, token, pubsub);
+    let client = ctx
+        .timeout(UPGRADE_TIMEOUT, upgrade)
+        .await
+        .ok_or(ClientError::UpgradeTimeout)??;
     client.read_write_messages(ctx).await
+}
+
+async fn upgrade<'a>(
+    ctx: &ServerContext<'_>,
+    mut stream: TcpStream,
+    token: &Token,
+    pubsub: PubSubHandle<'a>,
+) -> Result<Client<'a>, ClientError> {
+    let (rx, tx) = stream.split();
+    let mut reader = UpgradeReader::new(rx);
+    let (received, id) = reader.read(ctx).await?;
+
+    if *token != received {
+        let _ = UpgradeWriter::unauthorized(tx).write(ctx).await;
+        return Err(ClientError::InvalidToken { id });
+    }
+
+    UpgradeWriter::switching_protocols(tx)
+        .write(ctx)
+        .await
+        .map_err(|err| ClientError::UpgradeWrite { id, err })?;
+    info!("[{id}] connected");
+
+    Ok(Client::new(stream, id, pubsub))
 }

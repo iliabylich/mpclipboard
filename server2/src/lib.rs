@@ -11,10 +11,9 @@ mod config;
 mod constants;
 mod env;
 mod errors;
-mod handshake;
 mod pubsub;
 mod stderr;
-mod stranger;
+mod upgrade;
 
 pub use errors::ServerError;
 pub use stderr::Stderr;
