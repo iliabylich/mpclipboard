@@ -212,7 +212,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e89bb49fe7ac9e62a4aef4737366a7e615a9af46d0962cf2ff363362bf176aae"
 
 [[package]]
-name = "mpclipboard-generic-client2"
+name = "mpclipboard-generic-client"
 version = "0.1.0"
 dependencies = [
  "android_logger",
@@ -222,7 +222,7 @@ dependencies = [
  "httparse",
  "log",
  "mini-sansio-dns",
- "mpclipboard-shared2",
+ "mpclipboard-shared",
  "rustix",
  "rustls",
  "thiserror",
@@ -230,7 +230,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "mpclipboard-shared2"
+name = "mpclipboard-shared"
 version = "0.1.0"
 dependencies = [
  "externally-driven-async-rt",

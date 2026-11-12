@@ -3,7 +3,7 @@ use crate::{
     upgrade::parse::parse,
 };
 use externally_driven_async_rt::{io::AsyncRead, net::BorrowedReadHalf};
-use mpclipboard_shared2::{ID, Token};
+use mpclipboard_shared::{ID, Token};
 
 pub(crate) struct UpgradeReader<'s> {
     rx: BorrowedReadHalf<'s>,

@@ -1,6 +1,6 @@
 use crate::{ServerContext, errors::ClientError, pubsub::PubSubHandle};
 use externally_driven_async_rt::{Either3, net::TcpStream, select3};
-use mpclipboard_shared2::{ID, MessageReader, MessageWriter};
+use mpclipboard_shared::{ID, MessageReader, MessageWriter};
 
 pub(crate) struct Client<'a> {
     stream: TcpStream,

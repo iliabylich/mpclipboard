@@ -1,5 +1,5 @@
 use core::str::Utf8Error;
-use mpclipboard_shared2::{
+use mpclipboard_shared::{
     FixedStrError, ID, PROTOCOL_VERSION, Token, UPGRADE_PROTOCOL, http::has_token,
 };
 
@@ -107,7 +107,7 @@ mod tests {
         ParseError::{self, *},
         Token, UPGRADE_REQUEST_BUFFER_SIZE, parse,
     };
-    use mpclipboard_shared2::FixedStrError;
+    use mpclipboard_shared::FixedStrError;
     use std::{format, string::String, vec::Vec};
 
     const REQUEST: &str = "GET / HTTP/1.1\r\n\

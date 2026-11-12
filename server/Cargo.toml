@@ -1,17 +1,20 @@
 [package]
-name = "server2"
+name = "mpclipboard-server"
 version = "0.1.0"
 edition = "2024"
+authors = ["Ilya Bylich"]
+license = "MIT"
+description = "MPClipboard server"
 
 [[bin]]
-name = "server2"
+name = "mpclipboard-server"
 path = "src/main.rs"
 test = false
 bench = false
 
 [dependencies]
 externally-driven-async-rt = { version = "0.3.0" }
-mpclipboard-shared2 = { path = "../shared2" }
+mpclipboard-shared = { path = "../shared" }
 rustix = { version = "1", default-features = false, features = [
     "event",
     "stdio",
@@ -30,3 +33,18 @@ panic = "abort"
 lto = "fat"
 codegen-units = 1
 strip = true
+
+[package.metadata.deb]
+assets = [
+    [
+        "target/release/mpclipboard-server",
+        "usr/bin/mpclipboard-server",
+        "755",
+    ],
+    [
+        "debian/mpclipboard-server.service",
+        "lib/systemd/system/mpclipboard-server.service",
+        "644",
+    ],
+]
+extended-description = ""

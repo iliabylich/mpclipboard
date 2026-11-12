@@ -7,7 +7,7 @@ pub(crate) use writer::UpgradeWriter;
 
 use crate::{constants::UPGRADE_RESPONSE_BUFFER_SIZE, tls_stream::TlsError};
 use externally_driven_async_rt::io::{ReadExactError, WriteAllError};
-use mpclipboard_shared2::UPGRADE_PROTOCOL;
+use mpclipboard_shared::UPGRADE_PROTOCOL;
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum UpgradeError {

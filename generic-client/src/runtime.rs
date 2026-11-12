@@ -13,7 +13,7 @@ use core::{
     sync::atomic::{AtomicBool, Ordering},
 };
 use externally_driven_async_rt::{Context, EventLoop, LoopStorage, Selector};
-use mpclipboard_shared2::Message;
+use mpclipboard_shared::Message;
 use rustix::{
     fd::{AsFd, BorrowedFd},
     io::Errno,

@@ -7,7 +7,7 @@ use crate::{
     upgrade::{UpgradeReader, UpgradeWriter},
 };
 use externally_driven_async_rt::net::{TcpListener, TcpStream};
-use mpclipboard_shared2::Token;
+use mpclipboard_shared::Token;
 
 pub(crate) struct Acceptor {
     listener: TcpListener,

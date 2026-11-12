@@ -1,4 +1,4 @@
-use mpclipboard_generic_client2::{MPClipboard, Output};
+use mpclipboard_generic_client::{MPClipboard, Output};
 use rustix::event::{PollFd, PollFlags};
 use std::io::BufRead;
 

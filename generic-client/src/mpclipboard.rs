@@ -5,7 +5,7 @@ use crate::{
     runtime::{Runtime, RuntimeError},
     tls_config::tls_config,
 };
-use mpclipboard_shared2::{Message, Store};
+use mpclipboard_shared::{Message, Store};
 use rustix::fd::{AsFd, BorrowedFd};
 use std::sync::Once;
 

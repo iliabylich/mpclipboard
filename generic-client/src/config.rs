@@ -1,6 +1,6 @@
 use crate::url::{Url, UrlParseError};
 use boml::{Toml, table::TomlGetError, types::TomlValueType};
-use mpclipboard_shared2::{FixedStrError, ID, Token};
+use mpclipboard_shared::{FixedStrError, ID, Token};
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone)]

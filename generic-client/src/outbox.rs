@@ -1,5 +1,5 @@
 use core::cell::Cell;
-use mpclipboard_shared2::Message;
+use mpclipboard_shared::Message;
 
 #[derive(Debug, Default)]
 pub(crate) struct Outbox(Cell<Option<Message>>);

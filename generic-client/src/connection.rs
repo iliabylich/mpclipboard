@@ -14,7 +14,7 @@ use core::{
     net::{Ipv4Addr, SocketAddr},
 };
 use externally_driven_async_rt::{Either3, io::FrameWriterError, net::TcpStream, select3};
-use mpclipboard_shared2::{MessageReader, MessageReaderError, MessageWriter};
+use mpclipboard_shared::{MessageReader, MessageReaderError, MessageWriter};
 use rustix::io::Errno;
 use rustls::ClientConfig;
 use std::sync::Arc;

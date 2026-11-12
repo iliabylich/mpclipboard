@@ -2,7 +2,7 @@ use crate::{
     config::Config, runtime::LoopContext, tls_stream::TlsWriteHalf, upgrade::UpgradeError,
 };
 use externally_driven_async_rt::io::{AsyncWrite, WriteAllError};
-use mpclipboard_shared2::{PROTOCOL_VERSION, UPGRADE_PROTOCOL};
+use mpclipboard_shared::{PROTOCOL_VERSION, UPGRADE_PROTOCOL};
 
 pub(crate) struct UpgradeWriter<'s> {
     tx: TlsWriteHalf<'s>,

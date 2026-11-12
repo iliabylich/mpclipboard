@@ -1,7 +1,7 @@
 use crate::{constants::UPGRADE_TIMEOUT, upgrade::ParseError};
 use core::{ffi::CStr, net::AddrParseError, str::Utf8Error};
 use externally_driven_async_rt::io::{FrameWriterError, WriteAllError};
-use mpclipboard_shared2::{FixedStrError, ID, MessageReaderError};
+use mpclipboard_shared::{FixedStrError, ID, MessageReaderError};
 use rustix::io::Errno;
 
 #[derive(Debug, PartialEq, Eq)]

@@ -4,7 +4,7 @@ use core::{
     future::poll_fn,
     task::{Poll, Waker},
 };
-use mpclipboard_shared2::{ID, Message, Store};
+use mpclipboard_shared::{ID, Message, Store};
 
 pub(crate) struct PubSub {
     current: Store,
@@ -104,7 +104,7 @@ mod tests {
         pin::pin,
         task::{Context, Poll},
     };
-    use mpclipboard_shared2::{ID, Message};
+    use mpclipboard_shared::{ID, Message};
     use std::{
         string::String,
         sync::{

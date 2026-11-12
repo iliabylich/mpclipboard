@@ -1,6 +1,6 @@
 use crate::Connectivity;
 use externally_driven_async_rt::State;
-use mpclipboard_shared2::Message;
+use mpclipboard_shared::Message;
 
 #[derive(Debug)]
 pub(crate) struct LoopState {
@@ -44,7 +44,7 @@ mod tests {
     use super::{LoopEvent, LoopState};
     use crate::Connectivity;
     use externally_driven_async_rt::State;
-    use mpclipboard_shared2::Message;
+    use mpclipboard_shared::Message;
 
     #[test]
     fn test_initially_empty() {

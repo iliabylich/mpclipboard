@@ -1,10 +1,10 @@
 [Unit]
-AssertPathExists=/usr/bin/server2
+AssertPathExists=/usr/bin/mpclipboard-server
 
 [Service]
 WorkingDirectory=~
 EnvironmentFile=/etc/mpclipboard-server/env
-ExecStart=/usr/bin/server2
+ExecStart=/usr/bin/mpclipboard-server
 Restart=always
 PrivateTmp=false
 NoNewPrivileges=true

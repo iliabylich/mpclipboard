@@ -1,7 +1,7 @@
 pub use config::{ConfigError, ConfigIdError, ConfigTokenError, ConfigUrlError, LookupError};
 pub use connectivity::Connectivity;
 pub use mpclipboard::{MPClipboard, MPClipboardError};
-pub use mpclipboard_shared2::FixedStrError;
+pub use mpclipboard_shared::FixedStrError;
 pub use output::Output;
 pub use runtime::RuntimeError;
 pub use url::UrlParseError;

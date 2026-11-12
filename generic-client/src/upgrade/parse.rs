@@ -2,7 +2,7 @@ use crate::{
     constants::{UPGRADE_RESPONSE_BUFFER_SIZE, UPGRADE_RESPONSE_MAX_HEADERS},
     upgrade::UpgradeError,
 };
-use mpclipboard_shared2::{UPGRADE_PROTOCOL, http::has_token};
+use mpclipboard_shared::{UPGRADE_PROTOCOL, http::has_token};
 
 pub(crate) fn parse(bytes: &[u8]) -> Result<bool, UpgradeError> {
     let mut headers = [httparse::EMPTY_HEADER; UPGRADE_RESPONSE_MAX_HEADERS];
