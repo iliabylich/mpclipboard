@@ -1,0 +1,7 @@
+[package]
+name = "mpclipboard-shared2"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+externally-driven-async-rt = { path = "../../externally-driven-async-rt" }
