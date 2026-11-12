@@ -7,7 +7,7 @@ edition = "2024"
 crate-type = ["cdylib", "rlib", "staticlib"]
 
 [dependencies]
-externally-driven-async-rt = { version = "0.3.0" }
+externally-driven-async-rt = { version = "0.3.1" }
 mpclipboard-shared = { path = "../shared" }
 rustls = { version = "0.23", default-features = false, features = [
     "ring",
@@ -32,3 +32,8 @@ env_logger = { version = "0.11", default-features = false, features = [
 
 [dev-dependencies]
 rustix = { version = "1", features = ["event"] }
+
+[profile.release]
+panic = "abort"
+lto = "fat"
+codegen-units = 1

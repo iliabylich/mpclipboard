@@ -13,7 +13,7 @@ test = false
 bench = false
 
 [dependencies]
-externally-driven-async-rt = { version = "0.3.0" }
+externally-driven-async-rt = { version = "0.3.1" }
 mpclipboard-shared = { path = "../shared" }
 rustix = { version = "1", default-features = false, features = [
     "event",
