@@ -2,7 +2,14 @@
 
 A Java wrapper around the native [`generic-client`](/generic-client), packaged as an `.aar` (`classes.jar` + `jni/arm64-v8a/libmpclipboard_android.so`).
 
-It contains no UI, no manifest components, no permissions and no clipboard integration. The host app builds all of that itself, the same way the [Linux](/linux) and [macOS](/macos) clients do.
+What it does NOT provide or specify:
+
+1. UI
+2. manifest components
+3. permissions
+4. clipboard integration
+
+The host app builds all of that itself, the same way the [Linux](/linux) and [macOS](/macos) clients do.
 
 ### Building
 
@@ -11,8 +18,6 @@ mise build:debug                      # build/outputs/aar/mpclipboard-debug.aar
 mise build:release                    # build/outputs/aar/mpclipboard-release.aar
 mise release --out <absolute path>    # build:release + copy the .aar to <absolute path>
 ```
-
-The SDK, NDK, Gradle home and Android user home all live in `.cache/`.
 
 ### Integration
 
