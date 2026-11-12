@@ -1,7 +1,7 @@
 use crate::{
     Connectivity,
     config::Config,
-    constants::FREEZE_TIME,
+    constants::{FREEZE_TIME, KEEPALIVE_COUNT, KEEPALIVE_IDLE, KEEPALIVE_INTERVAL},
     loop_state::LoopEvent,
     outbox::Outbox,
     resolve::{ResolveError, resolve},
@@ -80,6 +80,10 @@ impl Connection {
             .await
             .ok_or(ConnectionError::TcpStuck)?
             .map_err(ConnectionError::Connect)?;
+
+        tcp.set_keepalive(KEEPALIVE_IDLE, KEEPALIVE_INTERVAL, KEEPALIVE_COUNT)
+            .map_err(ConnectionError::Keepalive)?;
+
         Ok(tcp)
     }
 
@@ -148,6 +152,8 @@ pub(crate) enum ConnectionError {
     Resolve(#[from] ResolveError),
     #[error("failed to connect: {0}")]
     Connect(Errno),
+    #[error("failed to enable TCP keepalive: {0}")]
+    Keepalive(Errno),
     #[error(transparent)]
     Tls(#[from] TlsError),
     #[error("upgrade failed: {0}")]

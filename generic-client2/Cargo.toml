@@ -7,7 +7,7 @@ edition = "2024"
 crate-type = ["cdylib", "rlib", "staticlib"]
 
 [dependencies]
-externally-driven-async-rt = { path = "../../externally-driven-async-rt" }
+externally-driven-async-rt = { version = "0.3.0" }
 mpclipboard-shared2 = { path = "../shared2" }
 rustls = { version = "0.23", default-features = false, features = [
     "ring",

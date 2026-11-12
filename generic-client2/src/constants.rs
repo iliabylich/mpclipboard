@@ -11,6 +11,10 @@ pub(crate) const FDS: usize = 1;
 
 pub(crate) const FREEZE_TIME: Duration = Duration::from_secs(3);
 
+pub(crate) const KEEPALIVE_IDLE: Duration = Duration::from_secs(1);
+pub(crate) const KEEPALIVE_INTERVAL: Duration = Duration::from_secs(1);
+pub(crate) const KEEPALIVE_COUNT: u32 = 2;
+
 pub(crate) const DNS_SERVER: SocketAddrV4 = SocketAddrV4::new(Ipv4Addr::new(8, 8, 8, 8), 53);
 
 pub(crate) const TLS_BUFFER_SIZE: usize = 17 * 1024;
