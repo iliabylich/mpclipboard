@@ -7,11 +7,13 @@ config_roots = [
     "dev-certs",
     "fdroid",
     "generic-client",
+    "generic-client2",
     "linux",
     "macos",
     "poll-cli",
     "server",
     "shared",
+    "shared2",
 ]
 
 [tools]

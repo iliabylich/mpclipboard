@@ -1,0 +1,34 @@
+[package]
+name = "mpclipboard-generic-client2"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib", "rlib", "staticlib"]
+
+[dependencies]
+externally-driven-async-rt = { path = "../../externally-driven-async-rt" }
+mpclipboard-shared2 = { path = "../shared2" }
+rustls = { version = "0.23", default-features = false, features = [
+    "ring",
+    "std",
+    "logging",
+] }
+webpki-roots = "1"
+rustix = { version = "1", default-features = false, features = ["std"] }
+mini-sansio-dns = "2"
+httparse = "1"
+boml = "2"
+log = "0.4"
+thiserror = "2"
+
+[target.'cfg(target_os = "android")'.dependencies]
+android_logger = { version = "0.15", default-features = false }
+
+[target.'cfg(any(target_os = "linux", target_os = "macos"))'.dependencies]
+env_logger = { version = "0.11", default-features = false, features = [
+    "color",
+] }
+
+[dev-dependencies]
+rustix = { version = "1", features = ["event"] }
