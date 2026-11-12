@@ -11,16 +11,10 @@ mod config;
 mod constants;
 mod env;
 mod errors;
-mod fixed_str;
 mod handshake;
-mod id;
-mod message;
-mod message_reader;
-mod message_stream;
 mod pubsub;
 mod stderr;
 mod stranger;
-mod token;
 
 pub use errors::ServerError;
 pub use stderr::Stderr;

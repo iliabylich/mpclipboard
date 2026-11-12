@@ -1,12 +1,13 @@
-use crate::{constants::MAX_CLIENTS, id::ID, message::Message};
+use crate::constants::MAX_CLIENTS;
 use core::{
-    cell::{Cell, RefCell},
+    cell::RefCell,
     future::poll_fn,
     task::{Poll, Waker},
 };
+use mpclipboard_shared2::{ID, Message, Store};
 
 pub(crate) struct PubSub {
-    current: Cell<Option<Message>>,
+    current: Store,
     slots: [RefCell<Slot>; MAX_CLIENTS],
 }
 
@@ -22,7 +23,7 @@ enum Slot {
 impl PubSub {
     pub(crate) fn new() -> Self {
         Self {
-            current: Cell::new(None),
+            current: Store::default(),
             slots: [const { RefCell::new(Slot::Free) }; MAX_CLIENTS],
         }
     }
@@ -34,7 +35,7 @@ impl PubSub {
             .find(|slot| matches!(*slot.borrow(), Slot::Free))?;
 
         *slot.borrow_mut() = Slot::Taken {
-            pending: self.current.get(),
+            pending: self.current.current(),
             waker: None,
         };
         Some(PubSubHandle { pubsub: self, slot })
@@ -64,11 +65,9 @@ impl PubSubHandle<'_> {
     }
 
     pub(crate) fn publish(&self, id: ID, message: Message) {
-        let current = &self.pubsub.current;
-        if current.get() == Some(message) {
+        if !self.pubsub.current.add(message) {
             return;
         }
-        current.set(Some(message));
 
         info!("[{id}] publishing {message:?}");
 
@@ -99,12 +98,13 @@ impl Drop for PubSubHandle<'_> {
 #[cfg(test)]
 mod tests {
     use super::{PubSub, PubSubHandle};
-    use crate::{constants::MAX_CLIENTS, id::ID, message::tests::message};
+    use crate::constants::MAX_CLIENTS;
     use core::{
         future::Future,
         pin::pin,
         task::{Context, Poll},
     };
+    use mpclipboard_shared2::{ID, Message};
     use std::{
         string::String,
         sync::{
@@ -114,6 +114,10 @@ mod tests {
         task::Wake,
         vec::Vec,
     };
+
+    fn message(text: &str) -> Message {
+        Message::truncate(text).unwrap()
+    }
 
     struct CountingWaker(AtomicUsize);
 
@@ -139,7 +143,7 @@ mod tests {
     #[test]
     fn test_new_client_gets_current_message() {
         let pubsub = PubSub::new();
-        pubsub.current.set(Some(message("hello")));
+        assert!(pubsub.current.add(message("hello")));
         let waker = Arc::new(CountingWaker(AtomicUsize::new(0)));
 
         let handle = pubsub.subscribe().unwrap();
@@ -169,7 +173,7 @@ mod tests {
 
         a.publish(id("a"), message("from a"));
 
-        assert_eq!(pubsub.current.get(), Some(message("from a")));
+        assert_eq!(pubsub.current.current(), Some(message("from a")));
         assert_eq!(a_waker.0.load(Ordering::Relaxed), 0);
         assert_eq!(b_waker.0.load(Ordering::Relaxed), 1);
         assert_eq!(poll_receive(&a, &a_waker), None);
@@ -192,7 +196,7 @@ mod tests {
     #[test]
     fn test_publish_same_message_is_ignored() {
         let pubsub = PubSub::new();
-        pubsub.current.set(Some(message("same")));
+        assert!(pubsub.current.add(message("same")));
         let waker = Arc::new(CountingWaker(AtomicUsize::new(0)));
 
         let a = pubsub.subscribe().unwrap();

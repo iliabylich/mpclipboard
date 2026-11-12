@@ -1,12 +1,13 @@
 use crate::{
     ServerContext, client::Client, constants::HANDSHAKE_REQUEST_BUFFER_SIZE, errors::ClientError,
-    id::ID, message::Message, message_reader::MessageReader, pubsub::PubSubHandle, token::Token,
+    pubsub::PubSubHandle,
 };
 use core::time::Duration;
 use externally_driven_async_rt::{
     io::{AsyncRead, AsyncWriteExt},
     net::TcpStream,
 };
+use mpclipboard_shared2::{ID, Token};
 
 pub(crate) struct Stranger<'a> {
     stream: TcpStream,
@@ -32,29 +33,19 @@ impl<'a> Stranger<'a> {
         ctx: &ServerContext<'_>,
         timeout: Duration,
     ) -> Result<Option<Client<'a>>, ClientError> {
-        let mut reader = MessageReader::new();
-
-        let read_write = self.read_write(ctx, &mut reader);
+        let read_write = self.read_write(ctx);
         let Some(read_write) = ctx.timeout(timeout, read_write).await else {
             return Err(ClientError::HandshakeTimeout(timeout));
         };
-        let Some((id, leftover_message)) = read_write? else {
+        let Some(id) = read_write? else {
             return Ok(None);
         };
         info!("[{id}] connected");
 
-        if let Some(message) = leftover_message {
-            self.pubsub.publish(id, message);
-        }
-
-        Ok(Some(Client::new(self.stream, reader, id, self.pubsub)))
+        Ok(Some(Client::new(self.stream, id, self.pubsub)))
     }
 
-    async fn read_write(
-        &mut self,
-        ctx: &ServerContext<'_>,
-        reader: &mut MessageReader,
-    ) -> Result<Option<(ID, Option<Message>)>, ClientError> {
+    async fn read_write(&mut self, ctx: &ServerContext<'_>) -> Result<Option<ID>, ClientError> {
         let Some((received, id, consumed)) = self.read(ctx).await? else {
             return Ok(None);
         };
@@ -64,12 +55,13 @@ impl<'a> Stranger<'a> {
             return Err(ClientError::InvalidToken { id });
         }
 
+        if consumed != self.len {
+            return Err(ClientError::BytesAfterHandshake { id });
+        }
+
         self.write_101(ctx, id).await?;
 
-        let leftover_message = reader.received(&self.buf[consumed..self.len]);
-        let leftover_message =
-            leftover_message.map_err(|err| ClientError::MalformedFrame { id, err })?;
-        Ok(Some((id, leftover_message)))
+        Ok(Some(id))
     }
 
     async fn read(

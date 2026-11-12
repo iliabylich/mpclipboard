@@ -4,9 +4,9 @@ use crate::{
     errors::ClientError,
     pubsub::{PubSub, PubSubHandle},
     stranger::Stranger,
-    token::Token,
 };
 use externally_driven_async_rt::net::{TcpListener, TcpStream};
+use mpclipboard_shared2::Token;
 
 pub(crate) struct Acceptor {
     listener: TcpListener,

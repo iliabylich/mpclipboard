@@ -1,5 +1,6 @@
-use crate::{errors::ServerError, token::Token};
+use crate::errors::ServerError;
 use core::net::SocketAddr;
+use mpclipboard_shared2::Token;
 
 pub(crate) fn from_env() -> Result<(SocketAddr, &'static str, Token), ServerError> {
     let (bind_address, raw_bind_address) =
@@ -23,7 +24,8 @@ fn parse_token(s: Option<&str>) -> Result<Token, ServerError> {
 mod tests {
     use core::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
 
-    use crate::{errors::ServerError, token::Token};
+    use crate::errors::ServerError;
+    use mpclipboard_shared2::Token;
 
     use super::{parse_address, parse_token};
 

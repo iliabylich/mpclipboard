@@ -1,29 +1,16 @@
-use crate::{
-    ServerContext, errors::ClientError, id::ID, message_reader::MessageReader,
-    message_stream::MessageStream, pubsub::PubSubHandle,
-};
+use crate::{ServerContext, errors::ClientError, pubsub::PubSubHandle};
 use externally_driven_async_rt::{Either, io::AsyncWriteExt, net::TcpStream, select};
+use mpclipboard_shared2::{ID, MessageReader};
 
 pub(crate) struct Client<'a> {
     stream: TcpStream,
-    reader: MessageReader,
     id: ID,
     pubsub: PubSubHandle<'a>,
 }
 
 impl<'a> Client<'a> {
-    pub(crate) fn new(
-        stream: TcpStream,
-        reader: MessageReader,
-        id: ID,
-        pubsub: PubSubHandle<'a>,
-    ) -> Self {
-        Self {
-            stream,
-            reader,
-            id,
-            pubsub,
-        }
+    pub(crate) fn new(stream: TcpStream, id: ID, pubsub: PubSubHandle<'a>) -> Self {
+        Self { stream, id, pubsub }
     }
 
     pub(crate) async fn read_write_messages(
@@ -32,18 +19,20 @@ impl<'a> Client<'a> {
     ) -> Result<(), ClientError> {
         let Self {
             mut stream,
-            reader,
             id,
             pubsub,
         } = self;
 
         let (rx, mut tx) = stream.split();
-        let mut messages = MessageStream::new(rx, reader, id);
+        let mut reader = MessageReader::new(rx);
         loop {
-            match select(messages.next(ctx), pubsub.receive()).await {
+            match select(reader.read(ctx), pubsub.receive()).await {
                 Either::Left(Ok(Some(message))) => pubsub.publish(id, message),
-                Either::Left(Ok(None)) => return Ok(()),
-                Either::Left(Err(err)) => return Err(err),
+                Either::Left(Ok(None)) => {
+                    info!("[{id}] disconnected");
+                    return Ok(());
+                }
+                Either::Left(Err(err)) => return Err(ClientError::Read { id, err }),
                 Either::Right(message) => tx
                     .write_all(ctx, &message.encode())
                     .await

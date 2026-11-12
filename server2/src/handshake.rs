@@ -1,14 +1,9 @@
 use core::str::Utf8Error;
-
-use crate::{
-    constants::{
-        HANDSHAKE_REQUEST_BUFFER_SIZE, HANDSHAKE_REQUEST_MAX_HEADERS, PROTOCOL_VERSION,
-        UPGRADE_PROTOCOL,
-    },
-    fixed_str::FixedStrError,
-    id::ID,
-    token::Token,
+use mpclipboard_shared2::{
+    FixedStrError, ID, PROTOCOL_VERSION, Token, UPGRADE_PROTOCOL, http::has_token,
 };
+
+use crate::constants::{HANDSHAKE_REQUEST_BUFFER_SIZE, HANDSHAKE_REQUEST_MAX_HEADERS};
 
 pub(crate) fn parse(bytes: &[u8]) -> Result<Option<(Token, ID, usize)>, ParseError> {
     let mut headers = [httparse::EMPTY_HEADER; HANDSHAKE_REQUEST_MAX_HEADERS];
@@ -63,12 +58,6 @@ pub(crate) fn parse(bytes: &[u8]) -> Result<Option<(Token, ID, usize)>, ParseErr
     Ok(Some((token, id, len)))
 }
 
-fn has_token(value: &[u8], token: &str) -> bool {
-    value
-        .split(|byte| *byte == b',')
-        .any(|item| item.trim_ascii().eq_ignore_ascii_case(token.as_bytes()))
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ParseError {
     InvalidHttpRequest(httparse::Error),
@@ -118,7 +107,7 @@ mod tests {
         ParseError::{self, *},
         Token, parse,
     };
-    use crate::fixed_str::FixedStrError;
+    use mpclipboard_shared2::FixedStrError;
     use std::{format, string::String, vec::Vec};
 
     const REQUEST: &str = "GET / HTTP/1.1\r\n\

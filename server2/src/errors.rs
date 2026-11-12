@@ -1,6 +1,7 @@
-use crate::{fixed_str::FixedStrError, handshake::ParseError, id::ID};
+use crate::handshake::ParseError;
 use core::{ffi::CStr, net::AddrParseError, str::Utf8Error, time::Duration};
 use externally_driven_async_rt::io::WriteAllError;
+use mpclipboard_shared2::{FixedStrError, ID, MessageReaderError};
 use rustix::io::Errno;
 
 #[derive(Debug, PartialEq, Eq)]
@@ -59,10 +60,20 @@ pub(crate) enum ClientError {
     HandshakeTimeout(Duration),
     HandshakeRead(Errno),
     Handshake(ParseError),
-    InvalidToken { id: ID },
-    Read { id: ID, err: Errno },
-    MalformedFrame { id: ID, err: Utf8Error },
-    Write { id: ID, err: WriteAllError },
+    InvalidToken {
+        id: ID,
+    },
+    BytesAfterHandshake {
+        id: ID,
+    },
+    Read {
+        id: ID,
+        err: MessageReaderError<Errno>,
+    },
+    Write {
+        id: ID,
+        err: WriteAllError<Errno>,
+    },
 }
 
 impl core::fmt::Display for ClientError {
@@ -74,10 +85,10 @@ impl core::fmt::Display for ClientError {
             Self::HandshakeRead(err) => write!(f, "read() failed during handshake: {err}"),
             Self::Handshake(err) => write!(f, "{err}"),
             Self::InvalidToken { id } => write!(f, "[{id}] invalid token"),
-            Self::Read { id, err } => write!(f, "[{id}] read() failed: {err}"),
-            Self::MalformedFrame { id, err } => {
-                write!(f, "[{id}] received a malformed frame: {err}")
+            Self::BytesAfterHandshake { id } => {
+                write!(f, "[{id}] sent bytes before receiving 101")
             }
+            Self::Read { id, err } => write!(f, "[{id}] {err}"),
             Self::Write { id, err } => write!(f, "[{id}] {err}"),
         }
     }
