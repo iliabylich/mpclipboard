@@ -1,11 +1,18 @@
-use crate::url::{Url, UrlParseError};
+use crate::{
+    constants::MAX_CONFIG_SIZE,
+    url::{Url, UrlParseError},
+};
 use boml::{Toml, table::TomlGetError, types::TomlValueType};
-use core::ffi::CStr;
+use core::{ffi::CStr, str::Utf8Error};
 use mpclipboard_shared::{
     FixedStrError, ID, Token,
     env::{self, EnvVarError},
 };
-use std::path::{Path, PathBuf};
+use rustix::{
+    fd::OwnedFd,
+    fs::{Mode, OFlags},
+    io::Errno,
+};
 
 #[derive(Debug, Clone)]
 pub(crate) struct Config {
@@ -23,17 +30,13 @@ impl Config {
     }
 
     pub(crate) fn new_from_file() -> Result<Self, ConfigError> {
-        let mut text = None;
-        for path in paths()? {
-            log::info!("trying {}...", path.display());
-            if let Some(found) = read(&path)? {
-                text = Some(found);
-                break;
-            }
-        }
+        let mut buf = [0; MAX_CONFIG_SIZE + 1];
+        let text = match open()? {
+            Some(fd) => Some(read(&fd, &mut buf)?),
+            None => None,
+        };
 
         let toml = text
-            .as_deref()
             .map(boml::parse)
             .transpose()
             .map_err(|err| ConfigError::MalformedToml(err.src.start))?;
@@ -48,27 +51,27 @@ impl Config {
 
 fn get_url(toml: Option<&Toml<'_>>) -> Result<Url, ConfigUrlError> {
     let url = get(c"MPCLIPBOARD_URL", toml, "url")?;
-    let url = Url::parse(&url)?;
+    let url = Url::parse(url)?;
     Ok(url)
 }
 
 fn get_token(toml: Option<&Toml<'_>>) -> Result<Token, ConfigTokenError> {
     let token = get(c"MPCLIPBOARD_TOKEN", toml, "token")?;
-    let token = Token::new(&token)?;
+    let token = Token::new(token)?;
     Ok(token)
 }
 
 fn get_id(toml: Option<&Toml<'_>>) -> Result<ID, ConfigIdError> {
     let id = get(c"MPCLIPBOARD_ID", toml, "id")?;
-    let id = ID::new(&id)?;
+    let id = ID::new(id)?;
     Ok(id)
 }
 
-fn get(
+fn get<'a>(
     env_var_name: &'static CStr,
-    toml: Option<&Toml<'_>>,
+    toml: Option<&'a Toml<'_>>,
     config_key: &'static str,
-) -> Result<String, LookupError> {
+) -> Result<&'a str, LookupError> {
     from_env(env_var_name)
         .transpose()
         .or_else(|| toml.and_then(|toml| from_toml(toml, config_key).transpose()))
@@ -78,14 +81,17 @@ fn get(
         }))
 }
 
-fn from_env(env_var_name: &'static CStr) -> Result<Option<String>, LookupError> {
+fn from_env(env_var_name: &'static CStr) -> Result<Option<&'static str>, LookupError> {
     let value = env::var(env_var_name)?;
-    Ok(value.map(String::from))
+    Ok(value)
 }
 
-fn from_toml(toml: &Toml<'_>, config_key: &'static str) -> Result<Option<String>, LookupError> {
+fn from_toml<'a>(
+    toml: &'a Toml<'_>,
+    config_key: &'static str,
+) -> Result<Option<&'a str>, LookupError> {
     match toml.get_string(config_key) {
-        Ok(value) => Ok(Some(value.to_string())),
+        Ok(value) => Ok(Some(value)),
         Err(TomlGetError::InvalidKey) => Ok(None),
         Err(TomlGetError::TypeMismatch(_, found)) => {
             Err(LookupError::NotAString { config_key, found })
@@ -93,25 +99,49 @@ fn from_toml(toml: &Toml<'_>, config_key: &'static str) -> Result<Option<String>
     }
 }
 
-fn paths() -> Result<impl Iterator<Item = PathBuf>, EnvVarError> {
-    let xdg = env::var(c"XDG_CONFIG_HOME")?
-        .map(|dir| PathBuf::from(dir).join("mpclipboard").join("config.toml"));
-    let home = env::var(c"HOME")?.map(|home| {
-        PathBuf::from(home)
-            .join(".config")
-            .join("mpclipboard")
-            .join("config.toml")
-    });
+fn open() -> Result<Option<OwnedFd>, ConfigError> {
+    let xdg = env::var(c"XDG_CONFIG_HOME")?.map(|dir| (dir, "mpclipboard/config.toml"));
+    let home = env::var(c"HOME")?.map(|home| (home, ".config/mpclipboard/config.toml"));
 
-    Ok([xdg, home].into_iter().flatten())
+    for (dir, file) in [xdg, home].into_iter().flatten() {
+        log::info!("trying {dir}/{file}...");
+        if let Some(fd) = open_in(dir, file).map_err(ConfigError::Read)? {
+            return Ok(Some(fd));
+        }
+    }
+    Ok(None)
 }
 
-fn read(path: &Path) -> Result<Option<String>, ConfigError> {
-    match std::fs::read_to_string(path) {
-        Ok(text) => Ok(Some(text)),
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(err) => Err(ConfigError::Read(err)),
+fn open_in(dir: &str, file: &str) -> Result<Option<OwnedFd>, Errno> {
+    let flags = OFlags::RDONLY | OFlags::CLOEXEC;
+    let dir = match rustix::fs::open(dir, flags, Mode::empty()) {
+        Ok(dir) => dir,
+        Err(Errno::NOENT) => return Ok(None),
+        Err(err) => return Err(err),
+    };
+    match rustix::fs::openat(&dir, file, flags, Mode::empty()) {
+        Ok(fd) => Ok(Some(fd)),
+        Err(Errno::NOENT) => Ok(None),
+        Err(err) => Err(err),
     }
+}
+
+fn read<'a>(fd: &OwnedFd, buf: &'a mut [u8; MAX_CONFIG_SIZE + 1]) -> Result<&'a str, ConfigError> {
+    let mut len = 0;
+    while len < buf.len() {
+        match rustix::io::read(fd, &mut buf[len..]) {
+            Ok(0) => break,
+            Ok(read) => len += read,
+            Err(Errno::INTR) => {}
+            Err(err) => return Err(ConfigError::Read(err)),
+        }
+    }
+    if len > MAX_CONFIG_SIZE {
+        return Err(ConfigError::ConfigIsTooLong);
+    }
+
+    let text = core::str::from_utf8(&buf[..len])?;
+    Ok(text)
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -119,7 +149,11 @@ pub enum ConfigError {
     #[error(transparent)]
     NonUtf8Env(#[from] EnvVarError),
     #[error("failed to read config: {0}")]
-    Read(std::io::Error),
+    Read(Errno),
+    #[error("config is too long (max is {MAX_CONFIG_SIZE} bytes)")]
+    ConfigIsTooLong,
+    #[error("config is not valid utf-8: {0}")]
+    NonUtf8(#[from] Utf8Error),
     #[error("failed to parse TOML config at byte {0}")]
     MalformedToml(usize),
     #[error("invalid url: {0}")]

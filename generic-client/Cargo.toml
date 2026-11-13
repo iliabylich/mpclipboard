@@ -15,7 +15,7 @@ rustls = { version = "0.23", default-features = false, features = [
     "logging",
 ] }
 webpki-roots = "1"
-rustix = { version = "1", default-features = false, features = ["std"] }
+rustix = { version = "1", default-features = false, features = ["std", "fs"] }
 mini-sansio-dns = "2"
 httparse = "1"
 boml = "2"

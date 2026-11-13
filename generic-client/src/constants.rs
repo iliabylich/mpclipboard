@@ -9,6 +9,8 @@ pub(crate) const ROOT_TASK_SIZE: usize = 7368;
 pub(crate) const TIMERS: usize = 1;
 pub(crate) const FDS: usize = 1;
 
+pub(crate) const MAX_CONFIG_SIZE: usize = 1024;
+
 pub(crate) const FREEZE_TIME: Duration = Duration::from_secs(3);
 
 pub(crate) const KEEPALIVE_IDLE: Duration = Duration::from_secs(1);
