@@ -13,7 +13,6 @@ run = "cargo test"
 ["cargo:outdated"]
 hide = true
 run = "cargo outdated"
-tools = { "cargo:cargo-outdated" = "latest" }
 
 ["cargo:update"]
 hide = true
