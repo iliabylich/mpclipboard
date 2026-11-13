@@ -1,12 +1,12 @@
 use crate::{constants::UPGRADE_TIMEOUT, upgrade::ParseError};
-use core::{ffi::CStr, net::AddrParseError, str::Utf8Error};
+use core::net::AddrParseError;
 use externally_driven_async_rt::io::{FrameWriterError, WriteAllError};
-use mpclipboard_shared::{FixedStrError, ID, MessageReaderError};
+use mpclipboard_shared::{FixedStrError, ID, MessageReaderError, env::EnvVarError};
 use rustix::io::Errno;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum ServerError {
-    NonUtf8EnvVar { name: &'static CStr, err: Utf8Error },
+    NonUtf8EnvVar(EnvVarError),
     InvalidRustLog(&'static str),
     MissingBindAddress,
     InvalidBindAddress(AddrParseError),
@@ -22,11 +22,7 @@ pub enum ServerError {
 impl core::fmt::Display for ServerError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            Self::NonUtf8EnvVar { name, err } => write!(
-                f,
-                "env var {} must be valid utf-8: {err}",
-                name.to_str().unwrap_or("<non-utf8 name>")
-            ),
+            Self::NonUtf8EnvVar(err) => write!(f, "{err}"),
             Self::InvalidRustLog(value) => write!(
                 f,
                 "invalid RUST_LOG=\"{value}\": expected one of off, error, warn, info, debug, trace"
@@ -46,6 +42,12 @@ impl core::fmt::Display for ServerError {
             Self::Poll(err) => write!(f, "poll() failed: {err}"),
             Self::EventLoop(err) => write!(f, "{err}"),
         }
+    }
+}
+
+impl From<EnvVarError> for ServerError {
+    fn from(err: EnvVarError) -> Self {
+        Self::NonUtf8EnvVar(err)
     }
 }
 

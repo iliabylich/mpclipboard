@@ -1,6 +1,10 @@
 use crate::url::{Url, UrlParseError};
 use boml::{Toml, table::TomlGetError, types::TomlValueType};
-use mpclipboard_shared::{FixedStrError, ID, Token};
+use core::ffi::CStr;
+use mpclipboard_shared::{
+    FixedStrError, ID, Token,
+    env::{self, EnvVarError},
+};
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone)]
@@ -20,7 +24,7 @@ impl Config {
 
     pub(crate) fn new_from_file() -> Result<Self, ConfigError> {
         let mut text = None;
-        for path in paths() {
+        for path in paths()? {
             log::info!("trying {}...", path.display());
             if let Some(found) = read(&path)? {
                 text = Some(found);
@@ -43,25 +47,25 @@ impl Config {
 }
 
 fn get_url(toml: Option<&Toml<'_>>) -> Result<Url, ConfigUrlError> {
-    let url = get("MPCLIPBOARD_URL", toml, "url")?;
+    let url = get(c"MPCLIPBOARD_URL", toml, "url")?;
     let url = Url::parse(&url)?;
     Ok(url)
 }
 
 fn get_token(toml: Option<&Toml<'_>>) -> Result<Token, ConfigTokenError> {
-    let token = get("MPCLIPBOARD_TOKEN", toml, "token")?;
+    let token = get(c"MPCLIPBOARD_TOKEN", toml, "token")?;
     let token = Token::new(&token)?;
     Ok(token)
 }
 
 fn get_id(toml: Option<&Toml<'_>>) -> Result<ID, ConfigIdError> {
-    let id = get("MPCLIPBOARD_ID", toml, "id")?;
+    let id = get(c"MPCLIPBOARD_ID", toml, "id")?;
     let id = ID::new(&id)?;
     Ok(id)
 }
 
 fn get(
-    env_var_name: &'static str,
+    env_var_name: &'static CStr,
     toml: Option<&Toml<'_>>,
     config_key: &'static str,
 ) -> Result<String, LookupError> {
@@ -74,14 +78,9 @@ fn get(
         }))
 }
 
-fn from_env(env_var_name: &'static str) -> Result<Option<String>, LookupError> {
-    let Some(value) = std::env::var_os(env_var_name) else {
-        return Ok(None);
-    };
-    let value = value
-        .into_string()
-        .map_err(|_| LookupError::NonUtf8Env { env_var_name })?;
-    Ok(Some(value))
+fn from_env(env_var_name: &'static CStr) -> Result<Option<String>, LookupError> {
+    let value = env::var(env_var_name)?;
+    Ok(value.map(String::from))
 }
 
 fn from_toml(toml: &Toml<'_>, config_key: &'static str) -> Result<Option<String>, LookupError> {
@@ -94,17 +93,17 @@ fn from_toml(toml: &Toml<'_>, config_key: &'static str) -> Result<Option<String>
     }
 }
 
-fn paths() -> impl Iterator<Item = PathBuf> {
-    let xdg = std::env::var_os("XDG_CONFIG_HOME")
+fn paths() -> Result<impl Iterator<Item = PathBuf>, EnvVarError> {
+    let xdg = env::var(c"XDG_CONFIG_HOME")?
         .map(|dir| PathBuf::from(dir).join("mpclipboard").join("config.toml"));
-    let home = std::env::var_os("HOME").map(|home| {
+    let home = env::var(c"HOME")?.map(|home| {
         PathBuf::from(home)
             .join(".config")
             .join("mpclipboard")
             .join("config.toml")
     });
 
-    [xdg, home].into_iter().flatten()
+    Ok([xdg, home].into_iter().flatten())
 }
 
 fn read(path: &Path) -> Result<Option<String>, ConfigError> {
@@ -117,6 +116,8 @@ fn read(path: &Path) -> Result<Option<String>, ConfigError> {
 
 #[derive(Debug, thiserror::Error)]
 pub enum ConfigError {
+    #[error(transparent)]
+    NonUtf8Env(#[from] EnvVarError),
     #[error("failed to read config: {0}")]
     Read(std::io::Error),
     #[error("failed to parse TOML config at byte {0}")]
@@ -131,13 +132,16 @@ pub enum ConfigError {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum LookupError {
-    #[error("{config_key} is missing: set ${env_var_name} or add it to the config file")]
+    #[error(
+        "{config_key} is missing: set ${} or add it to the config file",
+        env_var_name.to_string_lossy()
+    )]
     Missing {
-        env_var_name: &'static str,
+        env_var_name: &'static CStr,
         config_key: &'static str,
     },
-    #[error("${env_var_name} must be valid utf-8")]
-    NonUtf8Env { env_var_name: &'static str },
+    #[error(transparent)]
+    NonUtf8Env(#[from] EnvVarError),
     #[error("{config_key} must be a string in toml, got {found:?}")]
     NotAString {
         config_key: &'static str,

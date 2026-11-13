@@ -6,6 +6,7 @@ extern crate std;
 pub const PROTOCOL_VERSION: &str = "6";
 pub const UPGRADE_PROTOCOL: &str = "mpclipboard-raw";
 
+pub mod env;
 pub mod http;
 
 mod fixed_str;

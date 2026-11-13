@@ -9,7 +9,6 @@ mod acceptor;
 mod client;
 mod config;
 mod constants;
-mod env;
 mod errors;
 mod pubsub;
 mod stderr;

@@ -1,11 +1,10 @@
 use crate::errors::ServerError;
 use core::net::SocketAddr;
-use mpclipboard_shared::Token;
+use mpclipboard_shared::{Token, env};
 
 pub(crate) fn from_env() -> Result<(SocketAddr, &'static str, Token), ServerError> {
-    let (bind_address, raw_bind_address) =
-        crate::env::var(c"MPCLIPBOARD_BIND_ADDRESS").and_then(parse_address)?;
-    let token = crate::env::var(c"MPCLIPBOARD_TOKEN").and_then(parse_token)?;
+    let (bind_address, raw_bind_address) = parse_address(env::var(c"MPCLIPBOARD_BIND_ADDRESS")?)?;
+    let token = parse_token(env::var(c"MPCLIPBOARD_TOKEN")?)?;
     Ok((bind_address, raw_bind_address, token))
 }
 

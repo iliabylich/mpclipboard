@@ -3,6 +3,7 @@ use core::{
     fmt::Write as _,
     sync::atomic::{AtomicBool, AtomicU8, Ordering},
 };
+use mpclipboard_shared::env;
 
 macro_rules! error {
     ($($arg:tt)+) => {
@@ -34,7 +35,7 @@ const NC: &str = "\x1b[0m";
 
 impl Logger {
     pub(crate) fn init() -> Result<(), ServerError> {
-        let level = match crate::env::var(c"RUST_LOG")? {
+        let level = match env::var(c"RUST_LOG")? {
             None => LevelFilter::Error,
             Some(value) => LevelFilter::parse(value).ok_or(ServerError::InvalidRustLog(value))?,
         };
