@@ -1,6 +1,6 @@
 use crate::{constants::DNS_SERVER, runtime::LoopContext};
 use core::net::{Ipv4Addr, SocketAddr};
-use externally_driven_async_rt::net::UdpSocket;
+use externally_driven_async_rt::net::{NetError, UdpSocket};
 use mini_sansio_dns::{Dns, DnsError, DnsRecordType, DnsWants, MAX_DNS_PACKET_LEN};
 use rustix::io::Errno;
 
@@ -48,9 +48,9 @@ pub(crate) enum ResolveError {
     #[error("failed to connect to DNS server: {0}")]
     Connect(Errno),
     #[error("failed to send DNS request: {0}")]
-    Send(Errno),
+    Send(NetError),
     #[error("failed to receive DNS response: {0}")]
-    Recv(Errno),
+    Recv(NetError),
     #[error("DNS server returned a non-IPv4 address")]
     NotIpv4,
 }

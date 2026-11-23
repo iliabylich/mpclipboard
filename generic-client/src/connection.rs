@@ -9,11 +9,13 @@ use crate::{
     tls_stream::{TlsError, TlsStream, TlsWriteHalf},
     upgrade::{UpgradeError, UpgradeReader, UpgradeWriter},
 };
-use core::{
-    convert::Infallible,
-    net::{Ipv4Addr, SocketAddr},
+use core::net::{Ipv4Addr, SocketAddr};
+use externally_driven_async_rt::{
+    Either3, MaybeTimedOut,
+    io::FrameWriterError,
+    net::{NetError, TcpStream},
+    select3,
 };
-use externally_driven_async_rt::{Either3, io::FrameWriterError, net::TcpStream, select3};
 use mpclipboard_shared::{MessageReader, MessageReaderError, MessageWriter};
 use rustix::io::Errno;
 use rustls::ClientConfig;
@@ -41,11 +43,15 @@ impl Connection {
         }
     }
 
-    pub(crate) async fn run(&self) -> Result<Infallible, ConnectionError> {
+    pub(crate) async fn run(&self) -> Result<!, ConnectionError> {
         let tls = self.establish().await?;
         log::info!("connected");
-        self.ctx
-            .dispatch(LoopEvent::Connectivity(Connectivity::Connected));
+        if let Err(event) = self
+            .ctx
+            .dispatch(LoopEvent::Connectivity(Connectivity::Connected))
+        {
+            log::warn!("events queue is full, dropping {event:?}");
+        }
         self.serve(tls).await
     }
 
@@ -62,24 +68,32 @@ impl Connection {
             return Ok(ip);
         }
 
-        let ip = self
+        let result = self
             .ctx
             .timeout(FREEZE_TIME, resolve(&self.ctx, host))
             .await
-            .ok_or(ConnectionError::DnsStuck)??;
-        Ok(ip)
+            .unwrap_or_else(|err| unreachable!("too many timers: {err:?}"));
+
+        match result {
+            MaybeTimedOut::Timeout => Err(ConnectionError::DnsStuck),
+            MaybeTimedOut::Completed(ip) => Ok(ip?),
+        }
     }
 
     async fn connect(&self, ip: Ipv4Addr) -> Result<TcpStream, ConnectionError> {
         let addr = SocketAddr::from((ip, self.config.url.port()));
         log::info!("connecting to {addr}");
 
-        let tcp = self
+        let result = self
             .ctx
             .timeout(FREEZE_TIME, TcpStream::connect(&self.ctx, addr))
             .await
-            .ok_or(ConnectionError::TcpStuck)?
-            .map_err(ConnectionError::Connect)?;
+            .unwrap_or_else(|err| unreachable!("too many timers: {err:?}"));
+
+        let tcp = match result {
+            MaybeTimedOut::Timeout => return Err(ConnectionError::TcpStuck),
+            MaybeTimedOut::Completed(tcp) => tcp.map_err(ConnectionError::Connect)?,
+        };
 
         tcp.set_keepalive(KEEPALIVE_IDLE, KEEPALIVE_INTERVAL, KEEPALIVE_COUNT)
             .map_err(ConnectionError::Keepalive)?;
@@ -91,10 +105,17 @@ impl Connection {
         let host = self.config.url.host();
         let mut tls = TlsStream::new(tcp, Arc::clone(self.tls_config), host)?;
 
-        self.ctx
+        let result = self
+            .ctx
             .timeout(FREEZE_TIME, tls.handshake(&self.ctx))
             .await
-            .ok_or(ConnectionError::TlsStuck)??;
+            .unwrap_or_else(|err| unreachable!("too many timers: {err:?}"));
+
+        match result {
+            MaybeTimedOut::Timeout => return Err(ConnectionError::TlsStuck),
+            MaybeTimedOut::Completed(handshake) => handshake?,
+        }
+
         Ok(tls)
     }
 
@@ -105,14 +126,21 @@ impl Connection {
             UpgradeReader::new(rx).read(&self.ctx).await
         };
 
-        self.ctx
+        let result = self
+            .ctx
             .timeout(FREEZE_TIME, upgrade)
             .await
-            .ok_or(ConnectionError::UpgradeStuck)??;
+            .unwrap_or_else(|err| unreachable!("too many timers: {err:?}"));
+
+        match result {
+            MaybeTimedOut::Timeout => return Err(ConnectionError::UpgradeStuck),
+            MaybeTimedOut::Completed(upgrade) => upgrade?,
+        }
+
         Ok(tls)
     }
 
-    async fn serve(&self, mut tls: TlsStream) -> Result<Infallible, ConnectionError> {
+    async fn serve(&self, mut tls: TlsStream) -> Result<!, ConnectionError> {
         let ctx = &self.ctx;
         let (rx, tx) = tls.split();
         let mut reader = MessageReader::new(rx);
@@ -127,7 +155,9 @@ impl Connection {
                         return Err(TlsError::Closed.into());
                     };
                     log::info!("received {message:?}");
-                    ctx.dispatch(LoopEvent::Received(message));
+                    if let Err(event) = ctx.dispatch(LoopEvent::Received(message)) {
+                        log::warn!("events queue is full, dropping {event:?}");
+                    }
                 }
                 Either3::Second(()) => self.move_message_from_outbox_to(&mut writer),
                 Either3::Third(written) => {
@@ -151,7 +181,7 @@ pub(crate) enum ConnectionError {
     #[error("failed to resolve host: {0}")]
     Resolve(#[from] ResolveError),
     #[error("failed to connect: {0}")]
-    Connect(Errno),
+    Connect(NetError),
     #[error("failed to enable TCP keepalive: {0}")]
     Keepalive(Errno),
     #[error(transparent)]

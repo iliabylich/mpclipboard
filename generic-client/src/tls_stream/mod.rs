@@ -12,7 +12,7 @@ pub(crate) use write_half::TlsWriteHalf;
 use crate::runtime::LoopContext;
 use core::cell::RefCell;
 use externally_driven_async_rt::{
-    Context, State,
+    Context, NotEnoughResources,
     io::{AsyncRead, AsyncWrite},
     net::TcpStream,
 };
@@ -57,8 +57,8 @@ impl TlsStream {
 
     pub(crate) async fn handshake(&mut self, ctx: &LoopContext<'_>) -> Result<(), TlsError> {
         let (rx, tx) = self.tcp.split();
-        let rx = TlsReadHalf::new(rx, &self.state);
-        let tx = TlsWriteHalf::new(tx, &self.state);
+        let mut rx = TlsReadHalf::new(rx, &self.state);
+        let mut tx = TlsWriteHalf::new(tx, &self.state);
         loop {
             let step = self.state.borrow_mut().step()?;
             match step {
@@ -77,7 +77,8 @@ impl AsyncRead for TlsStream {
 
     async fn read<
         'a,
-        S: State,
+        E: 'static,
+        const EVENTS: usize,
         const TASKS: usize,
         const TASK_SIZE: usize,
         const ROOT_TASK_SIZE: usize,
@@ -85,7 +86,7 @@ impl AsyncRead for TlsStream {
         const FDS: usize,
     >(
         &'a mut self,
-        ctx: &'a Context<'_, S, TASKS, TASK_SIZE, ROOT_TASK_SIZE, TIMERS, FDS>,
+        ctx: &'a Context<'_, E, EVENTS, TASKS, TASK_SIZE, ROOT_TASK_SIZE, TIMERS, FDS>,
         buf: &'a mut [u8],
     ) -> Result<usize, TlsError> {
         let (mut rx, _) = self.split();
@@ -98,7 +99,8 @@ impl AsyncWrite for TlsStream {
 
     async fn write<
         'a,
-        S: State,
+        E: 'static,
+        const EVENTS: usize,
         const TASKS: usize,
         const TASK_SIZE: usize,
         const ROOT_TASK_SIZE: usize,
@@ -106,7 +108,7 @@ impl AsyncWrite for TlsStream {
         const FDS: usize,
     >(
         &'a mut self,
-        ctx: &'a Context<'_, S, TASKS, TASK_SIZE, ROOT_TASK_SIZE, TIMERS, FDS>,
+        ctx: &'a Context<'_, E, EVENTS, TASKS, TASK_SIZE, ROOT_TASK_SIZE, TIMERS, FDS>,
         buf: &'a [u8],
     ) -> Result<usize, TlsError> {
         let (_, mut tx) = self.split();
@@ -115,7 +117,8 @@ impl AsyncWrite for TlsStream {
 
     async fn flush<
         'a,
-        S: State,
+        E: 'static,
+        const EVENTS: usize,
         const TASKS: usize,
         const TASK_SIZE: usize,
         const ROOT_TASK_SIZE: usize,
@@ -123,7 +126,7 @@ impl AsyncWrite for TlsStream {
         const FDS: usize,
     >(
         &'a mut self,
-        ctx: &'a Context<'_, S, TASKS, TASK_SIZE, ROOT_TASK_SIZE, TIMERS, FDS>,
+        ctx: &'a Context<'_, E, EVENTS, TASKS, TASK_SIZE, ROOT_TASK_SIZE, TIMERS, FDS>,
     ) -> Result<(), TlsError> {
         let (_, mut tx) = self.split();
         tx.flush(ctx).await
@@ -154,6 +157,8 @@ pub(crate) enum TlsError {
     Read(Errno),
     #[error("failed to write to TCP socket: {0}")]
     Write(Errno),
+    #[error("failed to wait for TCP socket readiness: {0}")]
+    Readiness(#[from] NotEnoughResources),
     #[error("TCP socket accepted zero bytes")]
     WriteZero,
     #[error("connection closed")]

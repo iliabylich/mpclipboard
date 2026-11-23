@@ -1,6 +1,6 @@
 use crate::tls_stream::{TlsError, state::TlsState, step::Step};
 use core::{cell::RefCell, task::Poll};
-use externally_driven_async_rt::{Context, State, io::AsyncRead, net::BorrowedReadHalf};
+use externally_driven_async_rt::{Context, io::AsyncRead, net::BorrowedReadHalf};
 use rustix::io::Errno;
 
 pub(crate) struct TlsReadHalf<'s> {
@@ -14,18 +14,19 @@ impl<'s> TlsReadHalf<'s> {
     }
 
     pub(super) async fn fill<
-        S: State,
+        E: 'static,
+        const EVENTS: usize,
         const TASKS: usize,
         const TASK_SIZE: usize,
         const ROOT_TASK_SIZE: usize,
         const TIMERS: usize,
         const FDS: usize,
     >(
-        &self,
-        ctx: &Context<'_, S, TASKS, TASK_SIZE, ROOT_TASK_SIZE, TIMERS, FDS>,
+        &mut self,
+        ctx: &Context<'_, E, EVENTS, TASKS, TASK_SIZE, ROOT_TASK_SIZE, TIMERS, FDS>,
     ) -> Result<(), TlsError> {
         while self.try_fill()?.is_pending() {
-            self.rx.readable(ctx).await;
+            self.rx.readable(ctx).await?;
         }
         Ok(())
     }
@@ -66,7 +67,8 @@ impl AsyncRead for TlsReadHalf<'_> {
 
     async fn read<
         'a,
-        S: State,
+        E: 'static,
+        const EVENTS: usize,
         const TASKS: usize,
         const TASK_SIZE: usize,
         const ROOT_TASK_SIZE: usize,
@@ -74,7 +76,7 @@ impl AsyncRead for TlsReadHalf<'_> {
         const FDS: usize,
     >(
         &'a mut self,
-        ctx: &'a Context<'_, S, TASKS, TASK_SIZE, ROOT_TASK_SIZE, TIMERS, FDS>,
+        ctx: &'a Context<'_, E, EVENTS, TASKS, TASK_SIZE, ROOT_TASK_SIZE, TIMERS, FDS>,
         buf: &'a mut [u8],
     ) -> Result<usize, TlsError> {
         loop {

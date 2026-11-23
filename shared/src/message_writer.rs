@@ -1,7 +1,6 @@
 use crate::Message;
-use core::convert::Infallible;
 use externally_driven_async_rt::{
-    Context, State,
+    Context,
     io::{AsyncWrite, FrameWriter, FrameWriterError},
 };
 
@@ -23,7 +22,8 @@ impl<W: AsyncWrite> MessageWriter<W> {
     }
 
     pub async fn run<
-        S: State,
+        E: 'static,
+        const EVENTS: usize,
         const TASKS: usize,
         const TASK_SIZE: usize,
         const ROOT_TASK_SIZE: usize,
@@ -31,8 +31,8 @@ impl<W: AsyncWrite> MessageWriter<W> {
         const FDS: usize,
     >(
         &mut self,
-        ctx: &Context<'_, S, TASKS, TASK_SIZE, ROOT_TASK_SIZE, TIMERS, FDS>,
-    ) -> Result<Infallible, FrameWriterError<W::Error>> {
+        ctx: &Context<'_, E, EVENTS, TASKS, TASK_SIZE, ROOT_TASK_SIZE, TIMERS, FDS>,
+    ) -> Result<!, FrameWriterError<W::Error>> {
         if let Some(message) = self.next {
             self.frames.write_all(ctx, &message.encode()).await?;
             self.next = None;

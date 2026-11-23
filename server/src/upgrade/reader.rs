@@ -31,9 +31,11 @@ impl<'s> UpgradeReader<'s> {
                 Err(err) => return Err(ClientError::UpgradeRead(err)),
             }
 
-            if let Some((token, id, consumed)) = parse(&self.buf[..self.len])? {
+            if let Some((token, id, consumed)) =
+                parse(&self.buf[..self.len]).map_err(ClientError::Upgrade)?
+            {
                 if consumed != self.len {
-                    return Err(ClientError::BytesAfterUpgrade { id });
+                    return Err(ClientError::BytesAfterUpgrade(id));
                 }
                 return Ok((token, id));
             }

@@ -1,4 +1,4 @@
-use crate::{Stderr, errors::ServerError};
+use crate::{Stderr, constants::vars, errors::ServerError};
 use core::{
     fmt::Write as _,
     sync::atomic::{AtomicBool, AtomicU8, Ordering},
@@ -35,9 +35,12 @@ const NC: &str = "\x1b[0m";
 
 impl Logger {
     pub(crate) fn init() -> Result<(), ServerError> {
-        let level = match env::var(c"RUST_LOG")? {
-            None => LevelFilter::Error,
-            Some(value) => LevelFilter::parse(value).ok_or(ServerError::InvalidRustLog(value))?,
+        let level = match env::var(vars::RUST_LOG) {
+            Ok(None) => LevelFilter::Error,
+            Ok(Some(value)) => {
+                LevelFilter::parse(value).ok_or(ServerError::InvalidRustLog(value))?
+            }
+            Err(err) => return Err(ServerError::NonUtf8EnvVar(err)),
         };
         MAX_LEVEL.store(level as u8, Ordering::Relaxed);
 

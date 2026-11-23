@@ -39,9 +39,7 @@ impl MPClipboard {
     }
 
     pub fn read(&mut self) -> Result<Output, MPClipboardError> {
-        self.runtime.drain()?;
-
-        let (connectivity, received) = self.runtime.state_mut().take_updates();
+        let (connectivity, received) = self.runtime.drain()?;
 
         let text = match received {
             Some(message) if self.store.add(message) => Some(message.text().to_string()),

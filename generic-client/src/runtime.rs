@@ -2,17 +2,16 @@ use crate::{
     Connectivity,
     config::Config,
     connection::Connection,
-    constants::{FDS, FREEZE_TIME, ROOT_TASK_SIZE, TASK_SIZE, TASKS, TIMERS},
+    constants::{EVENTS, FDS, FREEZE_TIME, ROOT_TASK_SIZE, TASK_SIZE, TASKS, TIMERS},
     loop_state::{LoopEvent, LoopState},
     outbox::Outbox,
 };
 use core::{
-    cell::{RefCell, RefMut},
     mem::ManuallyDrop,
     ptr::NonNull,
     sync::atomic::{AtomicBool, Ordering},
 };
-use externally_driven_async_rt::{Context, EventLoop, LoopStorage, Selector};
+use externally_driven_async_rt::{Context, EventLoop, EventLoopError, LoopStorage, Selector};
 use mpclipboard_shared::Message;
 use rustix::{
     fd::{AsFd, BorrowedFd},
@@ -22,9 +21,9 @@ use rustls::ClientConfig;
 use std::sync::Arc;
 
 pub(crate) type LoopContext<'a> =
-    Context<'a, LoopState, TASKS, TASK_SIZE, ROOT_TASK_SIZE, TIMERS, FDS>;
-type Loop = EventLoop<'static, LoopState, TASKS, TASK_SIZE, ROOT_TASK_SIZE, TIMERS, FDS>;
-type Storage = LoopStorage<TASKS, TASK_SIZE, ROOT_TASK_SIZE, TIMERS, FDS>;
+    Context<'a, LoopEvent, EVENTS, TASKS, TASK_SIZE, ROOT_TASK_SIZE, TIMERS, FDS>;
+type Loop = EventLoop<'static, LoopEvent, EVENTS, TASKS, TASK_SIZE, ROOT_TASK_SIZE, TIMERS, FDS>;
+type Storage = LoopStorage<LoopEvent, EVENTS, TASKS, TASK_SIZE, ROOT_TASK_SIZE, TIMERS, FDS>;
 
 static STORAGE: Storage = Storage::new();
 static CREATED: AtomicBool = AtomicBool::new(false);
@@ -41,20 +40,28 @@ impl Runtime {
         }
 
         let selector = Selector::new().map_err(RuntimeError::Selector)?;
-        let (data, selector, state, outbox, config, tls_config) =
-            Data::new(selector, config, tls_config);
+        let (data, selector, outbox, config, tls_config) = Data::new(selector, config, tls_config);
 
-        let result = Loop::new(&STORAGE, selector, state, |ctx| async move {
+        let result = Loop::new(&STORAGE, selector, |ctx| async move {
             let connection = Connection::new(ctx, config, tls_config, outbox);
 
             loop {
-                ctx.dispatch(LoopEvent::Connectivity(Connectivity::Connecting));
+                if let Err(event) = ctx.dispatch(LoopEvent::Connectivity(Connectivity::Connecting))
+                {
+                    log::warn!("events queue is full, dropping {event:?}");
+                }
 
                 let Err(err) = connection.run().await;
                 log::error!("{err}");
 
-                ctx.dispatch(LoopEvent::Connectivity(Connectivity::Disconnected));
-                ctx.sleep(FREEZE_TIME).await;
+                if let Err(event) =
+                    ctx.dispatch(LoopEvent::Connectivity(Connectivity::Disconnected))
+                {
+                    log::warn!("events queue is full, dropping {event:?}");
+                }
+                ctx.sleep(FREEZE_TIME)
+                    .await
+                    .unwrap_or_else(|err| unreachable!("too many timers: {err:?}"));
             }
         });
 
@@ -71,14 +78,17 @@ impl Runtime {
         }
     }
 
-    pub(crate) fn drain(&mut self) -> Result<(), RuntimeError> {
+    pub(crate) fn drain(
+        &mut self,
+    ) -> Result<(Option<Connectivity>, Option<Message>), RuntimeError> {
         self.event_loop
             .drain_events_without_blocking()
-            .map_err(RuntimeError::Drain)
-    }
-
-    pub(crate) fn state_mut(&mut self) -> RefMut<'_, LoopState> {
-        self.event_loop.state_mut()
+            .map_err(RuntimeError::Drain)?;
+        let mut state = LoopState::new();
+        for event in self.event_loop.events() {
+            state.apply(event);
+        }
+        Ok(state.take_updates())
     }
 
     pub(crate) fn push(&self, message: Message) -> Result<(), RuntimeError> {
@@ -108,7 +118,6 @@ impl AsFd for Runtime {
 
 struct Data {
     selector: Selector,
-    state: RefCell<LoopState>,
     outbox: Outbox,
     config: Config,
     tls_config: Arc<ClientConfig>,
@@ -122,14 +131,12 @@ impl Data {
     ) -> (
         NonNull<Self>,
         &'static mut Selector,
-        &'static mut RefCell<LoopState>,
         &'static Outbox,
         &'static Config,
         &'static Arc<ClientConfig>,
     ) {
         let data = NonNull::from(Box::leak(Box::new(Self {
             selector,
-            state: RefCell::new(LoopState::new()),
             outbox: Outbox::default(),
             config,
             tls_config,
@@ -144,7 +151,6 @@ impl Data {
             (
                 data,
                 &mut (*ptr).selector,
-                &mut (*ptr).state,
                 &(*ptr).outbox,
                 &(*ptr).config,
                 &(*ptr).tls_config,
@@ -160,9 +166,9 @@ pub enum RuntimeError {
     #[error("failed to create selector: {0}")]
     Selector(Errno),
     #[error("failed to start event loop: {0}")]
-    Start(externally_driven_async_rt::Error),
+    Start(EventLoopError),
     #[error("failed to drain event loop: {0}")]
-    Drain(externally_driven_async_rt::Error),
+    Drain(EventLoopError),
     #[error("failed to notify event loop: {0}")]
     Notify(Errno),
 }

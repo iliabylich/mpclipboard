@@ -4,4 +4,4 @@ mod writer;
 
 pub(crate) use parse::ParseError;
 pub(crate) use reader::UpgradeReader;
-pub(crate) use writer::UpgradeWriter;
+pub(crate) use writer::{UpgradeWriter, UpgradeWriterError};

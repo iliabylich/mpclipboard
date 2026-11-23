@@ -1,12 +1,17 @@
+use core::time::Duration;
+
 use crate::{
     ServerContext,
     client::Client,
-    constants::UPGRADE_TIMEOUT,
+    constants::UPGRADE_TIMEOUT_IN_SECS,
     errors::ClientError,
     pubsub::{PubSub, PubSubHandle},
     upgrade::{UpgradeReader, UpgradeWriter},
 };
-use externally_driven_async_rt::net::{TcpListener, TcpStream};
+use externally_driven_async_rt::{
+    MaybeTimedOut,
+    net::{TcpListener, TcpStream},
+};
 use mpclipboard_shared::Token;
 
 pub(crate) struct Acceptor {
@@ -34,7 +39,9 @@ impl Acceptor {
         let pubsub: &'a PubSub = pubsub;
 
         loop {
-            let task = ctx.reserve_task().await;
+            let Ok(task) = ctx.reserve_task().await else {
+                unreachable!("the acceptor is the only task that waits for a free slot");
+            };
             let stream = loop {
                 match listener.accept(&ctx).await {
                     Ok((stream, _)) => break stream,
@@ -45,11 +52,11 @@ impl Acceptor {
             let Some(pubsub) = pubsub.subscribe() else {
                 unreachable!("every reserved task has a free pubsub slot");
             };
-            let _ = task.spawn(async move {
+            drop(task.spawn(async move {
                 if let Err(err) = serve(&ctx, stream, token, pubsub).await {
                     error!("{err}");
                 }
-            });
+            }));
         }
     }
 }
@@ -60,11 +67,19 @@ async fn serve<'a>(
     token: &'a Token,
     pubsub: PubSubHandle<'a>,
 ) -> Result<(), ClientError> {
-    let upgrade = upgrade(ctx, stream, token, pubsub);
-    let client = ctx
-        .timeout(UPGRADE_TIMEOUT, upgrade)
+    let result = ctx
+        .timeout(
+            Duration::from_secs(UPGRADE_TIMEOUT_IN_SECS),
+            upgrade(ctx, stream, token, pubsub),
+        )
         .await
-        .ok_or(ClientError::UpgradeTimeout)??;
+        .unwrap_or_else(|err| unreachable!("too many timers: {err:?}"));
+
+    let client = match result {
+        MaybeTimedOut::Timeout => return Err(ClientError::UpgradeTimeout),
+        MaybeTimedOut::Completed(client) => client?,
+    };
+
     client.read_write_messages(ctx).await
 }
 
@@ -80,7 +95,7 @@ async fn upgrade<'a>(
 
     if *token != received {
         let _ = UpgradeWriter::unauthorized(tx).write(ctx).await;
-        return Err(ClientError::InvalidToken { id });
+        return Err(ClientError::InvalidToken(id));
     }
 
     UpgradeWriter::switching_protocols(tx)

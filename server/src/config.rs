@@ -1,16 +1,21 @@
-use crate::errors::ServerError;
+use crate::{constants::vars, errors::ServerError};
 use core::net::SocketAddr;
 use mpclipboard_shared::{Token, env};
 
 pub(crate) fn from_env() -> Result<(SocketAddr, &'static str, Token), ServerError> {
-    let (bind_address, raw_bind_address) = parse_address(env::var(c"MPCLIPBOARD_BIND_ADDRESS")?)?;
-    let token = parse_token(env::var(c"MPCLIPBOARD_TOKEN")?)?;
+    let address = env::var(vars::BIND_ADDRESS).map_err(ServerError::NonUtf8EnvVar)?;
+    let token = env::var(vars::TOKEN).map_err(ServerError::NonUtf8EnvVar)?;
+
+    let (bind_address, raw_bind_address) = parse_address(address)?;
+    let token = parse_token(token)?;
     Ok((bind_address, raw_bind_address, token))
 }
 
 fn parse_address(s: Option<&str>) -> Result<(SocketAddr, &str), ServerError> {
     let s = s.ok_or(ServerError::MissingBindAddress)?;
-    let address = s.parse::<SocketAddr>()?;
+    let address = s
+        .parse::<SocketAddr>()
+        .map_err(ServerError::InvalidBindAddress)?;
     Ok((address, s))
 }
 

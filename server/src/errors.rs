@@ -1,6 +1,10 @@
-use crate::{constants::UPGRADE_TIMEOUT, upgrade::ParseError};
+use crate::{
+    constants::UPGRADE_TIMEOUT_IN_SECS,
+    constants::vars::{BIND_ADDRESS, RUST_LOG, TOKEN},
+    upgrade::{ParseError, UpgradeWriterError},
+};
 use core::net::AddrParseError;
-use externally_driven_async_rt::io::{FrameWriterError, WriteAllError};
+use externally_driven_async_rt::{EventLoopError, io::FrameWriterError, net::NetError};
 use mpclipboard_shared::{FixedStrError, ID, MessageReaderError, env::EnvVarError};
 use rustix::io::Errno;
 
@@ -14,28 +18,20 @@ pub enum ServerError {
     InvalidToken(FixedStrError),
     Bind { address: &'static str, err: Errno },
     Selector(Errno),
-    EventLoopStart(externally_driven_async_rt::Error),
+    EventLoopStart(EventLoopError),
     Poll(Errno),
-    EventLoop(externally_driven_async_rt::Error),
+    EventLoop(EventLoopError),
 }
 
 impl core::fmt::Display for ServerError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             Self::NonUtf8EnvVar(err) => write!(f, "{err}"),
-            Self::InvalidRustLog(value) => write!(
-                f,
-                "invalid RUST_LOG=\"{value}\": expected one of off, error, warn, info, debug, trace"
-            ),
-            Self::MissingBindAddress => f.write_str("MPCLIPBOARD_BIND_ADDRESS is missing"),
-            Self::InvalidBindAddress(err) => {
-                write!(
-                    f,
-                    "MPCLIPBOARD_BIND_ADDRESS must be an ip:port address: {err}"
-                )
-            }
-            Self::MissingToken => f.write_str("MPCLIPBOARD_TOKEN is missing"),
-            Self::InvalidToken(err) => write!(f, "MPCLIPBOARD_TOKEN is malformed: {err}"),
+            Self::InvalidRustLog(value) => write!(f, "invalid {RUST_LOG:?}: {value}"),
+            Self::MissingBindAddress => write!(f, "{BIND_ADDRESS:?} is missing"),
+            Self::InvalidBindAddress(err) => write!(f, "malformed {BIND_ADDRESS:?}: {err}"),
+            Self::MissingToken => write!(f, "{TOKEN:?} is missing"),
+            Self::InvalidToken(err) => write!(f, "{TOKEN:?} is malformed: {err}"),
             Self::Bind { address, err } => write!(f, "failed to bind {address}: {err}"),
             Self::Selector(err) => write!(f, "failed to create a selector: {err}"),
             Self::EventLoopStart(err) => write!(f, "failed to start the event loop: {err}"),
@@ -45,68 +41,40 @@ impl core::fmt::Display for ServerError {
     }
 }
 
-impl From<EnvVarError> for ServerError {
-    fn from(err: EnvVarError) -> Self {
-        Self::NonUtf8EnvVar(err)
-    }
-}
-
-impl From<AddrParseError> for ServerError {
-    fn from(err: AddrParseError) -> Self {
-        Self::InvalidBindAddress(err)
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ClientError {
     UpgradeTimeout,
-    UpgradeRead(Errno),
+    UpgradeRead(NetError),
     DisconnectedDuringUpgrade,
     Upgrade(ParseError),
-    InvalidToken {
-        id: ID,
-    },
-    BytesAfterUpgrade {
-        id: ID,
-    },
+    InvalidToken(ID),
+    BytesAfterUpgrade(ID),
     UpgradeWrite {
         id: ID,
-        err: WriteAllError<Errno>,
+        err: UpgradeWriterError,
     },
     Read {
         id: ID,
-        err: MessageReaderError<Errno>,
+        err: MessageReaderError<NetError>,
     },
     Write {
         id: ID,
-        err: FrameWriterError<Errno>,
+        err: FrameWriterError<NetError>,
     },
 }
 
 impl core::fmt::Display for ClientError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            Self::UpgradeTimeout => {
-                write!(f, "no upgrade within {}s", UPGRADE_TIMEOUT.as_secs())
-            }
+            Self::UpgradeTimeout => write!(f, "no upgrade within {UPGRADE_TIMEOUT_IN_SECS}s"),
             Self::UpgradeRead(err) => write!(f, "read() failed during upgrade: {err}"),
             Self::DisconnectedDuringUpgrade => f.write_str("disconnected during upgrade"),
             Self::Upgrade(err) => write!(f, "{err}"),
-            Self::InvalidToken { id } => write!(f, "[{id}] invalid token"),
-            Self::BytesAfterUpgrade { id } => {
-                write!(f, "[{id}] sent bytes before receiving 101")
-            }
-            Self::UpgradeWrite { id, err } => {
-                write!(f, "[{id}] failed to write 101 response: {err}")
-            }
+            Self::InvalidToken(id) => write!(f, "[{id}] invalid token"),
+            Self::BytesAfterUpgrade(id) => write!(f, "[{id}] received data after upgrade"),
+            Self::UpgradeWrite { id, err } => write!(f, "[{id}] failed to write 101: {err}"),
             Self::Read { id, err } => write!(f, "[{id}] {err}"),
             Self::Write { id, err } => write!(f, "[{id}] {err}"),
         }
-    }
-}
-
-impl From<ParseError> for ClientError {
-    fn from(err: ParseError) -> Self {
-        Self::Upgrade(err)
     }
 }

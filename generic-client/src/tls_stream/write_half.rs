@@ -1,6 +1,6 @@
 use crate::tls_stream::{TlsError, state::TlsState, step::Step};
 use core::{cell::RefCell, task::Poll};
-use externally_driven_async_rt::{Context, State, io::AsyncWrite, net::BorrowedWriteHalf};
+use externally_driven_async_rt::{Context, io::AsyncWrite, net::BorrowedWriteHalf};
 use rustix::io::Errno;
 
 pub(crate) struct TlsWriteHalf<'s> {
@@ -14,18 +14,19 @@ impl<'s> TlsWriteHalf<'s> {
     }
 
     pub(super) async fn transmit<
-        S: State,
+        E: 'static,
+        const EVENTS: usize,
         const TASKS: usize,
         const TASK_SIZE: usize,
         const ROOT_TASK_SIZE: usize,
         const TIMERS: usize,
         const FDS: usize,
     >(
-        &self,
-        ctx: &Context<'_, S, TASKS, TASK_SIZE, ROOT_TASK_SIZE, TIMERS, FDS>,
+        &mut self,
+        ctx: &Context<'_, E, EVENTS, TASKS, TASK_SIZE, ROOT_TASK_SIZE, TIMERS, FDS>,
     ) -> Result<(), TlsError> {
         while self.try_transmit()?.is_pending() {
-            self.tx.writable(ctx).await;
+            self.tx.writable(ctx).await?;
         }
         Ok(())
     }
@@ -65,7 +66,8 @@ impl AsyncWrite for TlsWriteHalf<'_> {
 
     async fn write<
         'a,
-        S: State,
+        E: 'static,
+        const EVENTS: usize,
         const TASKS: usize,
         const TASK_SIZE: usize,
         const ROOT_TASK_SIZE: usize,
@@ -73,7 +75,7 @@ impl AsyncWrite for TlsWriteHalf<'_> {
         const FDS: usize,
     >(
         &'a mut self,
-        ctx: &'a Context<'_, S, TASKS, TASK_SIZE, ROOT_TASK_SIZE, TIMERS, FDS>,
+        ctx: &'a Context<'_, E, EVENTS, TASKS, TASK_SIZE, ROOT_TASK_SIZE, TIMERS, FDS>,
         buf: &'a [u8],
     ) -> Result<usize, TlsError> {
         loop {
@@ -86,7 +88,8 @@ impl AsyncWrite for TlsWriteHalf<'_> {
 
     async fn flush<
         'a,
-        S: State,
+        E: 'static,
+        const EVENTS: usize,
         const TASKS: usize,
         const TASK_SIZE: usize,
         const ROOT_TASK_SIZE: usize,
@@ -94,7 +97,7 @@ impl AsyncWrite for TlsWriteHalf<'_> {
         const FDS: usize,
     >(
         &'a mut self,
-        ctx: &'a Context<'_, S, TASKS, TASK_SIZE, ROOT_TASK_SIZE, TIMERS, FDS>,
+        ctx: &'a Context<'_, E, EVENTS, TASKS, TASK_SIZE, ROOT_TASK_SIZE, TIMERS, FDS>,
     ) -> Result<(), TlsError> {
         self.transmit(ctx).await
     }

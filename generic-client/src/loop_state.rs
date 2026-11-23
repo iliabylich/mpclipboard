@@ -1,5 +1,4 @@
 use crate::Connectivity;
-use externally_driven_async_rt::State;
 use mpclipboard_shared::Message;
 
 #[derive(Debug)]
@@ -19,12 +18,8 @@ impl LoopState {
     pub(crate) const fn take_updates(&mut self) -> (Option<Connectivity>, Option<Message>) {
         (self.connectivity.take(), self.received.take())
     }
-}
 
-impl State for LoopState {
-    type Event = LoopEvent;
-
-    fn apply(&mut self, event: LoopEvent) {
+    pub(crate) const fn apply(&mut self, event: LoopEvent) {
         match event {
             LoopEvent::Connectivity(connectivity) => self.connectivity = Some(connectivity),
             LoopEvent::Received(message) => self.received = Some(message),
@@ -43,7 +38,6 @@ pub(crate) enum LoopEvent {
 mod tests {
     use super::{LoopEvent, LoopState};
     use crate::Connectivity;
-    use externally_driven_async_rt::State;
     use mpclipboard_shared::Message;
 
     #[test]

@@ -3,10 +3,10 @@ mod reader;
 mod writer;
 
 pub(crate) use reader::UpgradeReader;
-pub(crate) use writer::UpgradeWriter;
+pub(crate) use writer::{UpgradeWriter, UpgradeWriterError};
 
 use crate::{constants::UPGRADE_RESPONSE_BUFFER_SIZE, tls_stream::TlsError};
-use externally_driven_async_rt::io::{ReadExactError, WriteAllError};
+use externally_driven_async_rt::io::ReadExactError;
 use mpclipboard_shared::UPGRADE_PROTOCOL;
 
 #[derive(Debug, thiserror::Error)]
@@ -14,7 +14,7 @@ pub(crate) enum UpgradeError {
     #[error(transparent)]
     Tls(#[from] TlsError),
     #[error("failed to write HTTP request: {0}")]
-    Write(#[from] WriteAllError<TlsError>),
+    Write(#[from] UpgradeWriterError),
     #[error("failed to read HTTP response: {0}")]
     Read(#[from] ReadExactError<TlsError>),
     #[error("malformed HTTP response: {0}")]

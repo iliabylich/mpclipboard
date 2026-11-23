@@ -1,7 +1,9 @@
 use crate::{
-    config::Config, runtime::LoopContext, tls_stream::TlsWriteHalf, upgrade::UpgradeError,
+    config::Config,
+    runtime::LoopContext,
+    tls_stream::{TlsError, TlsWriteHalf},
 };
-use externally_driven_async_rt::io::{AsyncWrite, WriteAllError};
+use externally_driven_async_rt::io::AsyncWrite;
 use mpclipboard_shared::{PROTOCOL_VERSION, UPGRADE_PROTOCOL};
 
 pub(crate) struct UpgradeWriter<'s> {
@@ -19,16 +21,16 @@ impl<'s> UpgradeWriter<'s> {
         }
     }
 
-    pub(crate) async fn write(&mut self, ctx: &LoopContext<'_>) -> Result<(), UpgradeError> {
+    pub(crate) async fn write(&mut self, ctx: &LoopContext<'_>) -> Result<(), UpgradeWriterError> {
         while self.written < self.request.len() {
             match self
                 .tx
                 .write(ctx, &self.request.as_bytes()[self.written..])
                 .await
             {
-                Ok(0) => return Err(WriteAllError::WriteZero.into()),
+                Ok(0) => return Err(UpgradeWriterError::WriteZero),
                 Ok(len) => self.written += len,
-                Err(err) => return Err(WriteAllError::Io(err).into()),
+                Err(err) => return Err(UpgradeWriterError::Io(err)),
             }
         }
         self.tx.flush(ctx).await?;
@@ -51,6 +53,14 @@ Version: {PROTOCOL_VERSION}\r\n\
         token = config.token.as_str(),
         id = config.id,
     )
+}
+
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum UpgradeWriterError {
+    #[error(transparent)]
+    Io(#[from] TlsError),
+    #[error("TLS stream accepted zero bytes")]
+    WriteZero,
 }
 
 #[cfg(test)]

@@ -157,9 +157,9 @@ dependencies = [
 
 [[package]]
 name = "externally-driven-async-rt"
-version = "0.3.1"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6afa8a7b27451d1d1600ac8a6213f30bd768ca85ab98e2502a05eb424d814f11"
+checksum = "350678a4b15894b09ee8441b363fbb90f1df05bc7c684dfc8b31a35db321f815"
 dependencies = [
  "rustix",
 ]

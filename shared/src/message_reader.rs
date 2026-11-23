@@ -1,6 +1,6 @@
 use crate::{Message, MessageDecodeError};
 use externally_driven_async_rt::{
-    Context, State,
+    Context,
     io::{AsyncRead, FrameReader, FrameReaderError},
 };
 
@@ -16,7 +16,8 @@ impl<R: AsyncRead> MessageReader<R> {
     }
 
     pub async fn read<
-        S: State,
+        E: 'static,
+        const EVENTS: usize,
         const TASKS: usize,
         const TASK_SIZE: usize,
         const ROOT_TASK_SIZE: usize,
@@ -24,7 +25,7 @@ impl<R: AsyncRead> MessageReader<R> {
         const FDS: usize,
     >(
         &mut self,
-        ctx: &Context<'_, S, TASKS, TASK_SIZE, ROOT_TASK_SIZE, TIMERS, FDS>,
+        ctx: &Context<'_, E, EVENTS, TASKS, TASK_SIZE, ROOT_TASK_SIZE, TIMERS, FDS>,
     ) -> Result<Option<Message>, MessageReaderError<R::Error>> {
         let Some(frame) = self.frames.read_exact(ctx).await? else {
             return Ok(None);
