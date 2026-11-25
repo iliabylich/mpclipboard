@@ -5,16 +5,13 @@ use crate::{
     loop_state::LoopEvent,
     outbox::Outbox,
     resolve::{ResolveError, resolve},
-    runtime::LoopContext,
+    runtime::{Context, TcpStream},
     tls_stream::{TlsError, TlsStream, TlsWriteHalf},
     upgrade::{UpgradeError, UpgradeReader, UpgradeWriter},
 };
 use core::net::{Ipv4Addr, SocketAddr};
 use externally_driven_async_rt::{
-    Either3, MaybeTimedOut,
-    io::FrameWriterError,
-    net::{NetError, TcpStream},
-    select3,
+    Either3, MaybeTimedOut, io::FrameWriterError, net::NetError, select3,
 };
 use mpclipboard_shared::{MessageReader, MessageReaderError, MessageWriter};
 use rustix::io::Errno;
@@ -22,7 +19,7 @@ use rustls::ClientConfig;
 use std::sync::Arc;
 
 pub(crate) struct Connection {
-    ctx: LoopContext<'static>,
+    ctx: Context<'static>,
     config: &'static Config,
     tls_config: &'static Arc<ClientConfig>,
     outbox: &'static Outbox,
@@ -30,7 +27,7 @@ pub(crate) struct Connection {
 
 impl Connection {
     pub(crate) const fn new(
-        ctx: LoopContext<'static>,
+        ctx: Context<'static>,
         config: &'static Config,
         tls_config: &'static Arc<ClientConfig>,
         outbox: &'static Outbox,
@@ -107,7 +104,7 @@ impl Connection {
 
         let result = self
             .ctx
-            .timeout(FREEZE_TIME, tls.handshake(&self.ctx))
+            .timeout(FREEZE_TIME, tls.handshake())
             .await
             .unwrap_or_else(|err| unreachable!("too many timers: {err:?}"));
 
@@ -122,8 +119,8 @@ impl Connection {
     async fn upgrade(&self, mut tls: TlsStream) -> Result<TlsStream, ConnectionError> {
         let (rx, tx) = tls.split();
         let upgrade = async move {
-            UpgradeWriter::new(tx, self.config).write(&self.ctx).await?;
-            UpgradeReader::new(rx).read(&self.ctx).await
+            UpgradeWriter::new(tx, self.config).write().await?;
+            UpgradeReader::new(rx).read().await
         };
 
         let result = self
@@ -149,7 +146,7 @@ impl Connection {
         self.move_message_from_outbox_to(&mut writer);
 
         loop {
-            match select3(reader.read(ctx), ctx.notified(), writer.run(ctx)).await {
+            match select3(reader.read(), ctx.notified(), writer.run()).await {
                 Either3::First(message) => {
                     let Some(message) = message? else {
                         return Err(TlsError::Closed.into());

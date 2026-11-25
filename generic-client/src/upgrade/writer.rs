@@ -1,6 +1,5 @@
 use crate::{
     config::Config,
-    runtime::LoopContext,
     tls_stream::{TlsError, TlsWriteHalf},
 };
 use externally_driven_async_rt::io::AsyncWrite;
@@ -21,11 +20,11 @@ impl<'s> UpgradeWriter<'s> {
         }
     }
 
-    pub(crate) async fn write(&mut self, ctx: &LoopContext<'_>) -> Result<(), UpgradeWriterError> {
+    pub(crate) async fn write(&mut self) -> Result<(), UpgradeWriterError> {
         while self.written < self.request.len() {
             match self
                 .tx
-                .write(ctx, &self.request.as_bytes()[self.written..])
+                .write(&self.request.as_bytes()[self.written..])
                 .await
             {
                 Ok(0) => return Err(UpgradeWriterError::WriteZero),
@@ -33,7 +32,7 @@ impl<'s> UpgradeWriter<'s> {
                 Err(err) => return Err(UpgradeWriterError::Io(err)),
             }
         }
-        self.tx.flush(ctx).await?;
+        self.tx.flush().await?;
         Ok(())
     }
 }

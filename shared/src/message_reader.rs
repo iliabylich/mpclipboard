@@ -1,8 +1,5 @@
 use crate::{Message, MessageDecodeError};
-use externally_driven_async_rt::{
-    Context,
-    io::{AsyncRead, FrameReader, FrameReaderError},
-};
+use externally_driven_async_rt::io::{AsyncRead, FrameReader, FrameReaderError};
 
 pub struct MessageReader<R> {
     frames: FrameReader<R, { Message::BYTESIZE }>,
@@ -15,19 +12,8 @@ impl<R: AsyncRead> MessageReader<R> {
         }
     }
 
-    pub async fn read<
-        E: 'static,
-        const EVENTS: usize,
-        const TASKS: usize,
-        const TASK_SIZE: usize,
-        const ROOT_TASK_SIZE: usize,
-        const TIMERS: usize,
-        const FDS: usize,
-    >(
-        &mut self,
-        ctx: &Context<'_, E, EVENTS, TASKS, TASK_SIZE, ROOT_TASK_SIZE, TIMERS, FDS>,
-    ) -> Result<Option<Message>, MessageReaderError<R::Error>> {
-        let Some(frame) = self.frames.read_exact(ctx).await? else {
+    pub async fn read(&mut self) -> Result<Option<Message>, MessageReaderError<R::Error>> {
+        let Some(frame) = self.frames.read_exact().await? else {
             return Ok(None);
         };
         let message = Message::decode(&frame)?;

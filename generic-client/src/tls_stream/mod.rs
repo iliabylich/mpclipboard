@@ -9,13 +9,9 @@ mod write_half;
 pub(crate) use read_half::TlsReadHalf;
 pub(crate) use write_half::TlsWriteHalf;
 
-use crate::runtime::LoopContext;
+use crate::runtime::TcpStream;
 use core::cell::RefCell;
-use externally_driven_async_rt::{
-    Context, NotEnoughResources,
-    io::{AsyncRead, AsyncWrite},
-    net::TcpStream,
-};
+use externally_driven_async_rt::io::{AsyncRead, AsyncWrite};
 use rustix::io::Errno;
 use rustls::{
     ClientConfig,
@@ -55,7 +51,7 @@ impl TlsStream {
         )
     }
 
-    pub(crate) async fn handshake(&mut self, ctx: &LoopContext<'_>) -> Result<(), TlsError> {
+    pub(crate) async fn handshake(&mut self) -> Result<(), TlsError> {
         let (rx, tx) = self.tcp.split();
         let mut rx = TlsReadHalf::new(rx, &self.state);
         let mut tx = TlsWriteHalf::new(tx, &self.state);
@@ -63,8 +59,8 @@ impl TlsStream {
             let step = self.state.borrow_mut().step()?;
             match step {
                 Step::Writable => return Ok(()),
-                Step::Transmit => tx.transmit(ctx).await?,
-                Step::Blocked => rx.fill(ctx).await?,
+                Step::Transmit => tx.transmit().await?,
+                Step::Blocked => rx.fill().await?,
                 Step::Plaintext => return Err(TlsError::PlaintextDuringHandshake),
                 Step::PeerClosed => return Err(TlsError::Closed),
             }
@@ -75,61 +71,23 @@ impl TlsStream {
 impl AsyncRead for TlsStream {
     type Error = TlsError;
 
-    async fn read<
-        'a,
-        E: 'static,
-        const EVENTS: usize,
-        const TASKS: usize,
-        const TASK_SIZE: usize,
-        const ROOT_TASK_SIZE: usize,
-        const TIMERS: usize,
-        const FDS: usize,
-    >(
-        &'a mut self,
-        ctx: &'a Context<'_, E, EVENTS, TASKS, TASK_SIZE, ROOT_TASK_SIZE, TIMERS, FDS>,
-        buf: &'a mut [u8],
-    ) -> Result<usize, TlsError> {
+    async fn read<'a>(&'a mut self, buf: &'a mut [u8]) -> Result<usize, TlsError> {
         let (mut rx, _) = self.split();
-        rx.read(ctx, buf).await
+        rx.read(buf).await
     }
 }
 
 impl AsyncWrite for TlsStream {
     type Error = TlsError;
 
-    async fn write<
-        'a,
-        E: 'static,
-        const EVENTS: usize,
-        const TASKS: usize,
-        const TASK_SIZE: usize,
-        const ROOT_TASK_SIZE: usize,
-        const TIMERS: usize,
-        const FDS: usize,
-    >(
-        &'a mut self,
-        ctx: &'a Context<'_, E, EVENTS, TASKS, TASK_SIZE, ROOT_TASK_SIZE, TIMERS, FDS>,
-        buf: &'a [u8],
-    ) -> Result<usize, TlsError> {
+    async fn write<'a>(&'a mut self, buf: &'a [u8]) -> Result<usize, TlsError> {
         let (_, mut tx) = self.split();
-        tx.write(ctx, buf).await
+        tx.write(buf).await
     }
 
-    async fn flush<
-        'a,
-        E: 'static,
-        const EVENTS: usize,
-        const TASKS: usize,
-        const TASK_SIZE: usize,
-        const ROOT_TASK_SIZE: usize,
-        const TIMERS: usize,
-        const FDS: usize,
-    >(
-        &'a mut self,
-        ctx: &'a Context<'_, E, EVENTS, TASKS, TASK_SIZE, ROOT_TASK_SIZE, TIMERS, FDS>,
-    ) -> Result<(), TlsError> {
+    async fn flush(&mut self) -> Result<(), TlsError> {
         let (_, mut tx) = self.split();
-        tx.flush(ctx).await
+        tx.flush().await
     }
 }
 
@@ -157,8 +115,6 @@ pub(crate) enum TlsError {
     Read(Errno),
     #[error("failed to write to TCP socket: {0}")]
     Write(Errno),
-    #[error("failed to wait for TCP socket readiness: {0}")]
-    Readiness(#[from] NotEnoughResources),
     #[error("TCP socket accepted zero bytes")]
     WriteZero,
     #[error("connection closed")]

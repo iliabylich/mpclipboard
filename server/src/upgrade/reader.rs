@@ -1,18 +1,18 @@
 use crate::{
-    ServerContext, constants::UPGRADE_REQUEST_BUFFER_SIZE, errors::ClientError,
+    BorrowedReadHalf, constants::UPGRADE_REQUEST_BUFFER_SIZE, errors::ClientError,
     upgrade::parse::parse,
 };
-use externally_driven_async_rt::{io::AsyncRead, net::BorrowedReadHalf};
+use externally_driven_async_rt::io::AsyncRead;
 use mpclipboard_shared::{ID, Token};
 
-pub(crate) struct UpgradeReader<'s> {
-    rx: BorrowedReadHalf<'s>,
+pub(crate) struct UpgradeReader<'s, 'sel> {
+    rx: BorrowedReadHalf<'s, 'sel>,
     buf: [u8; UPGRADE_REQUEST_BUFFER_SIZE],
     len: usize,
 }
 
-impl<'s> UpgradeReader<'s> {
-    pub(crate) const fn new(rx: BorrowedReadHalf<'s>) -> Self {
+impl<'s, 'sel> UpgradeReader<'s, 'sel> {
+    pub(crate) const fn new(rx: BorrowedReadHalf<'s, 'sel>) -> Self {
         Self {
             rx,
             buf: [0; UPGRADE_REQUEST_BUFFER_SIZE],
@@ -20,12 +20,9 @@ impl<'s> UpgradeReader<'s> {
         }
     }
 
-    pub(crate) async fn read(
-        &mut self,
-        ctx: &ServerContext<'_>,
-    ) -> Result<(Token, ID), ClientError> {
+    pub(crate) async fn read(&mut self) -> Result<(Token, ID), ClientError> {
         loop {
-            match self.rx.read(ctx, &mut self.buf[self.len..]).await {
+            match self.rx.read(&mut self.buf[self.len..]).await {
                 Ok(0) => return Err(ClientError::DisconnectedDuringUpgrade),
                 Ok(read) => self.len += read,
                 Err(err) => return Err(ClientError::UpgradeRead(err)),

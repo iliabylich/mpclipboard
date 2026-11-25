@@ -1,6 +1,5 @@
 use crate::{
     constants::UPGRADE_RESPONSE_BUFFER_SIZE,
-    runtime::LoopContext,
     tls_stream::TlsReadHalf,
     upgrade::{UpgradeError, parse::parse},
 };
@@ -21,10 +20,10 @@ impl<'s> UpgradeReader<'s> {
         }
     }
 
-    pub(crate) async fn read(&mut self, ctx: &LoopContext<'_>) -> Result<(), UpgradeError> {
+    pub(crate) async fn read(&mut self) -> Result<(), UpgradeError> {
         loop {
             self.rx
-                .read_exact(ctx, &mut self.buf[self.len..=self.len])
+                .read_exact(&mut self.buf[self.len..=self.len])
                 .await?;
             self.len += 1;
 

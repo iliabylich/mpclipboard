@@ -1,8 +1,5 @@
 use crate::Message;
-use externally_driven_async_rt::{
-    Context,
-    io::{AsyncWrite, FrameWriter, FrameWriterError},
-};
+use externally_driven_async_rt::io::{AsyncWrite, FrameWriter, FrameWriterError};
 
 pub struct MessageWriter<W> {
     frames: FrameWriter<W, { Message::BYTESIZE }>,
@@ -21,23 +18,12 @@ impl<W: AsyncWrite> MessageWriter<W> {
         self.next = Some(message);
     }
 
-    pub async fn run<
-        E: 'static,
-        const EVENTS: usize,
-        const TASKS: usize,
-        const TASK_SIZE: usize,
-        const ROOT_TASK_SIZE: usize,
-        const TIMERS: usize,
-        const FDS: usize,
-    >(
-        &mut self,
-        ctx: &Context<'_, E, EVENTS, TASKS, TASK_SIZE, ROOT_TASK_SIZE, TIMERS, FDS>,
-    ) -> Result<!, FrameWriterError<W::Error>> {
+    pub async fn run(&mut self) -> Result<!, FrameWriterError<W::Error>> {
         if let Some(message) = self.next {
-            self.frames.write_all(ctx, &message.encode()).await?;
+            self.frames.write_all(&message.encode()).await?;
             self.next = None;
         }
-        self.frames.flush(ctx).await?;
+        self.frames.flush().await?;
         core::future::pending().await
     }
 }

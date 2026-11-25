@@ -1,8 +1,5 @@
-use crate::ServerContext;
-use externally_driven_async_rt::{
-    io::AsyncWrite,
-    net::{BorrowedWriteHalf, NetError},
-};
+use crate::BorrowedWriteHalf;
+use externally_driven_async_rt::{io::AsyncWrite, net::NetError};
 
 const SWITCHING_PROTOCOLS_RESPONSE: &str = concat!(
     "HTTP/1.1 101 Switching Protocols\r\n",
@@ -17,22 +14,22 @@ const UNAUTHORIZED_RESPONSE: &str = concat!(
     "\r\n",
 );
 
-pub(crate) struct UpgradeWriter<'s> {
-    tx: BorrowedWriteHalf<'s>,
+pub(crate) struct UpgradeWriter<'s, 'sel> {
+    tx: BorrowedWriteHalf<'s, 'sel>,
     response: &'static [u8],
     written: usize,
 }
 
-impl<'s> UpgradeWriter<'s> {
-    pub(crate) const fn switching_protocols(tx: BorrowedWriteHalf<'s>) -> Self {
+impl<'s, 'sel> UpgradeWriter<'s, 'sel> {
+    pub(crate) const fn switching_protocols(tx: BorrowedWriteHalf<'s, 'sel>) -> Self {
         Self::new(tx, SWITCHING_PROTOCOLS_RESPONSE)
     }
 
-    pub(crate) const fn unauthorized(tx: BorrowedWriteHalf<'s>) -> Self {
+    pub(crate) const fn unauthorized(tx: BorrowedWriteHalf<'s, 'sel>) -> Self {
         Self::new(tx, UNAUTHORIZED_RESPONSE)
     }
 
-    const fn new(tx: BorrowedWriteHalf<'s>, response: &'static str) -> Self {
+    const fn new(tx: BorrowedWriteHalf<'s, 'sel>, response: &'static str) -> Self {
         Self {
             tx,
             response: response.as_bytes(),
@@ -40,12 +37,9 @@ impl<'s> UpgradeWriter<'s> {
         }
     }
 
-    pub(crate) async fn write(
-        &mut self,
-        ctx: &ServerContext<'_>,
-    ) -> Result<(), UpgradeWriterError> {
+    pub(crate) async fn write(&mut self) -> Result<(), UpgradeWriterError> {
         while self.written < self.response.len() {
-            match self.tx.write(ctx, &self.response[self.written..]).await {
+            match self.tx.write(&self.response[self.written..]).await {
                 Ok(0) => return Err(UpgradeWriterError::WriteZero),
                 Ok(len) => self.written += len,
                 Err(err) => return Err(UpgradeWriterError::Io(err)),

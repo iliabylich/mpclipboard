@@ -19,39 +19,61 @@ pub use stderr::Stderr;
 
 use acceptor::Acceptor;
 use constants::{EVENTS, FDS, ROOT_TASK_SIZE, TASK_SIZE, TASKS, TIMERS};
-use externally_driven_async_rt::{Context, EventLoop, LoopStorage, Selector, net::TcpListener};
+use externally_driven_async_rt::Selector;
 use logger::Logger;
 use rustix::{
     event::{PollFd, PollFlags, poll},
     io::Errno,
 };
 
-type ServerContext<'a> = Context<'a, !, EVENTS, TASKS, TASK_SIZE, ROOT_TASK_SIZE, TIMERS, FDS>;
-type ServerLoop<'a> = EventLoop<'a, !, EVENTS, TASKS, TASK_SIZE, ROOT_TASK_SIZE, TIMERS, FDS>;
-type ServerStorage = LoopStorage<!, EVENTS, TASKS, TASK_SIZE, ROOT_TASK_SIZE, TIMERS, FDS>;
+type Context<'a> = externally_driven_async_rt::Context<
+    'a,
+    !,
+    EVENTS,
+    TASKS,
+    TASK_SIZE,
+    ROOT_TASK_SIZE,
+    TIMERS,
+    FDS,
+>;
+type EventLoop<'a> = externally_driven_async_rt::EventLoop<
+    'a,
+    !,
+    EVENTS,
+    TASKS,
+    TASK_SIZE,
+    ROOT_TASK_SIZE,
+    TIMERS,
+    FDS,
+>;
+type LoopStorage = externally_driven_async_rt::LoopStorage<
+    !,
+    EVENTS,
+    TASKS,
+    TASK_SIZE,
+    ROOT_TASK_SIZE,
+    TIMERS,
+    FDS,
+>;
+type TcpListener<'a> = externally_driven_async_rt::net::TcpListener<'a, FDS>;
+type TcpStream<'a> = externally_driven_async_rt::net::TcpStream<'a, FDS>;
+type BorrowedReadHalf<'s, 'a> = externally_driven_async_rt::net::BorrowedReadHalf<'s, 'a, FDS>;
+type BorrowedWriteHalf<'s, 'a> = externally_driven_async_rt::net::BorrowedWriteHalf<'s, 'a, FDS>;
 
 pub fn run() -> Result<!, ServerError> {
     Logger::init()?;
 
     let (address, raw_address, token) = config::from_env()?;
 
-    info!("Trying to bind on {raw_address}");
-    let listener = TcpListener::bind(address).map_err(|err| ServerError::Bind {
-        address: raw_address,
-        err,
-    })?;
-    info!("listening on {raw_address}");
+    let mut acceptor = Acceptor::new(address, raw_address, token);
 
-    let mut acceptor = Acceptor::new(listener, token);
-
-    let storage = ServerStorage::new();
+    let storage = LoopStorage::new();
     // SAFETY: `storage` outlives `event_loop`, which is dropped explicitly below, and only the
     // event loop's tasks call `wake()`, so no waker is woken after `storage` is gone.
-    let storage =
-        unsafe { core::mem::transmute::<&ServerStorage, &'static ServerStorage>(&storage) };
+    let storage = unsafe { core::mem::transmute::<&LoopStorage, &'static LoopStorage>(&storage) };
 
     let mut selector = Selector::new().map_err(ServerError::Selector)?;
-    let mut event_loop = ServerLoop::new(storage, &mut selector, |ctx| acceptor.run(ctx))
+    let mut event_loop = EventLoop::new(storage, &mut selector, |ctx| acceptor.run(ctx))
         .map_err(ServerError::EventLoopStart)?;
 
     let err = loop {

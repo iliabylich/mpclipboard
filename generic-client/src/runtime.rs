@@ -11,7 +11,7 @@ use core::{
     ptr::NonNull,
     sync::atomic::{AtomicBool, Ordering},
 };
-use externally_driven_async_rt::{Context, EventLoop, EventLoopError, LoopStorage, Selector};
+use externally_driven_async_rt::{EventLoopError, Selector};
 use mpclipboard_shared::Message;
 use rustix::{
     fd::{AsFd, BorrowedFd},
@@ -20,16 +20,47 @@ use rustix::{
 use rustls::ClientConfig;
 use std::sync::Arc;
 
-pub(crate) type LoopContext<'a> =
-    Context<'a, LoopEvent, EVENTS, TASKS, TASK_SIZE, ROOT_TASK_SIZE, TIMERS, FDS>;
-type Loop = EventLoop<'static, LoopEvent, EVENTS, TASKS, TASK_SIZE, ROOT_TASK_SIZE, TIMERS, FDS>;
-type Storage = LoopStorage<LoopEvent, EVENTS, TASKS, TASK_SIZE, ROOT_TASK_SIZE, TIMERS, FDS>;
+pub(crate) type Context<'a> = externally_driven_async_rt::Context<
+    'a,
+    LoopEvent,
+    EVENTS,
+    TASKS,
+    TASK_SIZE,
+    ROOT_TASK_SIZE,
+    TIMERS,
+    FDS,
+>;
+type EventLoop = externally_driven_async_rt::EventLoop<
+    'static,
+    LoopEvent,
+    EVENTS,
+    TASKS,
+    TASK_SIZE,
+    ROOT_TASK_SIZE,
+    TIMERS,
+    FDS,
+>;
+type LoopStorage = externally_driven_async_rt::LoopStorage<
+    LoopEvent,
+    EVENTS,
+    TASKS,
+    TASK_SIZE,
+    ROOT_TASK_SIZE,
+    TIMERS,
+    FDS,
+>;
+pub(crate) type TcpStream = externally_driven_async_rt::net::TcpStream<'static, FDS>;
+pub(crate) type UdpSocket = externally_driven_async_rt::net::UdpSocket<'static, FDS>;
+pub(crate) type BorrowedReadHalf<'s> =
+    externally_driven_async_rt::net::BorrowedReadHalf<'s, 'static, FDS>;
+pub(crate) type BorrowedWriteHalf<'s> =
+    externally_driven_async_rt::net::BorrowedWriteHalf<'s, 'static, FDS>;
 
-static STORAGE: Storage = Storage::new();
+static STORAGE: LoopStorage = LoopStorage::new();
 static CREATED: AtomicBool = AtomicBool::new(false);
 
 pub(crate) struct Runtime {
-    event_loop: ManuallyDrop<Loop>,
+    event_loop: ManuallyDrop<EventLoop>,
     data: NonNull<Data>,
 }
 
@@ -42,7 +73,7 @@ impl Runtime {
         let selector = Selector::new().map_err(RuntimeError::Selector)?;
         let (data, selector, outbox, config, tls_config) = Data::new(selector, config, tls_config);
 
-        let result = Loop::new(&STORAGE, selector, |ctx| async move {
+        let result = EventLoop::new(&STORAGE, selector, |ctx| async move {
             let connection = Connection::new(ctx, config, tls_config, outbox);
 
             loop {

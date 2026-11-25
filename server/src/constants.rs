@@ -15,7 +15,7 @@ pub(crate) const UPGRADE_REQUEST_MAX_HEADERS: usize = 32;
 pub(crate) mod vars {
     use core::ffi::CStr;
 
-    pub(crate) const BIND_ADDRESS: &'static CStr = c"MPCLIPBOARD_BIND_ADDRESS";
-    pub(crate) const TOKEN: &'static CStr = c"MPCLIPBOARD_TOKEN";
-    pub(crate) const RUST_LOG: &'static CStr = c"RUST_LOG";
+    pub(crate) const BIND_ADDRESS: &CStr = c"MPCLIPBOARD_BIND_ADDRESS";
+    pub(crate) const TOKEN: &CStr = c"MPCLIPBOARD_TOKEN";
+    pub(crate) const RUST_LOG: &CStr = c"RUST_LOG";
 }
