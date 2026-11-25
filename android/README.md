@@ -14,9 +14,9 @@ The host app builds all of that itself, the same way the [Linux](/linux) and [ma
 ### Building
 
 ```sh
-mise build:debug                      # build/outputs/aar/mpclipboard-debug.aar
-mise build:release                    # build/outputs/aar/mpclipboard-release.aar
-mise release --out <absolute path>    # build:release + copy the .aar to <absolute path>
+mise build:debug     # build/outputs/aar/mpclipboard-debug.aar
+mise build:release   # build/outputs/aar/mpclipboard-release.aar
+mise release --debug-out <absolute path> --release-out <absolute path> # both builds, copied to given paths
 ```
 
 ### Integration
@@ -46,6 +46,8 @@ public final class Output {
 
 public enum Connectivity { CONNECTING, CONNECTED, DISCONNECTED }
 ```
+
+`url` must be `https://host:port`, `token` and `id` are up to 20 bytes each. Only one instance can be created per process.
 
 All calls must happen on one thread. Calling anything after `close()` aborts the process.
 

@@ -2,9 +2,9 @@
 
 A simple client that:
 
-1. implements communication over HTTP/3 using `generic-client` and FFI
+1. talks to the server using [`generic-client`](/generic-client) via its C bindings
 2. integrates with macOS clipboard to read/write clipboard text
-3. shows a tray icon with last 5 clips
+3. shows a tray icon with last 4 clips
 4. shows a system notification every time a new text is received
 
 ### Configuration
@@ -12,7 +12,7 @@ A simple client that:
 If you have your server up and running, make sure to create a config in `~/.config/mpclipboard/config.toml`:
 
 ```toml
-url = "https://host:443" # must be https, clients talk HTTP/3
+url = "https://host:443" # must be https:// with an explicit port
 token = "s3cr3t"
 id = "macos-client"
 ```
@@ -20,8 +20,8 @@ id = "macos-client"
 ### Building
 
 ```sh
-mise dev                             # builds and runs a debug app from build/Debug/mpclipboard.app
-mise release:dmg --version <version> --out <absolute path> # builds a release app and packs it into a .dmg
+mise dev                                                    # builds and runs a debug app against a local server
+mise release:dmg --version <version> --out <absolute path>  # builds a release app and packs it into a .dmg
 ```
 
 ### Other notes
