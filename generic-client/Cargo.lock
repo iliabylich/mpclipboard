@@ -75,12 +75,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3ded4057c258ba199e2d26386d3af3780957ecaee6c4ef4041c6b4b8b97c0b06"
 
 [[package]]
-name = "boml"
-version = "2.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "94e18ce0171e3e8a2d294da0d6bfad9814eb3516d24864b32dc3902c786e0fb5"
-
-[[package]]
 name = "cc"
 version = "1.11.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -216,7 +210,6 @@ name = "mpclipboard-generic-client"
 version = "0.1.0"
 dependencies = [
  "android_logger",
- "boml",
  "env_logger",
  "externally-driven-async-rt",
  "httparse",

@@ -1,8 +1,8 @@
 use crate::{
     constants::MAX_CONFIG_SIZE,
+    toml::{Toml, TomlError},
     url::{Url, UrlParseError},
 };
-use boml::{Toml, table::TomlGetError, types::TomlValueType};
 use core::{ffi::CStr, str::Utf8Error};
 use mpclipboard_shared::{
     FixedStrError, ID, Token,
@@ -36,67 +36,44 @@ impl Config {
             None => None,
         };
 
-        let toml = text
-            .map(boml::parse)
-            .transpose()
-            .map_err(|err| ConfigError::MalformedToml(err.src.start))?;
+        let toml = text.map(Toml::parse).transpose()?.unwrap_or_default();
 
-        let url = get_url(toml.as_ref())?;
-        let token = get_token(toml.as_ref())?;
-        let id = get_id(toml.as_ref())?;
+        let url = get_url(&toml)?;
+        let token = get_token(&toml)?;
+        let id = get_id(&toml)?;
 
         Ok(Self { url, token, id })
     }
 }
 
-fn get_url(toml: Option<&Toml<'_>>) -> Result<Url, ConfigUrlError> {
-    let url = get(c"MPCLIPBOARD_URL", toml, "url")?;
+fn get_url(toml: &Toml<'_>) -> Result<Url, ConfigUrlError> {
+    let url = get(c"MPCLIPBOARD_URL", toml.url, "url")?;
     let url = Url::parse(url)?;
     Ok(url)
 }
 
-fn get_token(toml: Option<&Toml<'_>>) -> Result<Token, ConfigTokenError> {
-    let token = get(c"MPCLIPBOARD_TOKEN", toml, "token")?;
+fn get_token(toml: &Toml<'_>) -> Result<Token, ConfigTokenError> {
+    let token = get(c"MPCLIPBOARD_TOKEN", toml.token, "token")?;
     let token = Token::new(token)?;
     Ok(token)
 }
 
-fn get_id(toml: Option<&Toml<'_>>) -> Result<ID, ConfigIdError> {
-    let id = get(c"MPCLIPBOARD_ID", toml, "id")?;
+fn get_id(toml: &Toml<'_>) -> Result<ID, ConfigIdError> {
+    let id = get(c"MPCLIPBOARD_ID", toml.id, "id")?;
     let id = ID::new(id)?;
     Ok(id)
 }
 
 fn get<'a>(
     env_var_name: &'static CStr,
-    toml: Option<&'a Toml<'_>>,
+    from_toml: Option<&'a str>,
     config_key: &'static str,
 ) -> Result<&'a str, LookupError> {
-    from_env(env_var_name)
-        .transpose()
-        .or_else(|| toml.and_then(|toml| from_toml(toml, config_key).transpose()))
-        .unwrap_or(Err(LookupError::Missing {
-            env_var_name,
-            config_key,
-        }))
-}
-
-fn from_env(env_var_name: &'static CStr) -> Result<Option<&'static str>, LookupError> {
-    let value = env::var(env_var_name)?;
-    Ok(value)
-}
-
-fn from_toml<'a>(
-    toml: &'a Toml<'_>,
-    config_key: &'static str,
-) -> Result<Option<&'a str>, LookupError> {
-    match toml.get_string(config_key) {
-        Ok(value) => Ok(Some(value)),
-        Err(TomlGetError::InvalidKey) => Ok(None),
-        Err(TomlGetError::TypeMismatch(_, found)) => {
-            Err(LookupError::NotAString { config_key, found })
-        }
-    }
+    let from_env = env::var(env_var_name)?;
+    from_env.or(from_toml).ok_or(LookupError::Missing {
+        env_var_name,
+        config_key,
+    })
 }
 
 fn open() -> Result<Option<OwnedFd>, ConfigError> {
@@ -154,8 +131,8 @@ pub enum ConfigError {
     ConfigIsTooLong,
     #[error("config is not valid utf-8: {0}")]
     NonUtf8(#[from] Utf8Error),
-    #[error("failed to parse TOML config at byte {0}")]
-    MalformedToml(usize),
+    #[error("failed to parse TOML config: {0}")]
+    MalformedToml(#[from] TomlError),
     #[error("invalid url: {0}")]
     Url(#[from] ConfigUrlError),
     #[error("invalid token: {0}")]
@@ -176,11 +153,6 @@ pub enum LookupError {
     },
     #[error(transparent)]
     NonUtf8Env(#[from] EnvVarError),
-    #[error("{config_key} must be a string in toml, got {found:?}")]
-    NotAString {
-        config_key: &'static str,
-        found: TomlValueType,
-    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]

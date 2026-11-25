@@ -4,6 +4,7 @@ pub use mpclipboard::{MPClipboard, MPClipboardError};
 pub use mpclipboard_shared::{FixedStrError, env::EnvVarError};
 pub use output::Output;
 pub use runtime::RuntimeError;
+pub use toml::TomlError;
 pub use url::UrlParseError;
 
 mod config;
@@ -20,5 +21,6 @@ mod resolve;
 mod runtime;
 mod tls_config;
 mod tls_stream;
+mod toml;
 mod upgrade;
 mod url;
