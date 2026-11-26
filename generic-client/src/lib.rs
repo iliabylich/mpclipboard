@@ -1,3 +1,5 @@
+extern crate alloc;
+
 pub use config::{ConfigError, ConfigIdError, ConfigTokenError, ConfigUrlError, LookupError};
 pub use connectivity::Connectivity;
 pub use mpclipboard::{MPClipboard, MPClipboardError};

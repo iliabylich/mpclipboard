@@ -9,6 +9,7 @@ use crate::{
     tls_stream::{TlsError, TlsStream, TlsWriteHalf},
     upgrade::{UpgradeError, UpgradeReader, UpgradeWriter},
 };
+use alloc::sync::Arc;
 use core::net::{Ipv4Addr, SocketAddr};
 use externally_driven_async_rt::{
     Either3, MaybeTimedOut, io::FrameWriterError, net::NetError, select3,
@@ -16,7 +17,6 @@ use externally_driven_async_rt::{
 use mpclipboard_shared::{MessageReader, MessageReaderError, MessageWriter};
 use rustix::io::Errno;
 use rustls::ClientConfig;
-use std::sync::Arc;
 
 pub(crate) struct Connection {
     ctx: Context<'static>,

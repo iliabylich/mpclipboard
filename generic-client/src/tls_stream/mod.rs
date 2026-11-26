@@ -10,6 +10,7 @@ pub(crate) use read_half::TlsReadHalf;
 pub(crate) use write_half::TlsWriteHalf;
 
 use crate::runtime::TcpStream;
+use alloc::sync::Arc;
 use core::cell::RefCell;
 use externally_driven_async_rt::io::{AsyncRead, AsyncWrite};
 use rustix::io::Errno;
@@ -20,7 +21,6 @@ use rustls::{
     unbuffered::{EncodeError, EncryptError},
 };
 use state::TlsState;
-use std::sync::Arc;
 use step::Step;
 
 pub(crate) struct TlsStream {

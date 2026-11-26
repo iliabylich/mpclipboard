@@ -1,7 +1,7 @@
+use alloc::sync::Arc;
 use core::time::Duration;
 use rustix::time::{ClockId, clock_gettime};
 use rustls::{ClientConfig, RootCertStore, pki_types::UnixTime, time_provider::TimeProvider};
-use std::sync::Arc;
 
 pub(crate) fn tls_config() -> Result<Arc<ClientConfig>, rustls::Error> {
     let roots = RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());

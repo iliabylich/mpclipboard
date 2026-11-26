@@ -6,6 +6,7 @@ use crate::{
     loop_state::{LoopEvent, LoopState},
     outbox::Outbox,
 };
+use alloc::sync::Arc;
 use core::{
     mem::ManuallyDrop,
     ptr::NonNull,
@@ -18,7 +19,6 @@ use rustix::{
     io::Errno,
 };
 use rustls::ClientConfig;
-use std::sync::Arc;
 
 pub(crate) type Context<'a> = externally_driven_async_rt::Context<
     'a,

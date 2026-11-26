@@ -7,7 +7,6 @@ use crate::{
 };
 use mpclipboard_shared::{Message, Store};
 use rustix::fd::{AsFd, BorrowedFd};
-use std::sync::Once;
 
 pub struct MPClipboard {
     runtime: Runtime,
@@ -27,13 +26,13 @@ impl MPClipboard {
     }
 
     pub fn new_inline(url: &str, token: &str, id: &str) -> Result<Self, MPClipboardError> {
-        init_once();
+        Logger::init();
         let config = Config::new(url, token, id)?;
         Self::new(config)
     }
 
     pub fn new_from_file() -> Result<Self, MPClipboardError> {
-        init_once();
+        Logger::init();
         let config = Config::new_from_file()?;
         Self::new(config)
     }
@@ -84,10 +83,4 @@ impl From<rustls::Error> for MPClipboardError {
     fn from(err: rustls::Error) -> Self {
         Self::TlsConfig(err)
     }
-}
-
-fn init_once() {
-    static INIT: Once = Once::new();
-
-    INIT.call_once(Logger::init);
 }
