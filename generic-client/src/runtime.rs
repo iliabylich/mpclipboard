@@ -6,7 +6,7 @@ use crate::{
     loop_state::{LoopEvent, LoopState},
     outbox::Outbox,
 };
-use alloc::sync::Arc;
+use alloc::{boxed::Box, sync::Arc};
 use core::{
     mem::ManuallyDrop,
     ptr::NonNull,

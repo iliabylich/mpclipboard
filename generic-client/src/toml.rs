@@ -48,6 +48,7 @@ pub struct TomlError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::format;
 
     #[test]
     fn test_valid() {

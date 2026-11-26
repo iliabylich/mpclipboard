@@ -10,7 +10,7 @@ pub(crate) use read_half::TlsReadHalf;
 pub(crate) use write_half::TlsWriteHalf;
 
 use crate::runtime::TcpStream;
-use alloc::sync::Arc;
+use alloc::{string::ToString, sync::Arc};
 use core::cell::RefCell;
 use externally_driven_async_rt::io::{AsyncRead, AsyncWrite};
 use rustix::io::Errno;

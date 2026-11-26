@@ -1,4 +1,5 @@
 use crate::{Connectivity, MPClipboard};
+use alloc::boxed::Box;
 use core::{ffi::c_char, str::Utf8Error};
 use rustix::fd::{AsFd, AsRawFd};
 

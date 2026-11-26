@@ -1,4 +1,4 @@
-use alloc::sync::Arc;
+use alloc::{sync::Arc, vec};
 use core::time::Duration;
 use rustix::time::{ClockId, clock_gettime};
 use rustls::{ClientConfig, RootCertStore, pki_types::UnixTime, time_provider::TimeProvider};

@@ -43,6 +43,7 @@ pub(crate) fn parse(bytes: &[u8]) -> Result<bool, UpgradeError> {
 mod tests {
     use super::{UpgradeError, parse};
     use crate::constants::UPGRADE_RESPONSE_BUFFER_SIZE;
+    use std::format;
 
     const RESPONSE: &str = "HTTP/1.1 101 Switching Protocols\r\n\
 Connection: Upgrade\r\n\

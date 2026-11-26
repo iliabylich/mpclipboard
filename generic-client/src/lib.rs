@@ -1,4 +1,8 @@
+#![no_std]
+
 extern crate alloc;
+#[cfg(test)]
+extern crate std;
 
 pub use config::{ConfigError, ConfigIdError, ConfigTokenError, ConfigUrlError, LookupError};
 pub use connectivity::Connectivity;
