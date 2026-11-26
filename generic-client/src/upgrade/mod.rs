@@ -18,7 +18,7 @@ pub(crate) enum UpgradeError {
     #[error("failed to read HTTP response: {0}")]
     Read(#[from] ReadExactError<TlsError>),
     #[error("malformed HTTP response: {0}")]
-    InvalidHttpResponse(#[from] httparse::Error),
+    InvalidHttpResponse(httparse::Error),
     #[error("HTTP response exceeds {UPGRADE_RESPONSE_BUFFER_SIZE} bytes")]
     TooLarge,
     #[error("server rejected the token")]
@@ -29,4 +29,10 @@ pub(crate) enum UpgradeError {
     NotUpgrade,
     #[error("response is not Upgrade: {UPGRADE_PROTOCOL}")]
     UnsupportedUpgrade,
+}
+
+impl From<httparse::Error> for UpgradeError {
+    fn from(err: httparse::Error) -> Self {
+        Self::InvalidHttpResponse(err)
+    }
 }
