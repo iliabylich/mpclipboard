@@ -1,14 +1,14 @@
 use crate::{constants::TLS_BUFFER_SIZE, tls_stream::TlsError};
 
 pub(super) struct Incoming {
-    buf: Box<[u8; TLS_BUFFER_SIZE]>,
+    buf: [u8; TLS_BUFFER_SIZE],
     len: usize,
 }
 
 impl Incoming {
     pub(super) fn new() -> Self {
         Self {
-            buf: Box::new([0; TLS_BUFFER_SIZE]),
+            buf: [0; TLS_BUFFER_SIZE],
             len: 0,
         }
     }

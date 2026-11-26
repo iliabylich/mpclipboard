@@ -1,7 +1,7 @@
 use crate::{constants::TLS_BUFFER_SIZE, tls_stream::TlsError};
 
 pub(super) struct Plaintext {
-    buf: Box<[u8; TLS_BUFFER_SIZE]>,
+    buf: [u8; TLS_BUFFER_SIZE],
     start: usize,
     end: usize,
 }
@@ -9,7 +9,7 @@ pub(super) struct Plaintext {
 impl Plaintext {
     pub(super) fn new() -> Self {
         Self {
-            buf: Box::new([0; TLS_BUFFER_SIZE]),
+            buf: [0; TLS_BUFFER_SIZE],
             start: 0,
             end: 0,
         }

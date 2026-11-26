@@ -6,7 +6,7 @@ use core::{
 pub(crate) const EVENTS: usize = 20;
 pub(crate) const TASKS: usize = 1;
 pub(crate) const TASK_SIZE: usize = 0;
-pub(crate) const ROOT_TASK_SIZE: usize = 9968;
+pub(crate) const ROOT_TASK_SIZE: usize = 114008;
 pub(crate) const TIMERS: usize = 1;
 pub(crate) const FDS: usize = 1;
 

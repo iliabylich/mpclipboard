@@ -1,7 +1,7 @@
 use crate::constants::TLS_BUFFER_SIZE;
 
 pub(super) struct Outgoing {
-    buf: Box<[u8; TLS_BUFFER_SIZE]>,
+    buf: [u8; TLS_BUFFER_SIZE],
     len: usize,
     sent: usize,
 }
@@ -9,7 +9,7 @@ pub(super) struct Outgoing {
 impl Outgoing {
     pub(super) fn new() -> Self {
         Self {
-            buf: Box::new([0; TLS_BUFFER_SIZE]),
+            buf: [0; TLS_BUFFER_SIZE],
             len: 0,
             sent: 0,
         }
