@@ -20,6 +20,8 @@ pub(crate) const KEEPALIVE_COUNT: u32 = 2;
 
 pub(crate) const DNS_SERVER: SocketAddrV4 = SocketAddrV4::new(Ipv4Addr::new(8, 8, 8, 8), 53);
 
+pub(crate) const MAX_HOST_LENGTH: usize = 253;
+
 pub(crate) const TLS_BUFFER_SIZE: usize = 17 * 1024;
 
 pub(crate) const UPGRADE_RESPONSE_BUFFER_SIZE: usize = 2048;

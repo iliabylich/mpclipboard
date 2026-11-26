@@ -1,8 +1,10 @@
+use crate::constants::MAX_HOST_LENGTH;
 use core::num::{IntErrorKind, ParseIntError};
+use mpclipboard_shared::{FixedStr, FixedStrError};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Url {
-    host: String,
+    host: FixedStr<MAX_HOST_LENGTH>,
     port: u16,
 }
 
@@ -15,19 +17,14 @@ impl Url {
             return Err(UrlParseError::NotHttps);
         }
         let (host, port) = url.rsplit_once(':').ok_or(UrlParseError::NoPortSeparator)?;
-        if host.is_empty() {
-            return Err(UrlParseError::EmptyHost);
-        }
+        let host = FixedStr::new(host)?;
         let port = port.parse::<u16>()?;
 
-        Ok(Self {
-            host: host.to_string(),
-            port,
-        })
+        Ok(Self { host, port })
     }
 
     pub(crate) fn host(&self) -> &str {
-        &self.host
+        self.host.as_str()
     }
 
     pub(crate) const fn port(&self) -> u16 {
@@ -43,8 +40,8 @@ pub enum UrlParseError {
     NotHttps,
     #[error("no : separator between host and port")]
     NoPortSeparator,
-    #[error("host is empty")]
-    EmptyHost,
+    #[error("wrong host length: {0}")]
+    HostLength(#[from] FixedStrError),
     #[error("invalid port: {0:?}")]
     InvalidPort(IntErrorKind),
 }
@@ -59,13 +56,14 @@ impl From<ParseIntError> for UrlParseError {
 mod tests {
     use super::{Url, UrlParseError};
     use core::num::IntErrorKind;
+    use mpclipboard_shared::{FixedStr, FixedStrError};
 
     #[test]
     fn test_parse() {
         assert_eq!(
             Url::parse("https://google.com:443"),
             Ok(Url {
-                host: String::from("google.com"),
+                host: FixedStr::new("google.com").unwrap(),
                 port: 443,
             })
         );
@@ -85,7 +83,10 @@ mod tests {
             Url::parse("https://localhost"),
             Err(UrlParseError::NoPortSeparator)
         );
-        assert_eq!(Url::parse("https://:3000"), Err(UrlParseError::EmptyHost));
+        assert_eq!(
+            Url::parse("https://:3000"),
+            Err(UrlParseError::HostLength(FixedStrError::Empty))
+        );
         assert_eq!(
             Url::parse("https://localhost:99999"),
             Err(UrlParseError::InvalidPort(IntErrorKind::PosOverflow))
