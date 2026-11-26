@@ -1,17 +1,17 @@
 use crate::{
     constants::UPGRADE_TIMEOUT_IN_SECS,
-    constants::vars::{BIND_ADDRESS, RUST_LOG, TOKEN},
+    constants::vars::{BIND_ADDRESS, TOKEN},
     upgrade::{ParseError, UpgradeWriterError},
 };
 use core::net::AddrParseError;
 use externally_driven_async_rt::{EventLoopError, io::FrameWriterError, net::NetError};
-use mpclipboard_shared::{FixedStrError, ID, MessageReaderError, env::EnvVarError};
+use mpclipboard_shared::{FixedStrError, ID, LoggerError, MessageReaderError, env::EnvVarError};
 use rustix::io::Errno;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum ServerError {
     NonUtf8EnvVar(EnvVarError),
-    InvalidRustLog(&'static str),
+    Logger(LoggerError),
     MissingBindAddress,
     InvalidBindAddress(AddrParseError),
     MissingToken,
@@ -26,7 +26,7 @@ impl core::fmt::Display for ServerError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             Self::NonUtf8EnvVar(err) => write!(f, "{err}"),
-            Self::InvalidRustLog(value) => write!(f, "invalid {RUST_LOG:?}: {value}"),
+            Self::Logger(err) => write!(f, "{err}"),
             Self::MissingBindAddress => write!(f, "{BIND_ADDRESS:?} is missing"),
             Self::InvalidBindAddress(err) => write!(f, "malformed {BIND_ADDRESS:?}: {err}"),
             Self::MissingToken => write!(f, "{TOKEN:?} is missing"),

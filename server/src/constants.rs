@@ -17,5 +17,4 @@ pub(crate) mod vars {
 
     pub(crate) const BIND_ADDRESS: &CStr = c"MPCLIPBOARD_BIND_ADDRESS";
     pub(crate) const TOKEN: &CStr = c"MPCLIPBOARD_TOKEN";
-    pub(crate) const RUST_LOG: &CStr = c"RUST_LOG";
 }

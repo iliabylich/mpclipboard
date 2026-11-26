@@ -27,7 +27,7 @@ impl<'a> Client<'a> {
             match select3(reader.read(), pubsub.receive(), writer.run()).await {
                 Either3::First(Ok(Some(message))) => pubsub.publish(id, message),
                 Either3::First(Ok(None)) => {
-                    info!("[{id}] disconnected");
+                    log::info!("[{id}] disconnected");
                     return Ok(());
                 }
                 Either3::First(Err(err)) => return Err(ClientError::Read { id, err }),

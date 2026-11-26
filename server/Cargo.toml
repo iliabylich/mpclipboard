@@ -15,12 +15,9 @@ bench = false
 [dependencies]
 externally-driven-async-rt = { version = "0.5.1" }
 mpclipboard-shared = { path = "../shared" }
-rustix = { version = "1", default-features = false, features = [
-    "event",
-    "stdio",
-    "termios",
-] }
+rustix = { version = "1", default-features = false, features = ["event"] }
 httparse = { version = "1", default-features = false }
+log = { version = "0.4", default-features = false }
 
 [features]
 strace-like = ["externally-driven-async-rt/strace-like"]

@@ -38,15 +38,15 @@ impl Acceptor {
         let token: &'a Token = token;
         let pubsub: &'a PubSub = pubsub;
 
-        info!("Trying to bind on {raw_address}");
+        log::info!("Trying to bind on {raw_address}");
         let mut listener = match TcpListener::bind(&ctx, *address) {
             Ok(listener) => listener,
             Err(err) => {
-                error!("failed to bind {raw_address}: {err}");
+                log::error!("failed to bind {raw_address}: {err}");
                 return;
             }
         };
-        info!("listening on {raw_address}");
+        log::info!("listening on {raw_address}");
 
         loop {
             let Ok(task) = ctx.reserve_task().await else {
@@ -55,16 +55,16 @@ impl Acceptor {
             let stream = loop {
                 match listener.accept().await {
                     Ok((stream, _)) => break stream,
-                    Err(err) => error!("accept() failed: {err}"),
+                    Err(err) => log::error!("accept() failed: {err}"),
                 }
             };
-            trace!("accepted");
+            log::trace!("accepted");
             let Some(pubsub) = pubsub.subscribe() else {
                 unreachable!("every reserved task has a free pubsub slot");
             };
             drop(task.spawn(async move {
                 if let Err(err) = serve(&ctx, stream, token, pubsub).await {
-                    error!("{err}");
+                    log::error!("{err}");
                 }
             }));
         }
@@ -111,7 +111,7 @@ async fn upgrade<'a>(
         .write()
         .await
         .map_err(|err| ClientError::UpgradeWrite { id, err })?;
-    info!("[{id}] connected");
+    log::info!("[{id}] connected");
 
     Ok(Client::new(stream, id, pubsub))
 }

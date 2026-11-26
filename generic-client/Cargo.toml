@@ -17,19 +17,11 @@ webpki-roots = "1"
 rustix = { version = "1", default-features = false, features = ["fs", "time"] }
 mini-sansio-dns = "2"
 httparse = { version = "1", default-features = false }
-log = "0.4"
+log = { version = "0.4", default-features = false }
 thiserror = { version = "2", default-features = false }
 
-[target.'cfg(target_os = "android")'.dependencies]
-android_logger = { version = "0.15", default-features = false }
-
-[target.'cfg(any(target_os = "linux", target_os = "macos"))'.dependencies]
-env_logger = { version = "0.11", default-features = false, features = [
-    "color",
-] }
-
 [dev-dependencies]
-rustix = { version = "1", features = ["event"] }
+rustix = { version = "1", default-features = false, features = ["event"] }
 
 [profile.release]
 panic = "abort"

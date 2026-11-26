@@ -3,24 +3,21 @@
 #[cfg(test)]
 extern crate std;
 
-#[macro_use]
-mod logger;
 mod acceptor;
 mod client;
 mod config;
 mod constants;
 mod errors;
 mod pubsub;
-mod stderr;
 mod upgrade;
 
 pub use errors::ServerError;
-pub use stderr::Stderr;
+pub use mpclipboard_shared::Stderr;
 
 use acceptor::Acceptor;
 use constants::{EVENTS, FDS, ROOT_TASK_SIZE, TASK_SIZE, TASKS, TIMERS};
 use externally_driven_async_rt::Selector;
-use logger::Logger;
+use mpclipboard_shared::Logger;
 use rustix::{
     event::{PollFd, PollFlags, poll},
     io::Errno,
@@ -61,7 +58,7 @@ type BorrowedReadHalf<'s, 'a> = externally_driven_async_rt::net::BorrowedReadHal
 type BorrowedWriteHalf<'s, 'a> = externally_driven_async_rt::net::BorrowedWriteHalf<'s, 'a, FDS>;
 
 pub fn run() -> Result<!, ServerError> {
-    Logger::init()?;
+    Logger::init().map_err(ServerError::Logger)?;
 
     let (address, raw_address, token) = config::from_env()?;
 

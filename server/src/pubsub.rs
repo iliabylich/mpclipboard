@@ -69,7 +69,7 @@ impl PubSubHandle<'_> {
             return;
         }
 
-        info!("[{id}] publishing {message:?}");
+        log::info!("[{id}] publishing {message:?}");
 
         for slot in &self.pubsub.slots {
             if core::ptr::eq(slot, self.slot) {

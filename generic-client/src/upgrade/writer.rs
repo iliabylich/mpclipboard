@@ -4,11 +4,11 @@ use crate::{
 };
 use core::fmt::Write;
 use externally_driven_async_rt::io::AsyncWrite;
-use mpclipboard_shared::{PROTOCOL_VERSION, UPGRADE_PROTOCOL};
+use mpclipboard_shared::{FormatBuffer, PROTOCOL_VERSION, UPGRADE_PROTOCOL};
 
 pub(crate) struct UpgradeWriter<'s> {
     tx: TlsWriteHalf<'s>,
-    buf: Buffer,
+    buf: FormatBuffer<1024>,
     written: usize,
 }
 
@@ -22,7 +22,7 @@ impl<'s> UpgradeWriter<'s> {
     }
 
     pub(crate) async fn write(&mut self) -> Result<(), UpgradeWriterError> {
-        while self.written < self.buf.len() {
+        while self.written < self.buf.as_bytes().len() {
             match self.tx.write(&self.buf.as_bytes()[self.written..]).await {
                 Ok(0) => return Err(UpgradeWriterError::WriteZero),
                 Ok(len) => self.written += len,
@@ -34,8 +34,8 @@ impl<'s> UpgradeWriter<'s> {
     }
 }
 
-fn format_request(config: &Config) -> Buffer {
-    let mut request = Buffer::new();
+fn format_request(config: &Config) -> FormatBuffer<1024> {
+    let mut request = FormatBuffer::new();
     write!(
         request,
         "GET / HTTP/1.1\r\n\
@@ -53,39 +53,6 @@ Version: {PROTOCOL_VERSION}\r\n\
     )
     .unwrap_or_else(|_| unreachable!("upgrade request exceeds 1024 bytes"));
     request
-}
-
-struct Buffer {
-    buf: [u8; 1024],
-    len: usize,
-}
-
-impl Buffer {
-    const fn new() -> Self {
-        Self {
-            buf: [0; 1024],
-            len: 0,
-        }
-    }
-
-    fn as_bytes(&self) -> &[u8] {
-        &self.buf[..self.len]
-    }
-
-    const fn len(&self) -> usize {
-        self.len
-    }
-}
-
-impl Write for Buffer {
-    fn write_str(&mut self, s: &str) -> core::fmt::Result {
-        let Some(spare) = self.buf.get_mut(self.len..self.len + s.len()) else {
-            return Err(core::fmt::Error);
-        };
-        spare.copy_from_slice(s.as_bytes());
-        self.len += s.len();
-        Ok(())
-    }
 }
 
 #[derive(Debug, thiserror::Error)]
