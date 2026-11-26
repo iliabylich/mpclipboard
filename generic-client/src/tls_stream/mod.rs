@@ -101,8 +101,8 @@ pub(crate) enum TlsError {
     Encode(EncodeError),
     #[error("failed to encrypt TLS data: {0}")]
     Encrypt(EncryptError),
-    #[error("unexpected TLS state {0}")]
-    UnexpectedState(String),
+    #[error("unexpected TLS state")]
+    UnexpectedState,
     #[error("received application data during TLS handshake")]
     PlaintextDuringHandshake,
     #[error("can't write before TLS handshake is complete")]

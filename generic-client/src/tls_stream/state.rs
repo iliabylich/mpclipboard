@@ -61,7 +61,10 @@ impl TlsState {
                 ConnectionState::WriteTraffic(_) => Some(Step::Writable),
                 ConnectionState::PeerClosed => Some(Step::PeerClosed),
                 ConnectionState::Closed => return Err(TlsError::Closed),
-                state => return Err(TlsError::UnexpectedState(format!("{state:?}"))),
+                state => {
+                    log::error!("unexpected TLS state {state:?}");
+                    return Err(TlsError::UnexpectedState);
+                }
             };
 
             self.incoming.discard(discard);
@@ -80,7 +83,10 @@ impl TlsState {
             ConnectionState::WriteTraffic(mut traffic) => traffic
                 .encrypt(buf, self.outgoing.spare_mut())
                 .map_err(TlsError::Encrypt)?,
-            state => return Err(TlsError::UnexpectedState(format!("{state:?}"))),
+            state => {
+                log::error!("unexpected TLS state {state:?}");
+                return Err(TlsError::UnexpectedState);
+            }
         };
         self.outgoing.filled(len);
 
