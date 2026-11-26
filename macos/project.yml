@@ -21,6 +21,6 @@ targets:
         SWIFT_VERSION: 6.0
       configs:
         Debug:
-          OTHER_LDFLAGS: ../generic-client/target/debug/libmpclipboard_generic_client.a
+          OTHER_LDFLAGS: ../generic-client-ffi/target/debug/libmpclipboard_generic_client_ffi.a
         Release:
-          OTHER_LDFLAGS: ../generic-client/target/release/libmpclipboard_generic_client.a
+          OTHER_LDFLAGS: ../generic-client-ffi/target/release/libmpclipboard_generic_client_ffi.a

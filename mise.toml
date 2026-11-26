@@ -6,6 +6,7 @@ config_roots = [
     "android",
     "dev-certs",
     "generic-client",
+    "generic-client-ffi",
     "linux",
     "macos",
     "poll-cli",

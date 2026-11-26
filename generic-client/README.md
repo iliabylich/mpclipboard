@@ -10,7 +10,7 @@ id = "my-laptop"                    # any name of this device, up to 20 bytes, s
 
 Each value can be overridden with `MPCLIPBOARD_URL`, `MPCLIPBOARD_TOKEN` and `MPCLIPBOARD_ID` environment variables.
 
-You can take a look at [bindings.h](/generic-client/bindings.h).
+You can take a look at [bindings.h](/generic-client-ffi/bindings.h).
 
 ### API
 

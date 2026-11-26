@@ -1,4 +1,4 @@
-#include "../generic-client/bindings.h"
+#include "../generic-client-ffi/bindings.h"
 #include <assert.h>
 #include <errno.h>
 #include <poll.h>
@@ -97,8 +97,7 @@ void print_output(mpclipboard_Output output) {
     print_connectivity(output.connectivity);
   }
 
-  if (output.text.ptr != NULL) {
-    printf("%s%.*s%s\n", YELLOW, (int)output.text.len, output.text.ptr, NC);
-    mpclipboard_drop_str(output.text);
+  if (output.text_len != 0) {
+    printf("%s%.*s%s\n", YELLOW, (int)output.text_len, (const char *)output.text, NC);
   }
 }

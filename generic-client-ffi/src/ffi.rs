@@ -1,6 +1,6 @@
-use crate::{Connectivity, MPClipboard};
 use alloc::boxed::Box;
 use core::{ffi::c_char, str::Utf8Error};
+use mpclipboard_generic_client::{Connectivity, MPClipboard};
 use rustix::fd::{AsFd, AsRawFd};
 
 pub const MAX_TEXT_LENGTH: usize = 255;
@@ -114,8 +114,8 @@ impl Output {
     };
 }
 
-impl From<crate::Output> for Output {
-    fn from(output: crate::Output) -> Self {
+impl From<mpclipboard_generic_client::Output> for Output {
+    fn from(output: mpclipboard_generic_client::Output) -> Self {
         let (has_connectivity, connectivity) = match output.connectivity {
             Some(connectivity) => (true, connectivity),
             None => (false, Connectivity::Disconnected),

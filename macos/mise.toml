@@ -20,7 +20,7 @@ run = "xcodegen generate --use-cache"
 
 [tasks."build:debug"]
 hide = true
-depends = ["xcodegen:generate", "//generic-client:build:debug"]
+depends = ["xcodegen:generate", "//generic-client-ffi:build:debug"]
 run = "xcodebuild -quiet -configuration Debug"
 
 [tasks."build:release"]
@@ -28,7 +28,7 @@ hide = true
 usage = '''
 flag "--version <version>" required=#true help="Release version in MAJOR.MINOR.PATCH format"
 '''
-depends = ["xcodegen:generate", "//generic-client:build:release"]
+depends = ["xcodegen:generate", "//generic-client-ffi:build:release"]
 run = 'xcodebuild -quiet -configuration Release MARKETING_VERSION="{{usage.version}}"'
 
 [tasks.dev]

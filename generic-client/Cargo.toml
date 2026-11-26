@@ -3,9 +3,6 @@ name = "mpclipboard-generic-client"
 version = "0.1.0"
 edition = "2024"
 
-[lib]
-crate-type = ["cdylib", "rlib", "staticlib"]
-
 [dependencies]
 externally-driven-async-rt = { version = "0.5.1" }
 mpclipboard-shared = { path = "../shared" }

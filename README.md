@@ -11,7 +11,7 @@ It requires a server for communication (can be local if you only need it for dev
 Key components:
 
 + [Server](/server) - self-hosted server that sits behind a TLS-terminating reverse proxy (a single `no_std` binary, <1MB of RAM).
-+ [Generic client](/generic-client) - a cross-platform library that is the heart of all desktop/mobile apps listed below. It talks HTTPS/TCP over TLS to the reverse proxy and implements a dead simple communication protocol on top of it. You can use it to build your own client for any platform. Written in Rust, has minimal [C bindings](/generic-client/bindings.h).
++ [Generic client](/generic-client) - a cross-platform library that is the heart of all desktop/mobile apps listed below. It talks HTTPS/TCP over TLS to the reverse proxy and implements a dead simple communication protocol on top of it. You can use it to build your own client for any platform. Written in Rust, has minimal [C bindings](/generic-client-ffi/bindings.h).
 + [Linux client](/linux) - integrates with Wayland clipboard, shows history in tray menu.
 + [macOS client](/macos) - integrates with macOS clipboard, shows history in tray menu, displays system notification when there's a new text received from the server.
 + [Android library](/android) - a Java wrapper around the generic client, as an `.aar`. It has no UI and no clipboard integration, the app that integrates it must provide both.

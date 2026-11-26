@@ -17,7 +17,6 @@ mod config;
 mod connection;
 mod connectivity;
 mod constants;
-mod ffi;
 mod logger;
 mod loop_state;
 mod mpclipboard;

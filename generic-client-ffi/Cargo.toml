@@ -1,0 +1,22 @@
+[package]
+name = "mpclipboard-generic-client-ffi"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib", "staticlib"]
+test = false
+
+[dependencies]
+mpclipboard-generic-client = { path = "../generic-client" }
+mpclipboard-shared = { path = "../shared" }
+rustix = { version = "1", default-features = false }
+log = { version = "0.4", default-features = false }
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
+lto = "fat"
+codegen-units = 1

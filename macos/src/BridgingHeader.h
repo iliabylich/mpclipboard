@@ -1,1 +1,1 @@
-#include "../../generic-client/bindings.h"
+#include "../../generic-client-ffi/bindings.h"

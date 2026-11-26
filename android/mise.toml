@@ -34,14 +34,14 @@ run = """
 """
 
 [tasks."build:debug"]
-depends = ["//generic-client:build:android:debug"]
+depends = ["//generic-client-ffi:build:android:debug"]
 run = """
     gradle --no-daemon assembleDebug
     ls -l build/outputs/aar/mpclipboard-debug.aar
 """
 
 [tasks."build:release"]
-depends = ["//generic-client:build:android:release"]
+depends = ["//generic-client-ffi:build:android:release"]
 run = """
     gradle --no-daemon assembleRelease
     ls -l build/outputs/aar/mpclipboard-release.aar

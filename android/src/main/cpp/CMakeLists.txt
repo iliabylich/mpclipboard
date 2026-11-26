@@ -9,7 +9,7 @@ else()
     set(GENERIC_CLIENT_PROFILE "release")
 endif()
 
-set(GENERIC_CLIENT_LIB "${ROOT_DIR}/../generic-client/target/aarch64-linux-android/${GENERIC_CLIENT_PROFILE}/libmpclipboard_generic_client.a")
+set(GENERIC_CLIENT_LIB "${ROOT_DIR}/../generic-client-ffi/target/aarch64-linux-android/${GENERIC_CLIENT_PROFILE}/libmpclipboard_generic_client_ffi.a")
 
 if(NOT EXISTS "${GENERIC_CLIENT_LIB}")
     message(FATAL_ERROR "Prebuilt generic-client library not found: ${GENERIC_CLIENT_LIB}")
@@ -23,7 +23,7 @@ set_target_properties(
 
 add_library(mpclipboard_android SHARED mpclipboard_android_jni.c)
 set_target_properties(mpclipboard_android PROPERTIES C_STANDARD 23 C_STANDARD_REQUIRED YES)
-target_include_directories(mpclipboard_android PRIVATE "${ROOT_DIR}/../generic-client")
+target_include_directories(mpclipboard_android PRIVATE "${ROOT_DIR}/../generic-client-ffi")
 
 target_link_options(
     mpclipboard_android

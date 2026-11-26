@@ -1,15 +1,19 @@
 use mpclipboard_generic_client::{MPClipboard, Output};
-use rustix::event::{PollFd, PollFlags};
+use rustix::{
+    event::{PollFd, PollFlags},
+    fd::BorrowedFd,
+};
 use std::io::BufRead;
 
 fn main() {
     let mut mpclipboard = MPClipboard::new_from_file().unwrap();
     let mut stdin = std::io::stdin().lock();
+    let stdin_fd = unsafe { BorrowedFd::borrow_raw(rustix::stdio::raw_stdin()) };
 
     loop {
         let mut fds = [
             PollFd::new(&mpclipboard, PollFlags::IN),
-            PollFd::new(&stdin, PollFlags::IN),
+            PollFd::new(&stdin_fd, PollFlags::IN),
         ];
         rustix::event::poll(&mut fds, None).unwrap();
         let [mpclipboard_revents, stdin_revents] = fds.each_ref().map(PollFd::revents);

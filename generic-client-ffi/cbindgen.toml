@@ -10,3 +10,8 @@ rename_variants = "QualifiedScreamingSnakeCase"
 
 [export]
 prefix = "mpclipboard_"
+exclude = ["abort", "posix_memalign", "free"]
+
+[parse]
+parse_deps = true
+include = ["mpclipboard-generic-client"]
