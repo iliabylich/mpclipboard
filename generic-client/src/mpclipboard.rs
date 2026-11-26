@@ -75,9 +75,15 @@ pub enum MPClipboardError {
     #[error("config error: {0}")]
     Config(#[from] ConfigError),
     #[error("TLS config error: {0}")]
-    TlsConfig(#[from] rustls::Error),
+    TlsConfig(rustls::Error),
     #[error("runtime error: {0}")]
     Runtime(#[from] RuntimeError),
+}
+
+impl From<rustls::Error> for MPClipboardError {
+    fn from(err: rustls::Error) -> Self {
+        Self::TlsConfig(err)
+    }
 }
 
 fn init_once() {

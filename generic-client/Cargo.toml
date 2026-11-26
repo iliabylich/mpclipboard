@@ -11,11 +11,10 @@ externally-driven-async-rt = { version = "0.5.0" }
 mpclipboard-shared = { path = "../shared" }
 rustls = { version = "0.23", default-features = false, features = [
     "ring",
-    "std",
     "logging",
 ] }
 webpki-roots = "1"
-rustix = { version = "1", default-features = false, features = ["std", "fs"] }
+rustix = { version = "1", default-features = false, features = ["std", "fs", "time"] }
 mini-sansio-dns = "2"
 httparse = "1"
 log = "0.4"

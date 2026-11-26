@@ -94,9 +94,9 @@ impl AsyncWrite for TlsStream {
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum TlsError {
     #[error("invalid server name: {0}")]
-    InvalidServerName(#[from] InvalidDnsNameError),
+    InvalidServerName(InvalidDnsNameError),
     #[error("TLS error: {0}")]
-    Rustls(#[from] rustls::Error),
+    Rustls(rustls::Error),
     #[error("failed to encode TLS data: {0}")]
     Encode(EncodeError),
     #[error("failed to encrypt TLS data: {0}")]
@@ -119,4 +119,16 @@ pub(crate) enum TlsError {
     WriteZero,
     #[error("connection closed")]
     Closed,
+}
+
+impl From<InvalidDnsNameError> for TlsError {
+    fn from(err: InvalidDnsNameError) -> Self {
+        Self::InvalidServerName(err)
+    }
+}
+
+impl From<rustls::Error> for TlsError {
+    fn from(err: rustls::Error) -> Self {
+        Self::Rustls(err)
+    }
 }
