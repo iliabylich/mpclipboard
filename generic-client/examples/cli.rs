@@ -26,7 +26,7 @@ fn main() {
                 println!("[c] {connectivity:?}");
             }
             if let Some(text) = text {
-                println!("[{text}]");
+                println!("[{}]", text.text());
             }
         }
 

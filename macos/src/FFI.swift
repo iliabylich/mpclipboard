@@ -29,7 +29,7 @@ struct Output {
         }
 
         let connectivity = output.has_connectivity ? Connectivity.from(output.connectivity) : nil
-        let text = output.text.ptr != nil ? string(output.text) : nil
+        let text = output.text_len != 0 ? string(output) : nil
 
         if connectivity == nil && text == nil {
             return nil
@@ -37,9 +37,9 @@ struct Output {
         return Output(connectivity: connectivity, text: text)
     }
 
-    private static func string(_ text: mpclipboard_OwnedString) -> String {
-        let data = Data(bytes: text.ptr!, count: text.len)
-        mpclipboard_drop_str(text)
+    private static func string(_ output: mpclipboard_Output) -> String {
+        var text = output.text
+        let data = withUnsafeBytes(of: &text) { Data($0.prefix(output.text_len)) }
 
         guard let text = String(data: data, encoding: .utf8) else {
             fatalError("non-utf8 new text in output")

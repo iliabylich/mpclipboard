@@ -20,6 +20,7 @@ use rustix::{
 };
 use rustls::ClientConfig;
 
+/// cbindgen:ignore
 pub(crate) type Context<'a> = externally_driven_async_rt::Context<
     'a,
     LoopEvent,
@@ -30,6 +31,7 @@ pub(crate) type Context<'a> = externally_driven_async_rt::Context<
     TIMERS,
     FDS,
 >;
+/// cbindgen:ignore
 type EventLoop = externally_driven_async_rt::EventLoop<
     'static,
     LoopEvent,
@@ -40,6 +42,7 @@ type EventLoop = externally_driven_async_rt::EventLoop<
     TIMERS,
     FDS,
 >;
+/// cbindgen:ignore
 type LoopStorage = externally_driven_async_rt::LoopStorage<
     LoopEvent,
     EVENTS,
@@ -49,10 +52,14 @@ type LoopStorage = externally_driven_async_rt::LoopStorage<
     TIMERS,
     FDS,
 >;
+/// cbindgen:ignore
 pub(crate) type TcpStream = externally_driven_async_rt::net::TcpStream<'static, FDS>;
+/// cbindgen:ignore
 pub(crate) type UdpSocket = externally_driven_async_rt::net::UdpSocket<'static, FDS>;
+/// cbindgen:ignore
 pub(crate) type BorrowedReadHalf<'s> =
     externally_driven_async_rt::net::BorrowedReadHalf<'s, 'static, FDS>;
+/// cbindgen:ignore
 pub(crate) type BorrowedWriteHalf<'s> =
     externally_driven_async_rt::net::BorrowedWriteHalf<'s, 'static, FDS>;
 

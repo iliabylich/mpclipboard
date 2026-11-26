@@ -1,7 +1,7 @@
 use crate::FixedStr;
 use core::str::Utf8Error;
 
-const MAX_TEXT_LENGTH: usize = 255;
+pub const MAX_TEXT_LENGTH: usize = 255;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Message {

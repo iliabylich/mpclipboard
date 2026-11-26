@@ -41,7 +41,7 @@ impl MPClipboard {
         let (connectivity, received) = self.runtime.drain()?;
 
         let text = match received {
-            Some(message) if self.store.add(message) => Some(message.text().to_string()),
+            Some(message) if self.store.add(message) => Some(message),
             _ => None,
         };
 

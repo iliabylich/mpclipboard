@@ -66,8 +66,9 @@ fn main() -> Result<()> {
             }
 
             if let Some(text) = text {
+                let text = text.text();
                 tray.push(format!("R {text}"), &mut queue)?;
-                clipboard.offer_text(text)?;
+                clipboard.offer_text(text.to_string())?;
             }
         }
 

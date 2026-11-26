@@ -1,5 +1,4 @@
 #include <jni.h>
-#include <limits.h>
 #include <stdint.h>
 #include <stdlib.h>
 
@@ -49,16 +48,16 @@ static jobject new_output(JNIEnv *env, jboolean has_connectivity,
                            connectivity, text);
 }
 
-static jbyteArray new_jbytearray(JNIEnv *env, mpclipboard_OwnedString text) {
-  CHECK(text.len <= INT_MAX, "clipboard text exceeds Java array limit");
+static jbyteArray new_jbytearray(JNIEnv *env, const mpclipboard_Output *output) {
+  CHECK(output->text_len <= mpclipboard_MAX_TEXT_LENGTH,
+        "clipboard text exceeds mpclipboard_MAX_TEXT_LENGTH");
 
-  jbyteArray bytes = (*env)->NewByteArray(env, (jsize)text.len);
+  jbyteArray bytes = (*env)->NewByteArray(env, (jsize)output->text_len);
   CHECK(bytes != NULL, "failed to allocate Java byte array");
-  (*env)->SetByteArrayRegion(env, bytes, 0, (jsize)text.len,
-                             (const jbyte *)text.ptr);
+  (*env)->SetByteArrayRegion(env, bytes, 0, (jsize)output->text_len,
+                             (const jbyte *)output->text);
   CHECK(!(*env)->ExceptionCheck(env),
         "failed to copy native text into Java array");
-  mpclipboard_drop_str(text);
   return bytes;
 }
 
@@ -117,13 +116,13 @@ JNIEXPORT jobject JNICALL Java_dev_ibylich_mpclipboard_MPClipboard_mpclipboard_1
   mpclipboard_Output output = mpclipboard_read(mpclipboard);
   CHECK(!output.error, "mpclipboard_read failed");
 
-  if (!output.has_connectivity && output.text.ptr == NULL) {
+  if (!output.has_connectivity && output.text_len == 0) {
     return NULL;
   }
 
   jbyteArray text = NULL;
-  if (output.text.ptr != NULL) {
-    text = new_jbytearray(env, output.text);
+  if (output.text_len != 0) {
+    text = new_jbytearray(env, &output);
   }
 
   return new_output(env, output.has_connectivity ? JNI_TRUE : JNI_FALSE,

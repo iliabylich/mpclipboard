@@ -4,6 +4,8 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#define mpclipboard_MAX_TEXT_LENGTH 255
+
 typedef enum {
   MPCLIPBOARD_CONNECTIVITY_CONNECTING,
   MPCLIPBOARD_CONNECTIVITY_CONNECTED,
@@ -24,15 +26,11 @@ typedef struct {
 } mpclipboard_BorrowedString;
 
 typedef struct {
-  char *ptr;
-  size_t len;
-} mpclipboard_OwnedString;
-
-typedef struct {
   bool error;
   bool has_connectivity;
   mpclipboard_Connectivity connectivity;
-  mpclipboard_OwnedString text;
+  size_t text_len;
+  uint8_t text[mpclipboard_MAX_TEXT_LENGTH];
 } mpclipboard_Output;
 
 mpclipboard_MPClipboard *mpclipboard_new_inline(mpclipboard_BorrowedString url,
@@ -49,5 +47,3 @@ mpclipboard_PushResult mpclipboard_push_text(mpclipboard_MPClipboard *mpclipboar
                                              mpclipboard_BorrowedString text);
 
 void mpclipboard_drop(mpclipboard_MPClipboard *mpclipboard);
-
-void mpclipboard_drop_str(mpclipboard_OwnedString text);

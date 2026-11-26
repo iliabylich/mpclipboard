@@ -19,7 +19,7 @@ mod token;
 
 pub use fixed_str::{FixedStr, FixedStrError};
 pub use id::ID;
-pub use message::{Message, MessageDecodeError};
+pub use message::{MAX_TEXT_LENGTH, Message, MessageDecodeError};
 pub use message_reader::{MessageReader, MessageReaderError};
 pub use message_writer::MessageWriter;
 pub use store::Store;

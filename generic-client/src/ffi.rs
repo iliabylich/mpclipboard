@@ -2,6 +2,9 @@ use crate::{Connectivity, MPClipboard};
 use core::{ffi::c_char, str::Utf8Error};
 use rustix::fd::{AsFd, AsRawFd};
 
+pub const MAX_TEXT_LENGTH: usize = 255;
+const _: () = assert!(mpclipboard_shared::MAX_TEXT_LENGTH == MAX_TEXT_LENGTH);
+
 macro_rules! try_or_null {
     ($v:expr) => {
         match $v {
@@ -78,11 +81,6 @@ pub extern "C" fn mpclipboard_drop(mpclipboard: Box<MPClipboard>) {
     drop(mpclipboard);
 }
 
-#[unsafe(no_mangle)]
-pub extern "C" fn mpclipboard_drop_str(text: OwnedString) {
-    drop(text);
-}
-
 #[repr(C)]
 pub struct BorrowedString {
     ptr: *const c_char,
@@ -97,42 +95,12 @@ impl BorrowedString {
 }
 
 #[repr(C)]
-pub struct OwnedString {
-    ptr: *mut c_char,
-    len: usize,
-}
-
-impl OwnedString {
-    pub(crate) const NULL: Self = Self {
-        ptr: core::ptr::null_mut(),
-        len: 0,
-    };
-}
-
-impl From<String> for OwnedString {
-    fn from(s: String) -> Self {
-        let s = s.into_boxed_str().into_boxed_bytes();
-        let len = s.len();
-        let ptr = Box::into_raw(s).cast::<c_char>();
-        Self { ptr, len }
-    }
-}
-
-impl Drop for OwnedString {
-    fn drop(&mut self) {
-        if !self.ptr.is_null() {
-            let bytes: *mut [u8] = core::ptr::slice_from_raw_parts_mut(self.ptr.cast(), self.len);
-            drop(unsafe { Box::from_raw(bytes) });
-        }
-    }
-}
-
-#[repr(C)]
 pub struct Output {
     error: bool,
     has_connectivity: bool,
     connectivity: Connectivity,
-    text: OwnedString,
+    text_len: usize,
+    text: [u8; MAX_TEXT_LENGTH],
 }
 
 impl Output {
@@ -140,7 +108,8 @@ impl Output {
         error: true,
         has_connectivity: false,
         connectivity: Connectivity::Disconnected,
-        text: OwnedString::NULL,
+        text_len: 0,
+        text: [0; MAX_TEXT_LENGTH],
     };
 }
 
@@ -150,15 +119,21 @@ impl From<crate::Output> for Output {
             Some(connectivity) => (true, connectivity),
             None => (false, Connectivity::Disconnected),
         };
-        let text = match output.text {
-            Some(text) => OwnedString::from(text),
-            None => OwnedString::NULL,
+        let mut text = [0; MAX_TEXT_LENGTH];
+        let text_len = match output.text {
+            Some(message) => {
+                let bytes = message.text().as_bytes();
+                text[..bytes.len()].copy_from_slice(bytes);
+                bytes.len()
+            }
+            None => 0,
         };
 
         Self {
             error: false,
             has_connectivity,
             connectivity,
+            text_len,
             text,
         }
     }
