@@ -38,10 +38,11 @@ struct Output {
     }
 
     private static func string(_ output: mpclipboard_Output) -> String {
-        var text = output.text
-        let data = withUnsafeBytes(of: &text) { Data($0.prefix(output.text_len)) }
+        let text = withUnsafeBytes(of: output.text) { bytes in
+            String(validating: bytes.prefix(output.text_len), as: UTF8.self)
+        }
 
-        guard let text = String(data: data, encoding: .utf8) else {
+        guard let text else {
             fatalError("non-utf8 new text in output")
         }
 
