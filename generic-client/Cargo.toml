@@ -18,7 +18,7 @@ rustix = { version = "1", default-features = false, features = ["fs", "time"] }
 mini-sansio-dns = "2"
 httparse = { version = "1", default-features = false }
 log = "0.4"
-thiserror = "2"
+thiserror = { version = "2", default-features = false }
 
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = { version = "0.15", default-features = false }
